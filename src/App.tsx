@@ -6,7 +6,6 @@ import {
   Info,
   User
 } from 'lucide-react';
-import workoutHistory from './data/workout_history.json';
 import DashboardTab from './components/DashboardTab';
 import WorkoutTab from './components/WorkoutTab';
 import RehabTab from './components/RehabTab';
@@ -141,14 +140,10 @@ export default function App() {
     const savedUserSessions = localStorage.getItem('milo_user_sessions');
     const parsedUserSessions = savedUserSessions ? JSON.parse(savedUserSessions) : [];
 
-    // Merge static CSV history with dynamic custom recordings
-    // Ensuring the newest are always sorted first
-    const fullMergedHistory = [...parsedUserSessions, ...workoutHistory];
-    
     // Sort chronologically descending
-    fullMergedHistory.sort((a, b) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
+    parsedUserSessions.sort((a: any, b: any) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
     
-    setLocalHistory(fullMergedHistory);
+    setLocalHistory(parsedUserSessions);
 
     // Load active injury state
     const savedInjury = localStorage.getItem('milo_active_injury');
@@ -386,7 +381,7 @@ export default function App() {
 
       {/* Main Tab Render Slots */}
       <main style={{ minHeight: 'calc(100vh - 180px)' }}>
-        {activeTab === 'dashboard' && localHistory.length > 0 && (
+        {activeTab === 'dashboard' && (
           <div className="tab-transition">
             <DashboardTab 
               localHistory={localHistory}
@@ -396,7 +391,7 @@ export default function App() {
           </div>
         )}
         
-        {activeTab === 'workout' && localHistory.length > 0 && (
+        {activeTab === 'workout' && (
           <div className="tab-transition">
             <WorkoutTab 
               activeInjury={activeInjury} 

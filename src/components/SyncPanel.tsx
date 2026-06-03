@@ -26,7 +26,6 @@ import {
   uploadUserData, 
   mergeLocalAndCloudData 
 } from '../utils/firebaseSync';
-import staticHistory from '../data/workout_history.json';
 
 interface SyncPanelProps {
   customRoutines: any[];
@@ -166,8 +165,8 @@ export default function SyncPanel({
           localStorage.removeItem('milo_active_injury');
         }
 
-        // Re-merge history in App.tsx (static + dynamic)
-        const fullHistory = [...merged.userSessions, ...staticHistory];
+        // Update local history in App.tsx state
+        const fullHistory = [...merged.userSessions];
         fullHistory.sort((a, b) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
         setLocalHistory(fullHistory);
 
