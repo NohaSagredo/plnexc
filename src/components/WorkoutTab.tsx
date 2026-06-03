@@ -1,0 +1,1709 @@
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  Play, 
+  Pause,
+  X,
+  Check, 
+  AlertTriangle, 
+  Flame, 
+  Clock,
+  Dumbbell,
+  Plus,
+  Minus,
+  SkipForward,
+  Trash2,
+  BookmarkPlus,
+  Edit2,
+  Target,
+  BookOpen
+} from 'lucide-react';
+import { proposeNextSet } from '../utils/ProgressionEngine';
+import type { SetData, ProgressionTarget } from '../utils/ProgressionEngine';
+import { getSubstitutedExercise, MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
+import type { SubstitutionRule } from '../utils/MiloRehabEngine';
+import RoutineBuilder from './RoutineBuilder';
+import { DEFAULT_PRESETS } from '../data/default_routines';
+import { EXERCISES_DB } from '../data/exercises_db';
+import { getStrengthStandards } from '../utils/StrengthStandards';
+
+interface WorkoutTabProps {
+  activeInjury: {
+    joint: string;
+    phase: number;
+    weakness: string;
+    painScale: number;
+  } | null;
+  onSaveWorkout: (newSession: any) => void;
+  localHistory: any[];
+  customRoutines: any[];
+  onSaveCustomRoutine: (name: string, exercises: string[], originalName?: string) => void;
+  onDeleteRoutine: (name: string) => void;
+  deletedRoutines: string[];
+  bodyWeight: number;
+  height: number;
+  gender: 'Masculino' | 'Femenino';
+  bodyFat: number;
+}
+
+export default function WorkoutTab({ 
+  activeInjury, 
+  onSaveWorkout, 
+  localHistory,
+  customRoutines,
+  onSaveCustomRoutine,
+  onDeleteRoutine,
+  deletedRoutines,
+  bodyWeight,
+  height,
+  gender,
+  bodyFat
+}: WorkoutTabProps) {
+  // 1. Group exercises into routines from historical logs and custom creations
+  const routines = useMemo(() => {
+    const map = new Map<string, string[]>(); // Title -> Exercise List
+    
+    // 1. Load default presets
+    DEFAULT_PRESETS.forEach(r => {
+      map.set(r.title, r.exercises);
+    });
+
+    // 2. Scan full history to map unique titles to exercises
+    localHistory.forEach(session => {
+      if (!session.title) return;
+      if (!map.has(session.title)) {
+        map.set(session.title, []);
+      }
+      const list = map.get(session.title)!;
+      session.exercises.forEach((ex: any) => {
+        if (!list.includes(ex.title)) {
+          list.push(ex.title);
+        }
+      });
+    });
+
+    // 3. Overlay custom routines (these can override or append)
+    customRoutines.forEach(r => {
+      map.set(r.title, r.exercises);
+    });
+    
+    return Array.from(map.entries())
+      .map(([title, exercises]) => ({
+        title,
+        exercises,
+        isCustom: customRoutines.some(cr => cr.title === title),
+        isPreset: DEFAULT_PRESETS.some(dp => dp.title === title)
+      }))
+      .filter(r => !deletedRoutines.includes(r.title));
+  }, [localHistory, customRoutines, deletedRoutines]);
+
+  const [selectedRoutine, setSelectedRoutine] = useState<string>('');
+  const [activeSession, setActiveSession] = useState<any | null>(null);
+  const [timer, setTimer] = useState<number>(0);
+  const [timerActive, setTimerActive] = useState<boolean>(false);
+  const [recoveryScore, setRecoveryScore] = useState<number>(8);
+  const [isBuildingRoutine, setIsBuildingRoutine] = useState<boolean>(false);
+  const [editingRoutine, setEditingRoutine] = useState<{ title: string; exercises: string[] } | null>(null);
+  const [expandedStandards, setExpandedStandards] = useState<{[key: string]: boolean}>({});
+  const [expandedInstructions, setExpandedInstructions] = useState<{[key: string]: boolean}>({});
+
+  // pre-workout recovery wizard states
+  const [showRecoveryWizard, setShowRecoveryWizard] = useState<boolean>(false);
+  const [wizardStep, setWizardStep] = useState<number>(1);
+  const [sleepScore, setSleepScore] = useState<number>(3);
+  const [fatigueScore, setFatigueScore] = useState<number>(3);
+  const [stressScore, setStressScore] = useState<number>(3);
+  const [energyScoreInput, setEnergyScoreInput] = useState<number>(3);
+
+  const routineGridRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = routineGridRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY !== 0) {
+        container.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [activeSession, showRecoveryWizard, isBuildingRoutine]);
+
+  const selectedRoutineObj = useMemo(() => {
+    return routines.find(r => r.title === selectedRoutine);
+  }, [routines, selectedRoutine]);
+
+  const previewExercises = useMemo(() => {
+    if (!selectedRoutineObj) return [];
+    return selectedRoutineObj.exercises.map(title => {
+      const found = EXERCISES_DB.find(ex => ex.title === title);
+      return found || {
+        id: `custom_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+        title,
+        muscleGroup: 'Pecho',
+        equipment: 'Mancuerna',
+        difficulty: 'Intermedio',
+        description: 'Ejercicio personalizado'
+      };
+    });
+  }, [selectedRoutineObj]);
+
+  // Set default routine on load if not set
+  useEffect(() => {
+    if (!selectedRoutine && routines.length > 0) {
+      setSelectedRoutine(routines[0].title);
+    }
+  }, [routines, selectedRoutine]);
+
+  // Rest Timer State
+  const [restTimeTotal, setRestTimeTotal] = useState<number>(90);
+  const [restTimeRemaining, setRestTimeRemaining] = useState<number>(0);
+  const [restTimerActive, setRestTimerActive] = useState<boolean>(false);
+
+  // Timer Effect (Main workout duration)
+  useEffect(() => {
+    let interval: any = null;
+    if (timerActive) {
+      interval = setInterval(() => {
+        setTimer(t => t + 1);
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [timerActive]);
+
+  // Rest Timer Effect (Countdown between sets)
+  useEffect(() => {
+    let interval: any = null;
+    if (restTimerActive && restTimeRemaining > 0) {
+      interval = setInterval(() => {
+        setRestTimeRemaining(r => {
+          if (r <= 1) {
+            setRestTimerActive(false);
+            if ('vibrate' in navigator) {
+              navigator.vibrate([100, 50, 100]);
+            }
+            return 0;
+          }
+          return r - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [restTimerActive, restTimeRemaining]);
+
+  const formatTime = (secs: number) => {
+    const mins = Math.floor(secs / 60);
+    const remainingSecs = secs % 60;
+    return `${mins.toString().padStart(2, '0')}:${remainingSecs.toString().padStart(2, '0')}`;
+  };
+
+  // 2. Start Active Session
+  const handleStartWorkout = (finalRecoveryScore?: number) => {
+    const routine = routines.find(r => r.title === selectedRoutine);
+    if (!routine) return;
+
+    const scoreToUse = finalRecoveryScore !== undefined ? finalRecoveryScore : recoveryScore;
+
+    // Load exercises and calculate recommendations
+    const exercisesForSession = routine.exercises.map(exTitle => {
+      // Find history of this specific exercise
+      const exerciseHistory: any[] = [];
+      localHistory.forEach(session => {
+        const found = session.exercises.find((e: any) => e.title === exTitle);
+        if (found) {
+          exerciseHistory.push({
+            date: new Date(session.parsedDate),
+            sets: found.sets
+          });
+        }
+      });
+      
+      // Sort oldest to newest, then take the latest
+      exerciseHistory.sort((a, b) => a.date.getTime() - b.date.getTime());
+      const latestSession = exerciseHistory[exerciseHistory.length - 1];
+      
+      // Calculate progressive overload suggestions
+      let target: ProgressionTarget = {
+        suggestedWeight: 10,
+        suggestedReps: 10,
+        message: 'Comienza con una carga moderada para explorar el rango de movimiento.',
+        isDeload: false
+      };
+
+      if (latestSession && latestSession.sets) {
+        // Map sets to Progression engine interface
+        const lastSetsMapped: SetData[] = latestSession.sets.map((s: any) => ({
+          setIndex: s.setIndex,
+          setType: s.setType || 'normal',
+          weightKg: s.weightKg,
+          reps: s.reps,
+          rpe: s.rpe
+        }));
+        
+        const diffTime = Math.abs(new Date().getTime() - latestSession.date.getTime());
+        const daysSinceLastSession = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        
+        target = proposeNextSet(exTitle, lastSetsMapped, scoreToUse, false, daysSinceLastSession);
+      }
+
+      // 3. Rebuilding Milo Substitution check
+      let activeSub: SubstitutionRule | undefined = undefined;
+      let finalTitle = exTitle;
+      
+      if (activeInjury) {
+        const subRule = getSubstitutedExercise(exTitle);
+        if (subRule) {
+          // If the exercise affects the injured joint, substitute it
+          activeSub = subRule;
+          finalTitle = subRule.substitutedExercise;
+        }
+      }
+
+      // Generate 3 standard sets with suggested values
+      const initialSets = Array.from({ length: 3 }).map((_, i) => ({
+        setIndex: i,
+        setType: i === 0 && target.suggestedWeight > 20 ? 'warmup' : 'normal',
+        weightKg: i === 0 && target.suggestedWeight > 20 ? Math.round((target.suggestedWeight * 0.6) / 2.5) * 2.5 : target.suggestedWeight,
+        reps: target.suggestedReps,
+        rpe: null as number | null,
+        completed: false,
+        hasPain: false
+      }));
+
+      return {
+        originalTitle: exTitle,
+        title: finalTitle,
+        isSubstituted: !!activeSub,
+        subRule: activeSub,
+        suggestion: target,
+        sets: initialSets
+      };
+    });
+
+    setActiveSession({
+      title: selectedRoutine,
+      startTime: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+      exercises: exercisesForSession
+    });
+
+    setTimer(0);
+    setTimerActive(true);
+  };
+
+  // Change input value in real time
+  const handleSetChange = (exIdx: number, setIdx: number, field: string, value: any) => {
+    setActiveSession((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        exercises: prev.exercises.map((ex: any, eIdx: number) => {
+          if (eIdx !== exIdx) return ex;
+          return {
+            ...ex,
+            sets: ex.sets.map((set: any, sIdx: number) => {
+              if (sIdx !== setIdx) return set;
+              return {
+                ...set,
+                [field]: value
+              };
+            })
+          };
+        })
+      };
+    });
+  };
+
+  const handleTogglePain = (exIdx: number, setIdx: number) => {
+    setActiveSession((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        exercises: prev.exercises.map((ex: any, eIdx: number) => {
+          if (eIdx !== exIdx) return ex;
+          return {
+            ...ex,
+            sets: ex.sets.map((set: any, sIdx: number) => {
+              if (sIdx !== setIdx) return set;
+              const newPain = !set.hasPain;
+              return {
+                ...set,
+                hasPain: newPain,
+                rpe: newPain ? null : set.rpe // clear RPE if pain is flagged
+              };
+            })
+          };
+        })
+      };
+    });
+  };
+
+  const handleAddSet = (exIdx: number) => {
+    setActiveSession((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        exercises: prev.exercises.map((ex: any, eIdx: number) => {
+          if (eIdx !== exIdx) return ex;
+          const lastSet = ex.sets[ex.sets.length - 1];
+          return {
+            ...ex,
+            sets: [
+              ...ex.sets,
+              {
+                setIndex: ex.sets.length,
+                setType: 'normal',
+                weightKg: lastSet ? lastSet.weightKg : 10,
+                reps: lastSet ? lastSet.reps : 10,
+                rpe: null,
+                completed: false,
+                hasPain: false
+              }
+            ]
+          };
+        })
+      };
+    });
+  };
+
+  const handleRemoveSet = (exIdx: number) => {
+    setActiveSession((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        exercises: prev.exercises.map((ex: any, eIdx: number) => {
+          if (eIdx !== exIdx) return ex;
+          if (ex.sets.length <= 1) return ex;
+          return {
+            ...ex,
+            sets: ex.sets.slice(0, -1)
+          };
+        })
+      };
+    });
+  };
+
+  const handleFinishWorkout = () => {
+    if (!activeSession) return;
+    
+    // Check if any set has pain and prompt user
+    const hasAnyPain = activeSession.exercises.some((e: any) => e.sets.some((s: any) => s.hasPain));
+    if (hasAnyPain && !activeInjury) {
+      alert('⚠️ Hemos detectado que registraste dolor durante esta sesión. Al finalizar, te recomendamos ir a la pestaña "Rehab PLNEXC" para realizar una autoevaluación física de tu articulación afectada.');
+    }
+
+    const compiledExercises = activeSession.exercises.map((ex: any) => {
+      // Calculate local maxEst1RM & volume
+      let maxEst1RM = 0;
+      let totalVolume = 0;
+      
+      const filteredSets = ex.sets.map((s: any) => {
+        const weight = s.weightKg || 0;
+        const reps = s.reps || 0;
+        
+        if (s.completed && weight && reps) {
+          totalVolume += weight * reps;
+          const est1RM = weight * (1 + reps / 30);
+          if (est1RM > maxEst1RM) {
+            maxEst1RM = parseFloat(est1RM.toFixed(2));
+          }
+        }
+        
+        return {
+          setIndex: s.setIndex,
+          setType: s.setType,
+          weight_kg: weight || null,
+          reps: reps || null,
+          rpe: s.rpe || null,
+          hasPain: s.hasPain || false
+        };
+      });
+
+      return {
+        title: ex.title,
+        notes: ex.isSubstituted ? `Variante sustituida por molestia. Original: ${ex.originalTitle}` : '',
+        maxEst1RM: maxEst1RM > 0 ? maxEst1RM : undefined,
+        totalVolume,
+        sets: filteredSets
+      };
+    });
+
+    const newSession = {
+      title: activeSession.title,
+      startTime: activeSession.startTime,
+      endTime: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+      description: 'Entrenamiento completado en la app',
+      exercises: compiledExercises,
+      parsedDate: new Date().toISOString()
+    };
+
+    onSaveWorkout(newSession);
+    setActiveSession(null);
+    setTimerActive(false);
+    setRestTimerActive(false);
+    setRestTimeRemaining(0);
+    alert('🎉 ¡Entrenamiento completado y guardado en tu historial con éxito!');
+  };
+
+  const handleToggleCompleted = (exIdx: number, setIdx: number) => {
+    let triggeredRest = false;
+    let isCompound = false;
+
+    setActiveSession((prev: any) => {
+      if (!prev) return prev;
+      
+      const targetExercise = prev.exercises[exIdx];
+      const targetSet = targetExercise.sets[setIdx];
+      const newCompleted = !targetSet.completed;
+
+      if (newCompleted) {
+        triggeredRest = true;
+        const titleLower = targetExercise.title.toLowerCase();
+        isCompound = titleLower.includes('squat') || 
+                     titleLower.includes('deadlift') || 
+                     titleLower.includes('bench press') || 
+                     titleLower.includes('overhead press');
+      }
+
+      return {
+        ...prev,
+        exercises: prev.exercises.map((ex: any, eIdx: number) => {
+          if (eIdx !== exIdx) return ex;
+          return {
+            ...ex,
+            sets: ex.sets.map((set: any, sIdx: number) => {
+              if (sIdx !== setIdx) return set;
+              return {
+                ...set,
+                completed: newCompleted
+              };
+            })
+          };
+        })
+      };
+    });
+
+    if (triggeredRest) {
+      const seconds = isCompound ? 120 : 90;
+      setRestTimeTotal(seconds);
+      setRestTimeRemaining(seconds);
+      setRestTimerActive(true);
+
+      if ('vibrate' in navigator) {
+        navigator.vibrate(100);
+      }
+    }
+  };
+
+  const handleCancelWorkout = () => {
+    const confirmCancel = window.confirm(
+      '⚠️ ¿Estás seguro de que quieres cancelar el entrenamiento actual? Perderás todo el progreso registrado en esta sesión.'
+    );
+    if (confirmCancel) {
+      setActiveSession(null);
+      setTimerActive(false);
+      setTimer(0);
+      setRestTimerActive(false);
+      setRestTimeRemaining(0);
+    }
+  };
+
+  const handleAddRestTime = () => {
+    setRestTimeRemaining(r => r + 30);
+    setRestTimeTotal(t => t + 30);
+  };
+
+  const handleSubtractRestTime = () => {
+    setRestTimeRemaining(r => Math.max(0, r - 30));
+  };
+
+  const handleSkipRest = () => {
+    setRestTimerActive(false);
+    setRestTimeRemaining(0);
+  };
+
+  if (isBuildingRoutine) {
+    return (
+      <RoutineBuilder 
+        editRoutineName={editingRoutine?.title}
+        editExercises={editingRoutine?.exercises}
+        isEditing={!!editingRoutine}
+        onSave={(name, exercises, originalName) => {
+          onSaveCustomRoutine(name, exercises, originalName);
+          setIsBuildingRoutine(false);
+          setEditingRoutine(null);
+          setSelectedRoutine(name);
+        }}
+        onCancel={() => {
+          setIsBuildingRoutine(false);
+          setEditingRoutine(null);
+        }}
+      />
+    );
+  }
+
+  if (showRecoveryWizard) {
+    const calculatedScore = Math.round((sleepScore + fatigueScore + stressScore + energyScoreInput - 4) * (9 / 12)) + 1;
+    
+    return (
+      <div className="fade-in glass-panel glass-panel-glow" style={{ padding: '30px', maxWidth: '600px', margin: '20px auto', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid hsla(var(--primary) / 0.3)' }}>
+        {/* Wizard Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span className="badge badge-primary" style={{ marginBottom: '4px' }}>Cuestionario de Preparación (Readiness)</span>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Evaluación de Recuperación</h2>
+          </div>
+          <button 
+            onClick={() => {
+              setShowRecoveryWizard(false);
+              setWizardStep(1);
+            }} 
+            style={{ background: 'transparent', border: 'none', color: 'hsl(var(--muted))', cursor: 'pointer', fontSize: '1.5rem', fontWeight: 'bold' }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Wizard Progress Bar */}
+        <div className="wizard-progress-container">
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'hsl(var(--muted))', marginBottom: '6px' }}>
+            <span>Paso {wizardStep} de 5</span>
+            <span>{Math.round((wizardStep / 5) * 100)}% Completado</span>
+          </div>
+          <div className="wizard-progress-track">
+            <div className="wizard-progress-bar" style={{ width: `${(wizardStep / 5) * 100}%` }} />
+          </div>
+        </div>
+
+        {/* STEP 1: SLEEP */}
+        {wizardStep === 1 && (
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>💤 Paso 1: ¿Cómo evalúas tu descanso y sueño de anoche?</h3>
+            <div className="wizard-cards-grid">
+              {[
+                { val: 1, label: 'Insuficiente / Interrumpido', desc: 'Dormí menos de 5 horas o me desperté constantemente.' },
+                { val: 2, label: 'Regular / Incompleto', desc: 'Dormí unas 6 horas, me siento cansado.' },
+                { val: 3, label: 'Bueno / Descansado', desc: 'Dormí 7-8 horas, me siento recuperado.' },
+                { val: 4, label: 'Excelente / Profundo', desc: 'Descanso ideal, dormí más de 8 horas sin interrupción.' }
+              ].map(opt => (
+                <div 
+                  key={opt.val}
+                  onClick={() => {
+                    setSleepScore(opt.val);
+                    setWizardStep(2);
+                  }}
+                  className={`wizard-card ${sleepScore === opt.val ? 'selected' : ''}`}
+                >
+                  <strong style={{ fontSize: '0.95rem', color: sleepScore === opt.val ? 'hsl(var(--primary))' : '#fff' }}>{opt.label}</strong>
+                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', marginTop: '2px', lineHeight: '1.4' }}>{opt.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: FATIGUE */}
+        {wizardStep === 2 && (
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>🩹 Paso 2: ¿Tienes agujetas o cansancio muscular de tus últimos entrenamientos?</h3>
+            <div className="wizard-cards-grid">
+              {[
+                { val: 1, label: 'Fatiga Extrema / Agujetas Fuertes', desc: 'Siento dolor agudo o agujetas intensas en los músculos que voy a entrenar hoy.' },
+                { val: 2, label: 'Fatiga Moderada', desc: 'Siento tensión y cansancio acumulado, pero tolerable.' },
+                { val: 3, label: 'Fatiga Leve', desc: 'Alguna molestia menor, pero en general me siento bien.' },
+                { val: 4, label: 'Totalmente Recuperado', desc: 'Músculos frescos y listos para rendir al máximo.' }
+              ].map(opt => (
+                <div 
+                  key={opt.val}
+                  onClick={() => {
+                    setFatigueScore(opt.val);
+                    setWizardStep(3);
+                  }}
+                  className={`wizard-card ${fatigueScore === opt.val ? 'selected' : ''}`}
+                >
+                  <strong style={{ fontSize: '0.95rem', color: fatigueScore === opt.val ? 'hsl(var(--primary))' : '#fff' }}>{opt.label}</strong>
+                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', marginTop: '2px', lineHeight: '1.4' }}>{opt.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: STRESS */}
+        {wizardStep === 3 && (
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>🧠 Paso 3: ¿Cuál es tu nivel de estrés mental y capacidad de foco hoy?</h3>
+            <div className="wizard-cards-grid">
+              {[
+                { val: 1, label: 'Estrés Alto / Muy Distraído', desc: 'Mucha sobrecarga mental, ansiedad o problemas para concentrarme.' },
+                { val: 2, label: 'Estrés Moderado', desc: 'Con algunas preocupaciones de fondo, foco normal.' },
+                { val: 3, label: 'Bajo Estrés', desc: 'Buena disposición mental, concentración adecuada.' },
+                { val: 4, label: 'Foco Máximo / Motivado', desc: 'Mente despejada, determinación de acero y listo para entrenar.' }
+              ].map(opt => (
+                <div 
+                  key={opt.val}
+                  onClick={() => {
+                    setStressScore(opt.val);
+                    setWizardStep(4);
+                  }}
+                  className={`wizard-card ${stressScore === opt.val ? 'selected' : ''}`}
+                >
+                  <strong style={{ fontSize: '0.95rem', color: stressScore === opt.val ? 'hsl(var(--primary))' : '#fff' }}>{opt.label}</strong>
+                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', marginTop: '2px', lineHeight: '1.4' }}>{opt.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: ENERGY */}
+        {wizardStep === 4 && (
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>⚡ Paso 4: ¿Qué tan enérgico y motivado te sientes físicamente hoy?</h3>
+            <div className="wizard-cards-grid">
+              {[
+                { val: 1, label: 'Sin Energía / Cansado', desc: 'Siento pesadez en el cuerpo y falta de ganas de entrenar.' },
+                { val: 2, label: 'Energía Moderada', desc: 'Nivel estable, listo para cumplir el plan de entrenamiento.' },
+                { val: 3, label: 'Con Energía / Fuerte', desc: 'Siento buena potencia y motivación para entrenar intenso.' },
+                { val: 4, label: 'Energía Máxima / Explosivo', desc: 'Sensación de fuerza ideal, listo para romper récords personales.' }
+              ].map(opt => (
+                <div 
+                  key={opt.val}
+                  onClick={() => {
+                    setEnergyScoreInput(opt.val);
+                    setWizardStep(5);
+                  }}
+                  className={`wizard-card ${energyScoreInput === opt.val ? 'selected' : ''}`}
+                >
+                  <strong style={{ fontSize: '0.95rem', color: energyScoreInput === opt.val ? 'hsl(var(--primary))' : '#fff' }}>{opt.label}</strong>
+                  <p style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', marginTop: '2px', lineHeight: '1.4' }}>{opt.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5: SUMMARY & CONFIRMATION */}
+        {wizardStep === 5 && (
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ textAlign: 'center', padding: '10px 0' }}>
+              <span style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Cálculo de Preparación Física</span>
+              <div style={{ fontSize: '3rem', fontWeight: 900, color: 'hsl(var(--primary))', margin: '8px 0', textShadow: '0 0 15px hsla(var(--primary) / 0.3)' }}>
+                {calculatedScore}/10
+              </div>
+              <strong style={{ fontSize: '1.05rem', color: '#fff' }}>
+                {calculatedScore <= 4 ? '⚠️ Fatiga Alta / Deload Aconsejado' : calculatedScore >= 8 ? '🔥 Energía Excelente / Sobrecarga Normal' : '✅ Estado Óptimo / Recuperación Adecuada'}
+              </strong>
+            </div>
+
+            <div 
+              style={{ 
+                background: 'rgba(255,255,255,0.02)', 
+                border: '1px solid hsl(var(--border))', 
+                borderRadius: '10px', 
+                padding: '16px', 
+                fontSize: '0.85rem', 
+                lineHeight: '1.4', 
+                color: '#c7d2fe' 
+              }}
+            >
+              {calculatedScore <= 4 ? (
+                <span>
+                  <strong>Decisión del Coach:</strong> Tu cuerpo está acumulando fatiga. Hoy realizaremos un <strong>Deload (descarga)</strong> en las cargas propuestas. Esto te ayudará a restaurar tu sistema nervioso y evitar lesiones, manteniendo el estímulo sin sobrecargar.
+                </span>
+              ) : calculatedScore >= 8 ? (
+                <span>
+                  <strong>Decisión del Coach:</strong> Tu cuerpo está en perfectas condiciones. Aplicaremos una <strong>Sobrecarga Progresiva Normal</strong> basada en tu historial. ¡Prepárate para entrenar al máximo y buscar progresiones!
+                </span>
+              ) : (
+                <span>
+                  <strong>Decisión del Coach:</strong> Tienes un nivel de recuperación estable. Mantendremos cargas estándares de tu ciclo de progreso actual para seguir sumando volumen de forma segura.
+                </span>
+              )}
+            </div>
+
+            <button 
+              className="btn btn-primary" 
+              onClick={() => {
+                setRecoveryScore(calculatedScore);
+                handleStartWorkout(calculatedScore);
+                setShowRecoveryWizard(false);
+                setWizardStep(1);
+              }}
+              style={{ width: '100%', padding: '14px', fontSize: '1rem', fontWeight: 'bold' }}
+            >
+              Iniciar Entrenamiento Activo 🔥
+            </button>
+          </div>
+        )}
+
+        {/* Wizard Footer Nav */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
+          {wizardStep > 1 ? (
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setWizardStep(wizardStep - 1)}
+              style={{ padding: '6px 16px', fontSize: '0.85rem' }}
+            >
+              Atrás
+            </button>
+          ) : (
+            <div />
+          )}
+
+          <button 
+            className="btn btn-secondary" 
+            onClick={() => {
+              setShowRecoveryWizard(false);
+              setWizardStep(1);
+            }}
+            style={{ padding: '6px 16px', fontSize: '0.85rem', borderColor: 'rgba(255,255,255,0.08)' }}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <style>{`
+        .btn-standards {
+          background: transparent;
+          border: none;
+          color: hsl(var(--muted));
+          font-size: 0.72rem;
+          font-weight: 600;
+          padding: 4px 0;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          margin-top: 4px;
+          transition: all var(--transition-fast);
+        }
+        .btn-standards:hover {
+          color: hsl(var(--primary));
+          text-shadow: 0 0 8px hsla(var(--primary) / 0.3);
+        }
+        .btn-standards.active {
+          color: hsl(var(--primary));
+        }
+
+        .standards-container {
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.00) 100%);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 12px 14px;
+          margin-bottom: 16px;
+          box-shadow: inset 0 1px 1px rgba(255,255,255,0.05);
+          animation: slideDown 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-6px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .standards-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+        }
+
+        .standard-card {
+          padding: 8px 10px;
+          background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.00) 100%);
+          border-radius: 8px;
+          border: 1px solid rgba(255, 255, 255, 0.03);
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          transition: all var(--transition-fast);
+        }
+
+        .standard-card:hover {
+          border-color: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.03);
+          transform: translateY(-1px);
+        }
+
+        .standard-card.beginner {
+          border-color: rgba(147, 197, 253, 0.08);
+        }
+        .standard-card.beginner:hover {
+          border-color: rgba(147, 197, 253, 0.25);
+          box-shadow: 0 4px 12px rgba(147, 197, 253, 0.05);
+        }
+
+        .standard-card.intermediate {
+          border-color: hsla(var(--primary) / 0.08);
+          background: linear-gradient(180deg, hsla(var(--primary) / 0.03) 0%, hsla(var(--primary) / 0.00) 100%);
+        }
+        .standard-card.intermediate:hover {
+          border-color: hsla(var(--primary) / 0.25);
+          box-shadow: 0 4px 12px hsla(var(--primary) / 0.08);
+        }
+
+        .standard-card.advanced {
+          border-color: hsla(var(--secondary) / 0.08);
+          background: linear-gradient(180deg, hsla(var(--secondary) / 0.03) 0%, hsla(var(--secondary) / 0.00) 100%);
+        }
+        .standard-card.advanced:hover {
+          border-color: hsla(var(--secondary) / 0.25);
+          box-shadow: 0 4px 12px hsla(var(--secondary) / 0.08);
+        }
+
+        .routine-grid {
+          display: flex;
+          overflow-x: auto;
+          gap: 12px;
+          margin-top: 8px;
+          padding: 6px 4px 12px 4px;
+          scroll-behavior: smooth;
+          -webkit-overflow-scrolling: touch;
+        }
+        
+        .routine-grid::-webkit-scrollbar {
+          height: 6px;
+        }
+        .routine-grid::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.01);
+          border-radius: 3px;
+        }
+        .routine-grid::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.08);
+          border-radius: 3px;
+          transition: background var(--transition-fast);
+        }
+        .routine-grid::-webkit-scrollbar-thumb:hover {
+          background: hsl(var(--primary) / 0.4);
+        }
+
+        .routine-card {
+          flex: 0 0 260px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid hsl(var(--border));
+          border-radius: var(--border-radius-md);
+          padding: 14px 16px;
+          cursor: pointer;
+          transition: all var(--transition-smooth);
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          gap: 10px;
+          position: relative;
+          overflow: hidden;
+          min-height: 140px;
+        }
+
+        .routine-card:hover {
+          transform: translateY(-2px);
+          border-color: hsla(var(--primary) / 0.4);
+          box-shadow: 0 4px 20px rgba(0, 242, 254, 0.05);
+        }
+
+        .routine-card.active {
+          background: hsla(var(--primary) / 0.04);
+          border-color: hsl(var(--primary));
+          box-shadow: 0 0 20px hsla(var(--primary) / 0.15);
+        }
+
+        .routine-card.active::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 4px;
+          height: 100%;
+          background: hsl(var(--primary));
+        }
+
+        .btn-card-action {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          color: hsl(var(--muted));
+          border-radius: 6px;
+          width: 26px;
+          height: 26px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all var(--transition-fast);
+        }
+
+        .btn-card-action:hover {
+          color: hsl(var(--primary));
+          border-color: hsla(var(--primary) / 0.3);
+          background: hsla(var(--primary) / 0.05);
+        }
+
+        .btn-card-action.btn-card-danger:hover {
+          color: hsl(var(--danger));
+          border-color: hsla(var(--danger) / 0.3);
+          background: hsla(var(--danger) / 0.05);
+        }
+      `}</style>
+      
+      {/* 1. SELECTION & WELLNESS QUESTIONNAIRE (BEFORE STARTING) */}
+      {!activeSession ? (
+        <>
+          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Flame size={24} color="hsl(var(--primary))" />
+                  Nueva Sesión de Fuerza
+                </h2>
+                <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', marginTop: '2px' }}>
+                  Elige tu rutina o diseña una personalizada. El coach recalculará tu sobrecarga óptima.
+                </p>
+              </div>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setIsBuildingRoutine(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', borderColor: 'hsl(var(--primary))', color: 'hsl(var(--primary))' }}
+              >
+                <BookmarkPlus size={16} /> Crear Rutina
+              </button>
+            </div>
+
+            <div>
+              {/* Routine Cards Selection */}
+              <div>
+                <label style={{ fontSize: '0.9rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Seleccionar Rutina</label>
+                <div 
+                  ref={routineGridRef}
+                  className="routine-grid"
+                >
+                  {routines.map(r => (
+                    <div 
+                      key={r.title}
+                      onClick={() => setSelectedRoutine(r.title)}
+                      className={`routine-card ${selectedRoutine === r.title ? 'active' : ''}`}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className={`badge ${r.isCustom ? 'badge-secondary' : 'badge-primary'}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
+                          {r.isCustom ? '★ Personalizada' : '✦ Prediseñada'}
+                        </span>
+                        
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button 
+                            className="btn-card-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingRoutine({ title: r.title, exercises: r.exercises });
+                              setIsBuildingRoutine(true);
+                            }}
+                            title="Editar Rutina"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button 
+                            className="btn-card-action btn-card-danger" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`¿Estás seguro de que quieres eliminar la rutina "${r.title}"?`)) {
+                                onDeleteRoutine(r.title);
+                                setSelectedRoutine(routines.find(rout => rout.title !== r.title)?.title || '');
+                              }
+                            }}
+                            title="Eliminar Rutina"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#ffffff', margin: '4px 0 2px 0' }}>
+                          {r.title}
+                        </h4>
+                        <p style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '32px', lineHeight: '1.4' }}>
+                          {r.exercises.length > 0 ? r.exercises.join(', ') : 'Sin ejercicios registrados'}
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'hsl(var(--primary))', fontWeight: 600 }}>
+                        <Dumbbell size={14} />
+                        <span>{r.exercises.length} {r.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Exercise Preview Container */}
+            {previewExercises.length > 0 && (
+              <div style={{ 
+                marginTop: '8px', 
+                borderTop: '1px solid hsl(var(--border))', 
+                paddingTop: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <span style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', fontWeight: 600, display: 'block' }}>
+                  Ejercicios en esta rutina ({previewExercises.length}):
+                </span>
+                
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
+                  gap: '12px' 
+                }}>
+                  {previewExercises.map((ex, index) => {
+                    let willBeSubstituted = false;
+                    let substitutionTitle = '';
+                    if (activeInjury) {
+                      const subRule = getSubstitutedExercise(ex.title);
+                      if (subRule) {
+                        willBeSubstituted = true;
+                        substitutionTitle = subRule.substitutedExercise;
+                      }
+                    }
+
+                    return (
+                      <div 
+                        key={ex.id + '_' + index} 
+                        className="glass-panel" 
+                        style={{ 
+                          padding: '12px 14px', 
+                          background: 'rgba(255,255,255,0.01)', 
+                          borderColor: willBeSubstituted ? 'hsla(var(--warning) / 0.4)' : 'hsl(var(--border))',
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: '6px',
+                          borderRadius: 'var(--border-radius-sm)',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          boxShadow: 'var(--shadow-sm)'
+                        }}
+                      >
+                        {/* Left glowing strip */}
+                        <div style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: '3px',
+                          background: willBeSubstituted ? 'hsl(var(--warning))' : 'hsl(var(--primary))'
+                        }} />
+                        
+                        <div style={{ paddingLeft: '6px' }}>
+                          <strong style={{ 
+                            fontSize: '0.85rem', 
+                            color: '#ffffff', 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
+                            whiteSpace: 'nowrap', 
+                            display: 'block', 
+                            maxWidth: '100%' 
+                          }} title={ex.title}>
+                            {ex.title}
+                          </strong>
+                          
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                            <span className="badge badge-primary" style={{ fontSize: '0.6rem', padding: '1px 4px', textTransform: 'capitalize' }}>
+                              {ex.muscleGroup}
+                            </span>
+                            <span className="badge badge-success" style={{ fontSize: '0.6rem', padding: '1px 4px', textTransform: 'capitalize' }}>
+                              {ex.equipment}
+                            </span>
+                          </div>
+                          
+                          {(() => {
+                            const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
+                            if (!standards) return null;
+                            return (
+                              <div style={{ fontSize: '0.68rem', color: 'hsl(var(--primary))', marginTop: '6px', fontWeight: 600 }}>
+                                🎯 Intermedio: <strong>{standards.intermediate}</strong>
+                              </div>
+                            );
+                          })()}
+                          
+                          {willBeSubstituted && (
+                            <div style={{ 
+                              fontSize: '0.65rem', 
+                              color: 'hsl(var(--warning))', 
+                              marginTop: '6px', 
+                              fontWeight: 'bold', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '4px' 
+                            }}>
+                              ⚠️ Variante: {substitutionTitle}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <button 
+              className="btn btn-primary" 
+              onClick={() => {
+                setWizardStep(1);
+                setShowRecoveryWizard(true);
+              }} 
+              style={{ width: '100%', padding: '12px' }}
+            >
+              <Play size={18} /> Iniciar Entrenamiento
+            </button>
+          </div>
+
+          {/* Historial de Entrenamientos Recientes */}
+          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Clock size={20} color="hsl(var(--primary))" />
+              Historial de Entrenamientos Recientes
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {localHistory.slice(0, 5).map((session, idx) => {
+                let totalSets = 0;
+                let totalVolume = 0;
+                let hasSessionPain = false;
+                
+                session.exercises.forEach((ex: any) => {
+                  totalSets += ex.sets.length;
+                  let exVolume = 0;
+                  ex.sets.forEach((s: any) => {
+                    const weight = s.weightKg || s.weight_kg || 0;
+                    const reps = s.reps || 0;
+                    exVolume += weight * reps;
+                    if (s.hasPain) {
+                      hasSessionPain = true;
+                    }
+                  });
+                  totalVolume += exVolume;
+                });
+                
+                const dateObj = new Date(session.parsedDate);
+                const dateStr = dateObj.toLocaleDateString('es-ES', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric'
+                });
+
+                return (
+                  <div 
+                    key={`${session.title}_${session.startTime}_${idx}`}
+                    style={{ 
+                      padding: '16px', 
+                      background: 'rgba(255,255,255,0.01)',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: 'var(--border-radius-md)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <strong style={{ fontSize: '0.95rem', color: '#ffffff' }}>{session.title}</strong>
+                      <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>{dateStr}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>
+                      <span>🏋️ {session.exercises.length} Ejercicios</span>
+                      <span>🔄 {totalSets} Series</span>
+                      <span>📊 Volumen: <strong>{totalVolume.toLocaleString()} kg</strong></span>
+                      {hasSessionPain && (
+                        <span className="badge badge-danger" style={{ fontSize: '0.7rem', padding: '2px 6px' }}>
+                          ⚠️ Molestia Reportada
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ 
+                      fontSize: '0.8rem', 
+                      color: 'rgba(255,255,255,0.4)', 
+                      whiteSpace: 'nowrap', 
+                      overflow: 'hidden', 
+                      textOverflow: 'ellipsis',
+                      borderTop: '1px dashed rgba(255,255,255,0.05)',
+                      paddingTop: '8px',
+                      marginTop: '4px'
+                    }}>
+                      {session.exercises.map((ex: any) => ex.title).join(', ')}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      ) : (
+        
+        /* 2. ACTIVE WORKOUT LOGGER */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* Active Workout Info Panel */}
+          <div className="glass-panel" style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <span className="badge badge-success" style={{ marginBottom: '4px' }}>Entrenamiento Activo</span>
+              <h2 style={{ fontSize: '1.3rem', fontWeight: 800 }}>{activeSession.title}</h2>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              {/* Timer & Play/Pause */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px', 
+                background: 'rgba(255,255,255,0.03)',
+                padding: '6px 12px',
+                borderRadius: 'var(--border-radius-sm)',
+                border: '1px solid hsl(var(--border))'
+              }}>
+                <button 
+                  onClick={() => setTimerActive(!timerActive)}
+                  style={{ 
+                    background: 'transparent', 
+                    border: 'none', 
+                    cursor: 'pointer', 
+                    color: timerActive ? 'hsl(var(--primary))' : 'hsl(var(--warning))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title={timerActive ? 'Pausar' : 'Reanudar'}
+                >
+                  {timerActive ? <Pause size={18} /> : <Play size={18} />}
+                </button>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  fontSize: '1.1rem', 
+                  fontWeight: 700, 
+                  color: timerActive ? 'hsl(var(--primary))' : 'hsl(var(--warning))',
+                  fontFamily: 'monospace'
+                }}>
+                  <Clock size={16} />
+                  <span>{formatTime(timer)}</span>
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn btn-danger" onClick={handleCancelWorkout} style={{ padding: '8px 16px' }} title="Cancelar entrenamiento">
+                  <X size={18} /> Cancelar
+                </button>
+                <button className="btn btn-primary" onClick={handleFinishWorkout} style={{ padding: '8px 16px' }}>
+                  <Check size={18} /> Completar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Rest Timer Banner */}
+          {restTimeRemaining > 0 && (
+            <div className="glass-panel fade-in" style={{ 
+              padding: '16px 20px', 
+              background: 'hsla(var(--secondary) / 0.08)', 
+              borderColor: 'hsla(var(--secondary) / 0.3)',
+              boxShadow: '0 0 15px hsla(var(--secondary) / 0.15)',
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '12px',
+              borderRadius: 'var(--border-radius-md)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Clock size={20} color="hsl(var(--secondary))" style={{ animation: 'fadeIn 1.5s infinite alternate' }} />
+                  <div>
+                    <strong style={{ fontSize: '0.95rem', color: '#ffffff' }}>Tiempo de Descanso Activo</strong>
+                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
+                      Espera o ajusta el tiempo de recuperación entre series
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '1.6rem', fontWeight: 800, fontFamily: 'monospace', color: 'hsl(var(--secondary))' }}>
+                    {formatTime(restTimeRemaining)}
+                  </span>
+                  
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button className="btn btn-secondary" onClick={handleSubtractRestTime} style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                      <Minus size={12} /> 30s
+                    </button>
+                    <button className="btn btn-secondary" onClick={handleAddRestTime} style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                      <Plus size={12} /> 30s
+                    </button>
+                    <button className="btn btn-warning" onClick={handleSkipRest} style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <SkipForward size={12} /> Omitir
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ 
+                  height: '100%', 
+                  width: `${(restTimeRemaining / restTimeTotal) * 100}%`, 
+                  background: 'hsl(var(--secondary))',
+                  borderRadius: '3px',
+                  transition: 'width 1s linear'
+                }} />
+              </div>
+            </div>
+          )}
+
+          {/* Paused Session Warning Banner */}
+          {!timerActive && (
+            <div className="glass-panel fade-in" style={{ 
+              padding: '14px 20px', 
+              background: 'hsla(var(--warning) / 0.08)', 
+              borderColor: 'hsla(var(--warning) / 0.3)',
+              display: 'flex', 
+              gap: '12px', 
+              alignItems: 'center',
+              borderRadius: 'var(--border-radius-md)',
+              color: 'hsl(var(--warning))'
+            }}>
+              <Pause size={20} />
+              <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                Entrenamiento Pausado. El temporizador de duración de la sesión está detenido. Pulsa "Reanudar" para continuar.
+              </span>
+            </div>
+          )}
+
+          {/* Exercises Loop */}
+          {activeSession.exercises.map((ex: any, exIdx: number) => (
+            <div key={ex.originalTitle} className="glass-panel" style={{ padding: '20px', position: 'relative' }}>
+              
+              {/* Exercise Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '12px', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Dumbbell size={18} color="hsl(var(--primary))" />
+                    {ex.title}
+                  </h3>
+                  {ex.isSubstituted && (
+                    <span className="badge badge-warning" style={{ marginTop: '6px' }}>
+                      ⚠️ Variante PLNEXC por dolor en {activeInjury ? (MILO_REHAB_PROTOCOLS[activeInjury.joint]?.displayName || activeInjury.joint) : ''}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                  <span><strong>Objetivo:</strong> {ex.suggestion.suggestedWeight}kg x {ex.suggestion.suggestedReps} reps</span>
+                  {(() => {
+                    const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
+                    if (!standards) return null;
+                    const isExpanded = !!expandedStandards[ex.title];
+                    return (
+                      <button 
+                        onClick={() => setExpandedStandards(prev => ({ ...prev, [ex.title]: !isExpanded }))}
+                        className={`btn-standards ${isExpanded ? 'active' : ''}`}
+                      >
+                        <Target size={12} style={{ opacity: isExpanded ? 1 : 0.6 }} />
+                        <span>{isExpanded ? 'Ocultar estándares' : 'Estándares de fuerza'}</span>
+                      </button>
+                    );
+                  })()}
+                  {(() => {
+                    let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                    if (!foundEx && ex.originalTitle) {
+                      foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.originalTitle.toLowerCase());
+                    }
+                    if (!foundEx) {
+                      const cleanTitle = ex.title.toLowerCase();
+                      if (cleanTitle.includes('squat')) {
+                        foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                      } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
+                        foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                      } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
+                        foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                      } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
+                        foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                      } else if (cleanTitle.includes('row')) {
+                        foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                      } else if (cleanTitle.includes('curl')) {
+                        foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                      } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
+                        foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                      }
+                    }
+
+                    if (!foundEx || !foundEx.instructions) return null;
+                    const isExExpanded = !!expandedInstructions[ex.title];
+                    return (
+                      <button 
+                        onClick={() => setExpandedInstructions(prev => ({ ...prev, [ex.title]: !isExExpanded }))}
+                        className={`btn-standards ${isExExpanded ? 'active' : ''}`}
+                        style={{ marginTop: '4px' }}
+                      >
+                        <BookOpen size={12} style={{ opacity: isExExpanded ? 1 : 0.6 }} />
+                        <span>{isExExpanded ? 'Ocultar técnica' : 'Ver técnica / guía'}</span>
+                      </button>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* PLNEXC Substitution Tips box */}
+              {ex.isSubstituted && ex.subRule && (
+                <div style={{ background: 'hsla(var(--warning) / 0.05)', border: '1px solid hsla(var(--warning) / 0.2)', padding: '12px', borderRadius: '8px', fontSize: '0.825rem', marginBottom: '16px', color: 'hsl(var(--warning))' }}>
+                  <strong>Por qué cambiamos:</strong> {ex.subRule.reason} <br />
+                  <strong>Consejo PLNEXC Rehab:</strong> {ex.subRule.rehabTips}
+                </div>
+              )}
+
+              {/* Overload Engine Coaching Tips Box */}
+              {!ex.isSubstituted && (
+                <div style={{ background: 'hsla(var(--primary) / 0.03)', border: '1px solid hsla(var(--primary) / 0.1)', padding: '10px 14px', borderRadius: '8px', fontSize: '0.8rem', marginBottom: '16px', color: '#c7d2fe' }}>
+                  💡 <strong>Coach de Fuerza:</strong> {ex.suggestion.message}
+                </div>
+              )}
+
+              {/* Estándares de Fuerza Colapsables (Versión Premium Discreta) */}
+              {(() => {
+                const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
+                if (!standards) return null;
+                const isExpanded = !!expandedStandards[ex.title];
+                if (!isExpanded) return null;
+                
+                return (
+                  <div className="standards-container">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: 'hsl(var(--primary))', boxShadow: '0 0 6px hsl(var(--primary))' }} />
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+                          Estándares de Fuerza para tu peso
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))' }}>{standards.label}</span>
+                    </div>
+                    
+                    <div className="standards-grid">
+                      <div className="standard-card beginner">
+                        <span style={{ fontSize: '0.6rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Principiante</span>
+                        <strong style={{ fontSize: '0.85rem', color: '#93c5fd', textShadow: '0 0 10px rgba(147,197,253,0.15)' }}>{standards.beginner}</strong>
+                      </div>
+                      <div className="standard-card intermediate">
+                        <span style={{ fontSize: '0.6rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Intermedio</span>
+                        <strong style={{ fontSize: '0.85rem', color: 'hsl(var(--primary))', textShadow: '0 0 10px hsla(var(--primary) / 0.2)' }}>{standards.intermediate}</strong>
+                      </div>
+                      <div className="standard-card advanced">
+                        <span style={{ fontSize: '0.6rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Avanzado</span>
+                        <strong style={{ fontSize: '0.85rem', color: 'hsl(var(--secondary))', textShadow: '0 0 10px hsla(var(--secondary) / 0.2)' }}>{standards.advanced}</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Técnica e Instrucciones Colapsables con Imagen en la Nube */}
+              {(() => {
+                let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                if (!foundEx && ex.originalTitle) {
+                  foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.originalTitle.toLowerCase());
+                }
+                if (!foundEx) {
+                  const cleanTitle = ex.title.toLowerCase();
+                  if (cleanTitle.includes('squat')) {
+                    foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                  } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
+                    foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                  } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
+                    foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                  } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
+                    foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                  } else if (cleanTitle.includes('row')) {
+                    foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                  } else if (cleanTitle.includes('curl')) {
+                    foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                  } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
+                    foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                  }
+                }
+
+                if (!foundEx || !foundEx.instructions) return null;
+                const isExExpanded = !!expandedInstructions[ex.title];
+                if (!isExExpanded) return null;
+
+                return (
+                  <div className="standards-container" style={{ marginTop: '0px', marginBottom: '16px', borderLeft: '3px solid hsl(var(--primary))' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <BookOpen size={16} color="hsl(var(--primary))" />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
+                          Guía Técnica de Realización: {foundEx.title}
+                        </span>
+                      </div>
+                      <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>Nube</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {foundEx.image && (
+                        <div style={{ width: '100%', maxHeight: '200px', overflow: 'hidden', borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'rgba(0,0,0,0.2)' }}>
+                          <img 
+                            src={foundEx.image} 
+                            alt={foundEx.title}
+                            loading="lazy"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      <ol style={{ paddingLeft: '20px', margin: 0, fontSize: '0.85rem', color: '#e5e7eb', display: 'flex', flexDirection: 'column', gap: '8px', lineHeight: '1.4' }}>
+                        {foundEx.instructions.map((inst, idx) => (
+                          <li key={idx}>{inst}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Sets Table */}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '450px' }}>
+                  <thead>
+                    <tr style={{ color: 'hsl(var(--muted))', fontSize: '0.8rem', textTransform: 'uppercase' }}>
+                      <th style={{ padding: '8px' }}>Set</th>
+                      <th style={{ padding: '8px' }}>Tipo</th>
+                      <th style={{ padding: '8px' }}>Peso (kg)</th>
+                      <th style={{ padding: '8px' }}>Reps</th>
+                      <th style={{ padding: '8px' }}>RPE / Dolor</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>Check</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ex.sets.map((set: any, setIdx: number) => (
+                      <tr 
+                        key={set.setIndex} 
+                        style={{ 
+                          borderBottom: '1px solid rgba(255,255,255,0.03)',
+                          background: set.completed ? 'rgba(0, 242, 254, 0.01)' : 'transparent'
+                        }}
+                      >
+                        <td style={{ padding: '10px 8px', fontWeight: 700 }}>{set.setIndex + 1}</td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <select 
+                            value={set.setType} 
+                            onChange={(e) => handleSetChange(exIdx, setIdx, 'setType', e.target.value)}
+                            style={{ padding: '4px', fontSize: '0.75rem', width: 'auto' }}
+                          >
+                            <option value="normal">Normal</option>
+                            <option value="warmup">Warmup</option>
+                            <option value="failure">Al Fallo</option>
+                            <option value="dropset">Dropset</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <input 
+                            type="number" 
+                            step="0.5"
+                            value={set.weightKg === null ? '' : set.weightKg} 
+                            placeholder="0"
+                            onChange={(e) => handleSetChange(exIdx, setIdx, 'weightKg', e.target.value ? parseFloat(e.target.value) : null)}
+                            style={{ padding: '6px', fontSize: '0.85rem', width: '70px', textAlign: 'center' }}
+                          />
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <input 
+                            type="number" 
+                            value={set.reps === null ? '' : set.reps} 
+                            placeholder="0"
+                            onChange={(e) => handleSetChange(exIdx, setIdx, 'reps', e.target.value ? parseInt(e.target.value, 10) : null)}
+                            style={{ padding: '6px', fontSize: '0.85rem', width: '60px', textAlign: 'center' }}
+                          />
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <select 
+                              value={set.rpe === null ? '' : set.rpe} 
+                              disabled={set.hasPain}
+                              onChange={(e) => handleSetChange(exIdx, setIdx, 'rpe', e.target.value ? parseFloat(e.target.value) : null)}
+                              style={{ padding: '4px', fontSize: '0.75rem', width: '65px' }}
+                            >
+                              <option value="">RPE</option>
+                              <option value="10">10 (Fallo)</option>
+                              <option value="9.5">9.5</option>
+                              <option value="9">9 (1 RIR)</option>
+                              <option value="8.5">8.5</option>
+                              <option value="8">8 (2 RIR)</option>
+                              <option value="7">7 (3 RIR)</option>
+                              <option value="6">6 (Fácil)</option>
+                            </select>
+
+                            <button 
+                              className={`set-pain-btn ${set.hasPain ? 'has-pain' : ''}`}
+                              onClick={() => handleTogglePain(exIdx, setIdx)}
+                              title={set.hasPain ? 'Registrado con Dolor' : 'Reportar Dolor/Molestia'}
+                            >
+                              <AlertTriangle size={14} />
+                            </button>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                          <button
+                            onClick={() => handleToggleCompleted(exIdx, setIdx)}
+                            className={`set-checkbox-btn ${set.completed ? 'completed' : ''}`}
+                          >
+                            {set.completed && <Check size={16} />}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Warnings box when pain is reported in active set */}
+              {ex.sets.some((s: any) => s.hasPain) && (
+                <div style={{ marginTop: '16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', padding: '10px', borderRadius: '8px', color: 'hsl(var(--danger))', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.8rem' }}>
+                  <AlertTriangle size={18} />
+                  <span>
+                    <strong>Alerta de Dolor:</strong> No fuerces el movimiento. Reduce el peso de inmediato o sustituye el ejercicio por su variante Milo haciendo click en Molestia.
+                  </span>
+                </div>
+              )}
+
+              {/* Set Actions Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                <button className="btn btn-secondary" onClick={() => handleRemoveSet(exIdx)} style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
+                  Quitar Serie
+                </button>
+                <button className="btn btn-secondary" onClick={() => handleAddSet(exIdx)} style={{ padding: '4px 10px', fontSize: '0.75rem', borderColor: 'hsl(var(--primary))', color: 'hsl(var(--primary))' }}>
+                  Añadir Serie
+                </button>
+              </div>
+
+            </div>
+          ))}
+
+        </div>
+      )}
+
+    </div>
+  );
+}
