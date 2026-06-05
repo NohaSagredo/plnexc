@@ -3,7 +3,9 @@ import {
   TrendingUp, 
   Flame, 
   HeartPulse, 
-  Activity
+  Activity,
+  TrendingDown,
+  Heart
 } from 'lucide-react';
 
 export default function AlgorithmsTab() {
@@ -157,6 +159,86 @@ export default function AlgorithmsTab() {
               </table>
             </div>
           </div>
+        </div>
+
+        {/* Smart Cardio & Caloric Deficit */}
+        <div className="glass-panel" style={{ padding: '20px' }}>
+          <h3 style={{ fontSize: '1.2rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'hsl(var(--secondary))' }}>
+            <TrendingDown size={20} color="hsl(var(--secondary))" />
+            5. Algoritmo de Cardio Inteligente y Ajuste de Déficit
+          </h3>
+          <p style={{ fontSize: '0.9rem', color: '#e5e7eb', marginBottom: '14px', lineHeight: '1.6' }}>
+            Para alcanzar tu peso corporal objetivo de forma saludable y sosteniendo la masa magra (muscular), el motor calcula tu composición corporal y prescribe la dosis de cardio idónea utilizando las siguientes ecuaciones:
+          </p>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}>
+            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#ffffff' }}>Ecuaciones Clave de Composición Corporal:</h4>
+            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div>
+                <strong>Masa Magra Activa:</strong> <br />
+                <code style={{ color: 'hsl(var(--primary))' }}>Masa Magra (kg) = Peso Actual × (1 - Grasa% / 100)</code>
+              </div>
+              <div>
+                <strong>Peso Objetivo Recomendado:</strong> <br />
+                <code style={{ color: 'hsl(var(--primary))' }}>Peso Target (kg) = Masa Magra / (1 - Grasa Target% / 100)</code>
+              </div>
+              <div>
+                <strong>Déficit Calórico Total y Diario:</strong> <br />
+                <code style={{ color: 'hsl(var(--primary))' }}>Déficit Total (kcal) = Grasa a Perder (kg) × 7700 kcal</code> <br />
+                <code style={{ color: 'hsl(var(--primary))' }}>Déficit Diario (kcal) = Déficit Total / (Semanas de Plazo × 7)</code>
+              </div>
+            </div>
+          </div>
+
+          <p style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', lineHeight: '1.5', marginTop: '14px' }}>
+            <strong>Distribución y Equivalencia por METs:</strong> <br />
+            El algoritmo asume una distribución del déficit recomendada: <strong>60% recortando alimentos</strong> y <strong>40% a través de cardio</strong>. Luego, calcula los minutos necesarios estimando el gasto mediante coeficientes MET (LISS: 3.5, MISS: 7.0, HIIT: 11.0):
+          </p>
+          <div style={{ 
+            background: 'rgba(0,0,0,0.3)', 
+            padding: '16px', 
+            borderRadius: '8px', 
+            textAlign: 'center', 
+            fontFamily: 'monospace', 
+            fontSize: '1.05rem', 
+            border: '1px solid hsl(var(--border))',
+            margin: '12px 0',
+            color: 'hsl(var(--secondary))',
+            lineHeight: '1.4'
+          }}>
+            Gasto Cardio (kcal) = MET × 3.5 × (Peso / 200) × Minutos <br />
+            Minutos Requeridos = Objetivo Calórico Cardio / (MET × 3.5 × (Peso / 200))
+          </div>
+        </div>
+
+        {/* Karvonen Heart Rate Zones */}
+        <div className="glass-panel" style={{ padding: '20px' }}>
+          <h3 style={{ fontSize: '1.2rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'hsl(var(--danger))' }}>
+            <Heart size={20} color="hsl(var(--danger))" />
+            6. Zonas de Frecuencia Cardíaca (Fórmula de Karvonen)
+          </h3>
+          <p style={{ fontSize: '0.9rem', color: '#e5e7eb', marginBottom: '14px', lineHeight: '1.6' }}>
+            Para asegurar que el esfuerzo cardiovascular corresponda a la intensidad prescrita (LISS, MISS o HIIT) sin generar fatiga excesiva que afecte a la sesión de pesas, la app utiliza la fórmula de <strong>Karvonen</strong> para individualizar las zonas de pulso:
+          </p>
+          <div style={{ 
+            background: 'rgba(0,0,0,0.3)', 
+            padding: '16px', 
+            borderRadius: '8px', 
+            textAlign: 'center', 
+            fontFamily: 'monospace', 
+            fontSize: '1.15rem', 
+            border: '1px solid hsl(var(--border))',
+            margin: '12px 0',
+            color: 'hsl(var(--danger))'
+          }}>
+            PPM Objetivo = ((FC Max - FC Reposo) × %Intensidad) + FC Reposo
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', lineHeight: '1.5' }}>
+            Donde <strong>FC Max</strong> se estima como <code style={{ color: '#ffffff' }}>220 - Edad</code> y <strong>FC Reposo (RHR)</strong> es el pulso en reposo del usuario. <br />
+            • <strong>Zona 2 (LISS):</strong> 60% a 70% de intensidad. Ideal para quemar grasa de forma limpia y promover la salud mitocondrial.<br />
+            • <strong>Zona 3 (MISS):</strong> 70% a 80% de intensidad. Desarrolla capacidad aeróbica general.<br />
+            • <strong>Zona 4/5 (HIIT):</strong> &gt;80% de intensidad. Promueve la capacidad anaeróbica y el efecto post-combustión EPOC.
+          </p>
         </div>
 
       </div>

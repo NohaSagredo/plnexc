@@ -329,6 +329,27 @@ export default function App() {
     }
   };
 
+  const handleDeleteWorkout = (parsedDate: string) => {
+    const confirmDelete = window.confirm("¿Estás seguro de que deseas eliminar este entrenamiento de tu historial?");
+    if (!confirmDelete) return;
+
+    const savedUserSessions = localStorage.getItem('milo_user_sessions');
+    const parsedUserSessions = savedUserSessions ? JSON.parse(savedUserSessions) : [];
+    
+    const updatedUserSessions = parsedUserSessions.filter((session: any) => session.parsedDate !== parsedDate);
+    localStorage.setItem('milo_user_sessions', JSON.stringify(updatedUserSessions));
+
+    setLocalHistory(updatedUserSessions);
+
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      uploadUserData(currentUser.uid, { userSessions: updatedUserSessions }).catch(err => {
+        console.error('Error auto-syncing workout deletion:', err);
+      });
+    }
+  };
+
+
   // Save new custom routine (or update existing)
   const handleSaveCustomRoutine = (name: string, exercises: string[], originalName?: string) => {
     let updated;
@@ -484,6 +505,7 @@ export default function App() {
               localHistory={localHistory}
               activeInjury={activeInjury}
               weightHistory={weightHistory}
+              cardioHistory={cardioHistory}
             />
           </div>
         )}
@@ -493,6 +515,7 @@ export default function App() {
             <WorkoutTab 
               activeInjury={activeInjury} 
               onSaveWorkout={handleSaveWorkout}
+              onDeleteWorkout={handleDeleteWorkout}
               localHistory={localHistory}
               customRoutines={customRoutines}
               onSaveCustomRoutine={handleSaveCustomRoutine}

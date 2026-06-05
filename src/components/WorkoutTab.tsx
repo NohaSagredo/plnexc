@@ -34,6 +34,7 @@ interface WorkoutTabProps {
     painScale: number;
   } | null;
   onSaveWorkout: (newSession: any) => void;
+  onDeleteWorkout: (parsedDate: string) => void;
   localHistory: any[];
   customRoutines: any[];
   onSaveCustomRoutine: (name: string, exercises: string[], originalName?: string) => void;
@@ -48,6 +49,7 @@ interface WorkoutTabProps {
 export default function WorkoutTab({ 
   activeInjury, 
   onSaveWorkout, 
+  onDeleteWorkout,
   localHistory,
   customRoutines,
   onSaveCustomRoutine,
@@ -1222,7 +1224,25 @@ export default function WorkoutTab({
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                       <strong style={{ fontSize: '0.95rem', color: '#ffffff' }}>{session.title}</strong>
-                      <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>{dateStr}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>{dateStr}</span>
+                        <button
+                          onClick={() => onDeleteWorkout(session.parsedDate)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'hsl(var(--muted))',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                          title="Eliminar entrenamiento"
+                        >
+                          <X size={14} className="hover-danger" />
+                        </button>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>

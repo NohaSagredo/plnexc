@@ -729,3 +729,14 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 10px hsla(var(--danger) / 0.4);
 }
 
+.hover-danger {
+  transition: all var(--transition-fast) !important;
+}
+
+.hover-danger:hover {
+  color: hsl(var(--danger)) !important;
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 4px hsla(var(--danger) / 0.5));
+}
+
+
