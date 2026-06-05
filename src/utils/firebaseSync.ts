@@ -16,6 +16,9 @@ export interface SyncedData {
   bodyFat?: number;
   weightHistory?: WeightRecord[];
   deletedRoutines?: string[];
+  cardioGoalType?: 'daily' | 'weekly';
+  cardioTargetMinutes?: number;
+  cardioHistory?: { date: string; minutes: number; type: string; calories: number }[];
   updatedAt: string;
 }
 
@@ -57,6 +60,9 @@ export async function uploadUserData(userId: string, data: Partial<SyncedData>):
       bodyFat: data.bodyFat !== undefined ? data.bodyFat : (existing?.bodyFat ?? 15),
       weightHistory: data.weightHistory ?? existing?.weightHistory ?? [],
       deletedRoutines: data.deletedRoutines ?? existing?.deletedRoutines ?? [],
+      cardioGoalType: data.cardioGoalType ?? existing?.cardioGoalType ?? 'daily',
+      cardioTargetMinutes: data.cardioTargetMinutes !== undefined ? data.cardioTargetMinutes : (existing?.cardioTargetMinutes ?? 150),
+      cardioHistory: data.cardioHistory ?? existing?.cardioHistory ?? [],
       updatedAt: new Date().toISOString(),
     };
 
@@ -83,6 +89,9 @@ export function mergeLocalAndCloudData(local: {
   bodyFat: number;
   weightHistory: WeightRecord[];
   deletedRoutines: string[];
+  cardioGoalType: 'daily' | 'weekly';
+  cardioTargetMinutes: number;
+  cardioHistory: any[];
 }, cloud: SyncedData): {
   merged: {
     customRoutines: any[];
@@ -94,6 +103,9 @@ export function mergeLocalAndCloudData(local: {
     bodyFat: number;
     weightHistory: WeightRecord[];
     deletedRoutines: string[];
+    cardioGoalType: 'daily' | 'weekly';
+    cardioTargetMinutes: number;
+    cardioHistory: any[];
   };
   hasChanges: boolean;
 } {
@@ -232,6 +244,43 @@ export function mergeLocalAndCloudData(local: {
     hasChanges = true;
   }
 
+  // 10. Merge Cardio Goal Type
+  let mergedCardioGoalType = local.cardioGoalType;
+  if (cloud.cardioGoalType !== undefined && cloud.cardioGoalType !== local.cardioGoalType) {
+    mergedCardioGoalType = cloud.cardioGoalType;
+    hasChanges = true;
+  } else if (cloud.cardioGoalType === undefined) {
+    hasChanges = true;
+  }
+
+  // 11. Merge Cardio Target Minutes
+  let mergedCardioTargetMinutes = local.cardioTargetMinutes;
+  if (cloud.cardioTargetMinutes !== undefined && cloud.cardioTargetMinutes !== local.cardioTargetMinutes) {
+    mergedCardioTargetMinutes = cloud.cardioTargetMinutes;
+    hasChanges = true;
+  } else if (cloud.cardioTargetMinutes === undefined) {
+    hasChanges = true;
+  }
+
+  // 12. Merge Cardio History
+  const mergedCardioHistory = [...(local.cardioHistory || [])];
+  const cloudCardioHistory = cloud.cardioHistory ?? [];
+  cloudCardioHistory.forEach((cloudRec) => {
+    const exists = mergedCardioHistory.some(localRec => localRec.date === cloudRec.date);
+    if (!exists) {
+      mergedCardioHistory.push(cloudRec);
+      hasChanges = true;
+    }
+  });
+  const localHistoryArr = local.cardioHistory || [];
+  localHistoryArr.forEach((localRec) => {
+    const exists = cloudCardioHistory.some(cloudRec => cloudRec.date === localRec.date);
+    if (!exists) {
+      hasChanges = true;
+    }
+  });
+  mergedCardioHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   return {
     merged: {
       customRoutines: mergedRoutines,
@@ -242,7 +291,10 @@ export function mergeLocalAndCloudData(local: {
       gender: mergedGender,
       bodyFat: mergedFat,
       weightHistory: mergedWeightHistory,
-      deletedRoutines: mergedDeleted
+      deletedRoutines: mergedDeleted,
+      cardioGoalType: mergedCardioGoalType,
+      cardioTargetMinutes: mergedCardioTargetMinutes,
+      cardioHistory: mergedCardioHistory
     },
     hasChanges
   };

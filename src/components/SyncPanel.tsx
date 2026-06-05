@@ -45,6 +45,12 @@ interface SyncPanelProps {
   setWeightHistory: (history: any[]) => void;
   deletedRoutines: string[];
   setDeletedRoutines: (routines: string[]) => void;
+  cardioGoalType: 'daily' | 'weekly';
+  setCardioGoalType: (type: 'daily' | 'weekly') => void;
+  cardioTargetMinutes: number;
+  setCardioTargetMinutes: (mins: number) => void;
+  cardioHistory: any[];
+  setCardioHistory: (history: any[]) => void;
 }
 
 export default function SyncPanel({
@@ -64,7 +70,13 @@ export default function SyncPanel({
   weightHistory,
   setWeightHistory,
   deletedRoutines,
-  setDeletedRoutines
+  setDeletedRoutines,
+  cardioGoalType,
+  setCardioGoalType,
+  cardioTargetMinutes,
+  setCardioTargetMinutes,
+  cardioHistory,
+  setCardioHistory
 }: SyncPanelProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -113,7 +125,10 @@ export default function SyncPanel({
         gender,
         bodyFat,
         weightHistory,
-        deletedRoutines
+        deletedRoutines,
+        cardioGoalType,
+        cardioTargetMinutes,
+        cardioHistory
       };
 
       // 2. Download from Cloud Firestore
@@ -149,6 +164,9 @@ export default function SyncPanel({
         setBodyFat(merged.bodyFat, true);
         setWeightHistory(merged.weightHistory);
         setDeletedRoutines(merged.deletedRoutines);
+        setCardioGoalType(merged.cardioGoalType);
+        setCardioTargetMinutes(merged.cardioTargetMinutes);
+        setCardioHistory(merged.cardioHistory);
         
         // Update local user sessions in localStorage
         localStorage.setItem('milo_user_sessions', JSON.stringify(merged.userSessions));
@@ -159,6 +177,9 @@ export default function SyncPanel({
         localStorage.setItem('plnexc_body_fat', merged.bodyFat.toString());
         localStorage.setItem('plnexc_weight_history', JSON.stringify(merged.weightHistory));
         localStorage.setItem('plnexc_deleted_routines', JSON.stringify(merged.deletedRoutines));
+        localStorage.setItem('plnexc_cardio_goal_type', merged.cardioGoalType);
+        localStorage.setItem('plnexc_cardio_target_minutes', merged.cardioTargetMinutes.toString());
+        localStorage.setItem('plnexc_cardio_history', JSON.stringify(merged.cardioHistory));
         if (merged.activeInjury) {
           localStorage.setItem('milo_active_injury', JSON.stringify(merged.activeInjury));
         } else {
@@ -181,7 +202,10 @@ export default function SyncPanel({
             gender: merged.gender,
             bodyFat: merged.bodyFat,
             weightHistory: merged.weightHistory,
-            deletedRoutines: merged.deletedRoutines
+            deletedRoutines: merged.deletedRoutines,
+            cardioGoalType: merged.cardioGoalType,
+            cardioTargetMinutes: merged.cardioTargetMinutes,
+            cardioHistory: merged.cardioHistory
           });
         }
       } else {
@@ -195,7 +219,10 @@ export default function SyncPanel({
           gender: localData.gender,
           bodyFat: localData.bodyFat,
           weightHistory: localData.weightHistory,
-          deletedRoutines: localData.deletedRoutines
+          deletedRoutines: localData.deletedRoutines,
+          cardioGoalType: localData.cardioGoalType,
+          cardioTargetMinutes: localData.cardioTargetMinutes,
+          cardioHistory: localData.cardioHistory
         });
       }
 

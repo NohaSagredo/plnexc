@@ -4,11 +4,13 @@ import {
   HeartPulse, 
   Zap,
   Info,
-  User
+  User,
+  Flame
 } from 'lucide-react';
 import DashboardTab from './components/DashboardTab';
 import WorkoutTab from './components/WorkoutTab';
 import RehabTab from './components/RehabTab';
+import CardioTab from './components/CardioTab';
 import AlgorithmsTab from './components/AlgorithmsTab';
 import ProfileTab from './components/ProfileTab';
 import SyncPanel from './components/SyncPanel';
@@ -18,7 +20,7 @@ import { auth } from './utils/firebase';
 import { useState, useEffect } from 'react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'workout' | 'rehab' | 'profile' | 'algorithms'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile' | 'algorithms'>('dashboard');
   
   // 1. Manage state of historical workouts
   const [localHistory, setLocalHistory] = useState<any[]>([]);
@@ -43,6 +45,69 @@ export default function App() {
 
   // 5. Manage deleted/hidden routines
   const [deletedRoutines, setDeletedRoutines] = useState<string[]>([]);
+
+  // 6. Manage cardio goals and history
+  const [cardioGoalType, setCardioGoalType] = useState<'daily' | 'weekly'>('daily');
+  const [cardioTargetMinutes, setCardioTargetMinutes] = useState<number>(150);
+  const [cardioHistory, setCardioHistory] = useState<any[]>([]);
+
+  const handleSetCardioGoalType = (type: 'daily' | 'weekly', skipCloudUpload = false) => {
+    setCardioGoalType(type);
+    localStorage.setItem('plnexc_cardio_goal_type', type);
+    if (!skipCloudUpload) {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        uploadUserData(currentUser.uid, { cardioGoalType: type }).catch(err => {
+          console.error('Error auto-syncing cardio goal type:', err);
+        });
+      }
+    }
+  };
+
+  const handleSetCardioTargetMinutes = (mins: number, skipCloudUpload = false) => {
+    setCardioTargetMinutes(mins);
+    localStorage.setItem('plnexc_cardio_target_minutes', mins.toString());
+    if (!skipCloudUpload) {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        uploadUserData(currentUser.uid, { cardioTargetMinutes: mins }).catch(err => {
+          console.error('Error auto-syncing cardio target minutes:', err);
+        });
+      }
+    }
+  };
+
+  const handleAddCardioSession = (session: any, skipCloudUpload = false) => {
+    setCardioHistory(prev => {
+      const newHistory = [session, ...prev];
+      localStorage.setItem('plnexc_cardio_history', JSON.stringify(newHistory));
+      if (!skipCloudUpload) {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          uploadUserData(currentUser.uid, { cardioHistory: newHistory }).catch(err => {
+            console.error('Error auto-syncing cardio history:', err);
+          });
+        }
+      }
+      return newHistory;
+    });
+  };
+
+  const handleDeleteCardioSession = (dateStr: string, skipCloudUpload = false) => {
+    setCardioHistory(prev => {
+      const newHistory = prev.filter(s => s.date !== dateStr);
+      localStorage.setItem('plnexc_cardio_history', JSON.stringify(newHistory));
+      if (!skipCloudUpload) {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          uploadUserData(currentUser.uid, { cardioHistory: newHistory }).catch(err => {
+            console.error('Error auto-syncing cardio history delete:', err);
+          });
+        }
+      }
+      return newHistory;
+    });
+  };
 
   const handleSetBodyWeight = (weight: number, skipCloudUpload = false) => {
     setBodyWeight(weight);
@@ -161,6 +226,24 @@ export default function App() {
     const savedDeletedRoutines = localStorage.getItem('plnexc_deleted_routines');
     if (savedDeletedRoutines) {
       setDeletedRoutines(JSON.parse(savedDeletedRoutines));
+    }
+
+    // Load cardio goal type
+    const savedCardioGoalType = localStorage.getItem('plnexc_cardio_goal_type');
+    if (savedCardioGoalType === 'daily' || savedCardioGoalType === 'weekly') {
+      setCardioGoalType(savedCardioGoalType);
+    }
+
+    // Load cardio target minutes
+    const savedCardioTargetMinutes = localStorage.getItem('plnexc_cardio_target_minutes');
+    if (savedCardioTargetMinutes) {
+      setCardioTargetMinutes(parseInt(savedCardioTargetMinutes, 10));
+    }
+
+    // Load cardio history
+    const savedCardioHistory = localStorage.getItem('plnexc_cardio_history');
+    if (savedCardioHistory) {
+      setCardioHistory(JSON.parse(savedCardioHistory));
     }
 
     // Load bodyWeight state
@@ -326,6 +409,14 @@ export default function App() {
               <Dumbbell size={18} />
               Entrenar
             </button>
+
+            <button 
+              className={`nav-tab ${activeTab === 'cardio' ? 'active' : ''}`}
+              onClick={() => setActiveTab('cardio')}
+            >
+              <Flame size={18} />
+              Cardio
+            </button>
             
             <button 
               className={`nav-tab ${activeTab === 'rehab' ? 'active' : ''}`}
@@ -375,6 +466,12 @@ export default function App() {
             setWeightHistory={setWeightHistory}
             deletedRoutines={deletedRoutines}
             setDeletedRoutines={setDeletedRoutines}
+            cardioGoalType={cardioGoalType}
+            setCardioGoalType={handleSetCardioGoalType}
+            cardioTargetMinutes={cardioTargetMinutes}
+            setCardioTargetMinutes={handleSetCardioTargetMinutes}
+            cardioHistory={cardioHistory}
+            setCardioHistory={setCardioHistory}
           />
         </div>
       </header>
@@ -436,6 +533,22 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === 'cardio' && (
+          <div className="tab-transition">
+            <CardioTab 
+              cardioGoalType={cardioGoalType}
+              setCardioGoalType={handleSetCardioGoalType}
+              cardioTargetMinutes={cardioTargetMinutes}
+              setCardioTargetMinutes={handleSetCardioTargetMinutes}
+              cardioHistory={cardioHistory}
+              onAddCardioSession={handleAddCardioSession}
+              onDeleteCardioSession={handleDeleteCardioSession}
+              bodyWeight={bodyWeight}
+              bodyFat={bodyFat}
+            />
+          </div>
+        )}
+
         {activeTab === 'algorithms' && (
           <div className="tab-transition">
             <AlgorithmsTab />
@@ -459,6 +572,14 @@ export default function App() {
         >
           <Dumbbell size={22} />
           <span>Entrenar</span>
+        </button>
+
+        <button 
+          className={`mobile-tab ${activeTab === 'cardio' ? 'active' : ''}`}
+          onClick={() => setActiveTab('cardio')}
+        >
+          <Flame size={22} />
+          <span>Cardio</span>
         </button>
         
         <button 

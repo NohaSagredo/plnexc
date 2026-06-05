@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Scale, User, Trash2, Calendar, Plus } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Scale, User, Trash2, Calendar, Plus, HelpCircle, Calculator, ChevronDown, ChevronUp, Check, Info } from 'lucide-react';
 import type { WeightRecord } from '../utils/firebaseSync';
 
 interface ProfileTabProps {
@@ -32,6 +32,58 @@ export default function ProfileTab({
   const [newWeightInput, setNewWeightInput] = useState<string>('');
   const [customDateInput, setCustomDateInput] = useState<string>(new Date().toISOString().split('T')[0]);
 
+  // States for body fat calculator
+  const [showFatCalc, setShowFatCalc] = useState<boolean>(false);
+  const [neckCirc, setNeckCirc] = useState<number>(gender === 'Masculino' ? 38 : 34);
+  const [waistCirc, setWaistCirc] = useState<number>(gender === 'Masculino' ? 85 : 75);
+  const [hipCirc, setHipCirc] = useState<number>(95);
+
+  // Sync state defaults when gender changes
+  useEffect(() => {
+    setNeckCirc(gender === 'Masculino' ? 38 : 34);
+    setWaistCirc(gender === 'Masculino' ? 85 : 75);
+  }, [gender]);
+
+  // Navy Fat Calculation
+  const calculatedNavyFat = useMemo(() => {
+    if (!height || !waistCirc || !neckCirc) return null;
+    if (gender === 'Femenino' && !hipCirc) return null;
+
+    try {
+      if (gender === 'Masculino') {
+        if (waistCirc <= neckCirc) return null;
+        const density = 1.0324 - 0.19077 * Math.log10(waistCirc - neckCirc) + 0.15456 * Math.log10(height);
+        const bf = 495 / density - 450;
+        return isNaN(bf) || bf < 2 || bf > 60 ? null : parseFloat(bf.toFixed(1));
+      } else {
+        if ((waistCirc + hipCirc) <= neckCirc) return null;
+        const density = 1.29579 - 0.35004 * Math.log10(waistCirc + hipCirc - neckCirc) + 0.22100 * Math.log10(height);
+        const bf = 495 / density - 450;
+        return isNaN(bf) || bf < 2 || bf > 60 ? null : parseFloat(bf.toFixed(1));
+      }
+    } catch (e) {
+      return null;
+    }
+  }, [gender, height, waistCirc, neckCirc, hipCirc]);
+
+  // Body Fat Category for profile
+  const fatCategory = useMemo(() => {
+    const value = bodyFat;
+    if (gender === 'Masculino') {
+      if (value < 6) return { text: 'Grasa Esencial', color: 'hsl(var(--primary))', desc: 'Rango mínimo necesario para la supervivencia.' };
+      if (value < 14) return { text: 'Atleta', color: 'hsl(var(--success))', desc: 'Nivel óptimo para rendimiento deportivo de velocidad/estética.' };
+      if (value < 18) return { text: 'Fitness', color: 'hsl(var(--success))', desc: 'Composición corporal atlética y saludable.' };
+      if (value < 25) return { text: 'Aceptable', color: 'hsl(var(--warning))', desc: 'Rango promedio saludable para población general.' };
+      return { text: 'Obesidad', color: 'hsl(var(--danger))', desc: 'Considera un déficit calórico y entrenamiento para reducir grasa.' };
+    } else {
+      if (value < 14) return { text: 'Grasa Esencial', color: 'hsl(var(--primary))', desc: 'Rango mínimo necesario para la salud hormonal femenina.' };
+      if (value < 21) return { text: 'Atleta', color: 'hsl(var(--success))', desc: 'Nivel óptimo para rendimiento deportivo y estética.' };
+      if (value < 25) return { text: 'Fitness', color: 'hsl(var(--success))', desc: 'Composición corporal atlética y saludable.' };
+      if (value < 32) return { text: 'Aceptable', color: 'hsl(var(--warning))', desc: 'Rango promedio saludable para población general.' };
+      return { text: 'Obesidad', color: 'hsl(var(--danger))', desc: 'Considera un déficit calórico y entrenamiento para reducir grasa.' };
+    }
+  }, [bodyFat, gender]);
+
   // BMI calculations
   const bmi = useMemo(() => {
     if (!height || !bodyWeight) return 0;
@@ -50,6 +102,22 @@ export default function ProfileTab({
     if (!bodyWeight || !bodyFat) return 0;
     return bodyWeight * (1 - bodyFat / 100);
   }, [bodyWeight, bodyFat]);
+
+  const getCalculatedFatCategory = (value: number) => {
+    if (gender === 'Masculino') {
+      if (value < 6) return 'Grasa Esencial';
+      if (value < 14) return 'Atleta';
+      if (value < 18) return 'Fitness';
+      if (value < 25) return 'Aceptable';
+      return 'Obesidad';
+    } else {
+      if (value < 14) return 'Grasa Esencial';
+      if (value < 21) return 'Atleta';
+      if (value < 25) return 'Fitness';
+      if (value < 32) return 'Aceptable';
+      return 'Obesidad';
+    }
+  };
 
   const handleRegisterWeight = (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,6 +274,32 @@ export default function ProfileTab({
                 </div>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setShowFatCalc(!showFatCalc)}
+              style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px',
+                color: showFatCalc ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
+                padding: '8px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                transition: 'all var(--transition-fast)',
+                marginTop: '12px',
+                width: '100%'
+              }}
+            >
+              <Calculator size={14} />
+              {showFatCalc ? 'Ocultar Calculadora' : '¿Cómo medirlo? / Calcular % Grasa'}
+              {showFatCalc ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
           </div>
 
           {/* Resultados de Composición Corporal */}
@@ -258,14 +352,279 @@ export default function ProfileTab({
                 <span style={{ fontSize: '1.6rem', fontWeight: 800, margin: '4px 0', color: 'hsl(var(--primary))' }}>
                   {leanMass > 0 ? `${leanMass.toFixed(1)} kg` : '--'}
                 </span>
-                <span style={{ fontSize: '0.62rem', color: 'hsl(var(--muted))' }}>
-                  Hueso, músculo y agua: {(100 - bodyFat).toFixed(1)}%
+                <span style={{ fontSize: '0.62rem', color: 'hsl(var(--muted))', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'center' }}>
+                  <span>Hueso, músculo y agua: {(100 - bodyFat).toFixed(1)}%</span>
+                  <span className="badge" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${fatCategory.color}`, color: fatCategory.color, fontSize: '0.6rem', padding: '1px 6.5px', marginTop: '2px' }}>
+                    {fatCategory.text}
+                  </span>
                 </span>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Calculator Panel */}
+      {showFatCalc && (
+        <div className="glass-panel fade-in" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', borderLeft: '4px solid hsl(var(--primary))' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ background: 'hsla(var(--primary) / 0.1)', padding: '10px', borderRadius: '10px' }}>
+              <Calculator size={24} color="hsl(var(--primary))" />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Calculadora de % de Grasa Corporal</h2>
+              <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', marginTop: '2px' }}>
+                Método de la Marina de los EE. UU. Basado en mediciones de circunferencia.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid-cols-2" style={{ gap: '24px', alignItems: 'stretch' }}>
+            {/* Formulario de Medidas */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, borderBottom: '1px solid hsl(var(--border))', paddingBottom: '8px', color: 'hsl(var(--primary))' }}>
+                Ingresa tus Medidas (cm)
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Altura informada */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))' }}>Altura del perfil:</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{height} cm</span>
+                </div>
+
+                {/* Cuello */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Circunferencia del Cuello</label>
+                    <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{neckCirc} cm</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button 
+                      type="button"
+                      onClick={() => setNeckCirc(Math.max(20, neckCirc - 0.5))}
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '28px', height: '38px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                    >
+                      -
+                    </button>
+                    <input 
+                      type="number" 
+                      step="0.5"
+                      value={neckCirc} 
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val > 0) setNeckCirc(val);
+                      }}
+                      style={{ flex: 1, textAlign: 'center', padding: '6px', fontSize: '0.85rem', background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', borderRadius: '6px', color: '#fff', height: '38px' }}
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setNeckCirc(neckCirc + 0.5)}
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '28px', height: '38px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>Medir horizontalmente justo debajo de la nuez de Adán.</span>
+                </div>
+
+                {/* Cintura */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Circunferencia de la Cintura</label>
+                    <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{waistCirc} cm</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button 
+                      type="button"
+                      onClick={() => setWaistCirc(Math.max(30, waistCirc - 0.5))}
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '28px', height: '38px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                    >
+                      -
+                    </button>
+                    <input 
+                      type="number" 
+                      step="0.5"
+                      value={waistCirc} 
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val > 0) setWaistCirc(val);
+                      }}
+                      style={{ flex: 1, textAlign: 'center', padding: '6px', fontSize: '0.85rem', background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', borderRadius: '6px', color: '#fff', height: '38px' }}
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setWaistCirc(waistCirc + 0.5)}
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '28px', height: '38px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
+                    {gender === 'Masculino' 
+                      ? 'Medir a nivel del ombligo (relajado, sin meter el estómago).' 
+                      : 'Medir en la parte más estrecha del torso (por encima del ombligo).'}
+                  </span>
+                </div>
+
+                {/* Cadera - Sólo mujeres */}
+                {gender === 'Femenino' && (
+                  <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Circunferencia de la Cadera</label>
+                      <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{hipCirc} cm</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button 
+                        type="button"
+                        onClick={() => setHipCirc(Math.max(40, hipCirc - 0.5))}
+                        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '28px', height: '38px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                      >
+                        -
+                      </button>
+                      <input 
+                        type="number" 
+                        step="0.5"
+                        value={hipCirc} 
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val) && val > 0) setHipCirc(val);
+                        }}
+                        style={{ flex: 1, textAlign: 'center', padding: '6px', fontSize: '0.85rem', background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', borderRadius: '6px', color: '#fff', height: '38px' }}
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setHipCirc(hipCirc + 0.5)}
+                        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '28px', height: '38px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                      >
+                        +
+                      </button>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>Medir horizontalmente en la parte más ancha de los glúteos.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Resultado y Clasificación */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, borderBottom: '1px solid hsl(var(--border))', paddingBottom: '8px', color: 'hsl(var(--secondary))' }}>
+                Resultado Estimado
+              </h3>
+
+              {calculatedNavyFat !== null ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%' }}>
+                  <div 
+                    className="glass-panel" 
+                    style={{ 
+                      padding: '16px', 
+                      background: 'rgba(255,255,255,0.02)', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center',
+                      borderRadius: '12px',
+                      border: '1px solid hsl(var(--border))',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>% Grasa Corporal Estimado</span>
+                    <span style={{ fontSize: '2.2rem', fontWeight: 800, color: 'hsl(var(--primary))', margin: '6px 0' }}>
+                      {calculatedNavyFat}%
+                    </span>
+                    <span className="badge" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${
+                      gender === 'Masculino'
+                        ? (calculatedNavyFat < 6 ? 'hsl(var(--primary))' : calculatedNavyFat < 18 ? 'hsl(var(--success))' : calculatedNavyFat < 25 ? 'hsl(var(--warning))' : 'hsl(var(--danger))')
+                        : (calculatedNavyFat < 14 ? 'hsl(var(--primary))' : calculatedNavyFat < 25 ? 'hsl(var(--success))' : calculatedNavyFat < 32 ? 'hsl(var(--warning))' : 'hsl(var(--danger))')
+                    }`, color: 
+                      gender === 'Masculino'
+                        ? (calculatedNavyFat < 6 ? 'hsl(var(--primary))' : calculatedNavyFat < 18 ? 'hsl(var(--success))' : calculatedNavyFat < 25 ? 'hsl(var(--warning))' : 'hsl(var(--danger))')
+                        : (calculatedNavyFat < 14 ? 'hsl(var(--primary))' : calculatedNavyFat < 25 ? 'hsl(var(--success))' : calculatedNavyFat < 32 ? 'hsl(var(--warning))' : 'hsl(var(--danger))')
+                    , fontSize: '0.7rem', padding: '2px 8px' }}>
+                      {getCalculatedFatCategory(calculatedNavyFat)}
+                    </span>
+
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setBodyFat(calculatedNavyFat);
+                        setShowFatCalc(false);
+                      }}
+                      className="btn btn-primary"
+                      style={{ marginTop: '16px', width: '100%', gap: '6px', fontSize: '0.85rem', padding: '8px 16px' }}
+                    >
+                      <Check size={16} /> Aplicar a mi perfil
+                    </button>
+                  </div>
+
+                  {/* Tabla de Rangos */}
+                  <div style={{ background: 'rgba(255, 255, 255, 0.01)', border: '1px solid hsl(var(--border))', borderRadius: '8px', padding: '10px', fontSize: '0.75rem' }}>
+                    <span style={{ fontWeight: 'bold', color: 'hsl(var(--muted))', display: 'block', marginBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '4px' }}>
+                      Rangos de Grasa Corporal ({gender})
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {gender === 'Masculino' ? (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Grasa Esencial' ? 'rgba(0, 242, 254, 0.1)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Grasa Esencial' ? 'hsl(var(--primary))' : undefined }}>
+                            <span>Grasa Esencial:</span><span>2 - 5.9%</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Atleta' ? 'rgba(74, 254, 0, 0.08)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Atleta' ? 'hsl(var(--success))' : undefined }}>
+                            <span>Atletas:</span><span>6 - 13.9%</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Fitness' ? 'rgba(74, 254, 0, 0.08)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Fitness' ? 'hsl(var(--success))' : undefined }}>
+                            <span>Fitness:</span><span>14 - 17.9%</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Aceptable' ? 'rgba(254, 190, 0, 0.08)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Aceptable' ? 'hsl(var(--warning))' : undefined }}>
+                            <span>Aceptable:</span><span>18 - 24.9%</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Obesidad' ? 'rgba(254, 0, 74, 0.08)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Obesidad' ? 'hsl(var(--danger))' : undefined }}>
+                            <span>Exceso/Obesidad:</span><span>25% o más</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Grasa Esencial' ? 'rgba(0, 242, 254, 0.1)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Grasa Esencial' ? 'hsl(var(--primary))' : undefined }}>
+                            <span>Grasa Esencial:</span><span>10 - 13.9%</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Atleta' ? 'rgba(74, 254, 0, 0.08)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Atleta' ? 'hsl(var(--success))' : undefined }}>
+                            <span>Atletas:</span><span>14 - 20.9%</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Fitness' ? 'rgba(74, 254, 0, 0.08)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Fitness' ? 'hsl(var(--success))' : undefined }}>
+                            <span>Fitness:</span><span>21 - 24.9%</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Aceptable' ? 'rgba(254, 190, 0, 0.08)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Aceptable' ? 'hsl(var(--warning))' : undefined }}>
+                            <span>Aceptable:</span><span>25 - 31.9%</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 6px', borderRadius: '4px', background: getCalculatedFatCategory(calculatedNavyFat) === 'Obesidad' ? 'rgba(254, 0, 74, 0.08)' : 'transparent', color: getCalculatedFatCategory(calculatedNavyFat) === 'Obesidad' ? 'hsl(var(--danger))' : undefined }}>
+                            <span>Exceso/Obesidad:</span><span>32% o más</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '8px', color: 'hsl(var(--muted))', textAlign: 'center', padding: '20px', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid hsl(var(--border))', borderRadius: '12px' }}>
+                  <Info size={28} />
+                  <p style={{ fontSize: '0.85rem' }}>Ingresa medidas válidas para calcular automáticamente tu % de grasa.</p>
+                  <p style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontStyle: 'italic' }}>El cuello debe ser menor que la cintura.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Tips de Medición */}
+          <div style={{ background: 'hsla(var(--primary) / 0.02)', border: '1px dashed hsl(var(--border))', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', color: 'hsl(var(--primary))' }}>
+              <HelpCircle size={16} /> Consejos para mayor precisión
+            </span>
+            <ul style={{ fontSize: '0.78rem', color: 'hsl(var(--muted))', paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <li><strong>Momento ideal:</strong> Realiza las mediciones en ayunas por la mañana, antes de comer o hacer ejercicio.</li>
+              <li><strong>Tensión adecuada:</strong> Mantén la cinta tensa y alineada horizontalmente sin presionar la piel.</li>
+              <li><strong>Consistencia:</strong> Mídete tres veces y saca el promedio para reducir el margen de error humano.</li>
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Registrar Peso e Historial */}
       <div className="grid-cols-2">
