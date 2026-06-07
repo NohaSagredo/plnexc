@@ -51,6 +51,10 @@ interface SyncPanelProps {
   setCardioTargetMinutes: (mins: number) => void;
   cardioHistory: any[];
   setCardioHistory: (history: any[]) => void;
+  profilePicture: string;
+  setProfilePicture: (pic: string) => void;
+  progressPhotos: any[];
+  setProgressPhotos: (photos: any[]) => void;
 }
 
 export default function SyncPanel({
@@ -76,7 +80,11 @@ export default function SyncPanel({
   cardioTargetMinutes,
   setCardioTargetMinutes,
   cardioHistory,
-  setCardioHistory
+  setCardioHistory,
+  profilePicture,
+  setProfilePicture,
+  progressPhotos,
+  setProgressPhotos
 }: SyncPanelProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -128,7 +136,9 @@ export default function SyncPanel({
         deletedRoutines,
         cardioGoalType,
         cardioTargetMinutes,
-        cardioHistory
+        cardioHistory,
+        profilePicture,
+        progressPhotos
       };
 
       // 2. Download from Cloud Firestore
@@ -167,6 +177,8 @@ export default function SyncPanel({
         setCardioGoalType(merged.cardioGoalType);
         setCardioTargetMinutes(merged.cardioTargetMinutes);
         setCardioHistory(merged.cardioHistory);
+        setProfilePicture(merged.profilePicture);
+        setProgressPhotos(merged.progressPhotos);
         
         // Update local user sessions in localStorage
         localStorage.setItem('milo_user_sessions', JSON.stringify(merged.userSessions));
@@ -180,6 +192,8 @@ export default function SyncPanel({
         localStorage.setItem('plnexc_cardio_goal_type', merged.cardioGoalType);
         localStorage.setItem('plnexc_cardio_target_minutes', merged.cardioTargetMinutes.toString());
         localStorage.setItem('plnexc_cardio_history', JSON.stringify(merged.cardioHistory));
+        localStorage.setItem('plnexc_profile_picture', merged.profilePicture);
+        localStorage.setItem('plnexc_progress_photos', JSON.stringify(merged.progressPhotos));
         if (merged.activeInjury) {
           localStorage.setItem('milo_active_injury', JSON.stringify(merged.activeInjury));
         } else {
@@ -205,7 +219,9 @@ export default function SyncPanel({
             deletedRoutines: merged.deletedRoutines,
             cardioGoalType: merged.cardioGoalType,
             cardioTargetMinutes: merged.cardioTargetMinutes,
-            cardioHistory: merged.cardioHistory
+            cardioHistory: merged.cardioHistory,
+            profilePicture: merged.profilePicture,
+            progressPhotos: merged.progressPhotos
           });
         }
       } else {
@@ -222,7 +238,9 @@ export default function SyncPanel({
           deletedRoutines: localData.deletedRoutines,
           cardioGoalType: localData.cardioGoalType,
           cardioTargetMinutes: localData.cardioTargetMinutes,
-          cardioHistory: localData.cardioHistory
+          cardioHistory: localData.cardioHistory,
+          profilePicture: localData.profilePicture,
+          progressPhotos: localData.progressPhotos
         });
       }
 

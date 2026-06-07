@@ -15,9 +15,10 @@ import {
   BookmarkPlus,
   Edit2,
   Target,
-  BookOpen
+  BookOpen,
+  Award
 } from 'lucide-react';
-import { proposeNextSet } from '../utils/ProgressionEngine';
+import { proposeNextSet, calculatePBProfiles } from '../utils/ProgressionEngine';
 import type { SetData, ProgressionTarget } from '../utils/ProgressionEngine';
 import { getSubstitutedExercise, MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import type { SubstitutionRule } from '../utils/MiloRehabEngine';
@@ -60,6 +61,9 @@ export default function WorkoutTab({
   gender,
   bodyFat
 }: WorkoutTabProps) {
+  // Calculate PBs from history
+  const pbProfiles = useMemo(() => calculatePBProfiles(localHistory), [localHistory]);
+
   // 1. Group exercises into routines from historical logs and custom creations
   const routines = useMemo(() => {
     const map = new Map<string, string[]>(); // Title -> Exercise List
@@ -107,6 +111,9 @@ export default function WorkoutTab({
   const [editingRoutine, setEditingRoutine] = useState<{ title: string; exercises: string[] } | null>(null);
   const [expandedStandards, setExpandedStandards] = useState<{[key: string]: boolean}>({});
   const [expandedInstructions, setExpandedInstructions] = useState<{[key: string]: boolean}>({});
+  const [brokenPBs, setBrokenPBs] = useState<any[]>([]);
+  const [pendingSessionToSave, setPendingSessionToSave] = useState<any | null>(null);
+  const [showCelebrationModal, setShowCelebrationModal] = useState<boolean>(false);
 
   // pre-workout recovery wizard states
   const [showRecoveryWizard, setShowRecoveryWizard] = useState<boolean>(false);
@@ -446,12 +453,86 @@ export default function WorkoutTab({
       parsedDate: new Date().toISOString()
     };
 
-    onSaveWorkout(newSession);
-    setActiveSession(null);
-    setTimerActive(false);
-    setRestTimerActive(false);
-    setRestTimeRemaining(0);
-    alert('🎉 ¡Entrenamiento completado y guardado en tu historial con éxito!');
+    // Detect broken PBs
+    const sessionBrokenPBs: any[] = [];
+    compiledExercises.forEach((ex: any) => {
+      const profile = pbProfiles[ex.title];
+      const hasHistory = profile && profile.maxWeight.weight > 0;
+      
+      let maxWeightInSession = 0;
+      let maxEst1RMInSession = 0;
+      let sessionMaxWeightReps = 0;
+      
+      const sessionRepPRs: { [reps: number]: number } = {};
+
+      ex.sets.forEach((set: any) => {
+        const weight = set.weight_kg || 0;
+        const reps = set.reps || 0;
+        
+        if (weight > 0 && reps > 0) {
+          const est1RM = weight * (1 + reps / 30);
+          
+          if (weight > maxWeightInSession) {
+            maxWeightInSession = weight;
+            sessionMaxWeightReps = reps;
+          }
+          if (est1RM > maxEst1RMInSession) {
+            maxEst1RMInSession = est1RM;
+          }
+          if (!sessionRepPRs[reps] || weight > sessionRepPRs[reps]) {
+            sessionRepPRs[reps] = weight;
+          }
+        }
+      });
+
+      if (maxWeightInSession > 0 && profile && hasHistory) {
+        const oldMaxWeight = profile.maxWeight.weight;
+        const oldMaxEst1RM = profile.maxEst1RM.value;
+
+        let exerciseBroken = false;
+        const details: string[] = [];
+
+        if (maxWeightInSession > oldMaxWeight) {
+          details.push(`Peso Máximo: de ${oldMaxWeight} kg a ${maxWeightInSession} kg (x ${sessionMaxWeightReps} reps)`);
+          exerciseBroken = true;
+        }
+
+        if (maxEst1RMInSession > oldMaxEst1RM) {
+          details.push(`1RM Estimado: de ${Math.round(oldMaxEst1RM)} kg a ${Math.round(maxEst1RMInSession)} kg`);
+          exerciseBroken = true;
+        }
+
+        // Check rep PRs
+        Object.entries(sessionRepPRs).forEach(([repsStr, weight]) => {
+          const reps = parseInt(repsStr, 10);
+          const oldRepPR = profile.repPRs[reps]?.weight || 0;
+          if (oldRepPR > 0 && weight > oldRepPR) {
+            details.push(`Récord para ${reps} reps: de ${oldRepPR} kg a ${weight} kg`);
+            exerciseBroken = true;
+          }
+        });
+
+        if (exerciseBroken) {
+          sessionBrokenPBs.push({
+            exercise: ex.title,
+            details
+          });
+        }
+      }
+    });
+
+    if (sessionBrokenPBs.length > 0) {
+      setBrokenPBs(sessionBrokenPBs);
+      setPendingSessionToSave(newSession);
+      setShowCelebrationModal(true);
+    } else {
+      // Complete directly if no records were broken
+      onSaveWorkout(newSession);
+      setActiveSession(null);
+      setTimerActive(false);
+      setRestTimerActive(false);
+      setRestTimeRemaining(0);
+    }
   };
 
   const handleToggleCompleted = (exIdx: number, setIdx: number) => {
@@ -1500,6 +1581,34 @@ export default function WorkoutTab({
                 </div>
               )}
 
+              {/* PB Record reference box */}
+              {(() => {
+                const profile = pbProfiles[ex.title];
+                if (!profile || profile.maxWeight.weight === 0) return null;
+                return (
+                  <div style={{ 
+                    background: 'hsla(45, 100%, 50%, 0.03)', 
+                    border: '1px solid hsla(45, 100%, 50%, 0.15)', 
+                    padding: '10px 14px', 
+                    borderRadius: '8px', 
+                    fontSize: '0.8rem', 
+                    marginBottom: '16px', 
+                    color: '#fbbf24',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span>🏆</span>
+                    <div>
+                      <strong>Récord de Fuerza:</strong> {profile.maxWeight.weight} kg x {profile.maxWeight.reps} reps
+                      <span style={{ opacity: 0.7, marginLeft: '8px' }}>
+                        (1RM Estimado: {Math.round(profile.maxEst1RM.value)} kg)
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Estándares de Fuerza Colapsables (Versión Premium Discreta) */}
               {(() => {
                 const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
@@ -1685,12 +1794,62 @@ export default function WorkoutTab({
                           </div>
                         </td>
                         <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                          <button
-                            onClick={() => handleToggleCompleted(exIdx, setIdx)}
-                            className={`set-checkbox-btn ${set.completed ? 'completed' : ''}`}
-                          >
-                            {set.completed && <Check size={16} />}
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            {(() => {
+                              if (!set.completed) return null;
+                              const weight = set.weightKg || 0;
+                              const reps = set.reps || 0;
+                              if (weight <= 0 || reps <= 0) return null;
+
+                              const profile = pbProfiles[ex.title];
+                              const est1RM = weight * (1 + reps / 30);
+                              
+                              let isPB = false;
+                              let pbReason = "";
+                              
+                              if (profile) {
+                                const isNewMaxWeight = weight > profile.maxWeight.weight;
+                                const isNewMaxEst1RM = est1RM > profile.maxEst1RM.value;
+                                const isNewRepPR = !profile.repPRs[reps] || weight > profile.repPRs[reps].weight;
+                                
+                                if (profile.maxWeight.weight > 0 && (isNewMaxWeight || isNewMaxEst1RM || isNewRepPR)) {
+                                  isPB = true;
+                                  if (isNewMaxWeight && isNewMaxEst1RM) {
+                                    pbReason = "🏆 ¡Nuevo Récord de Peso Máximo y 1RM Estimado!";
+                                  } else if (isNewMaxWeight) {
+                                    pbReason = "🏆 ¡Nuevo Récord de Peso Máximo!";
+                                  } else if (isNewMaxEst1RM) {
+                                    pbReason = "🏆 ¡Nuevo Récord de 1RM Estimado!";
+                                  } else if (isNewRepPR) {
+                                    pbReason = `🏆 ¡Nuevo Récord para ${reps} Repeticiones!`;
+                                  }
+                                }
+                              }
+                              
+                              if (isPB) {
+                                return (
+                                  <span title={pbReason} style={{ display: 'inline-flex' }}>
+                                    <Award 
+                                      size={16} 
+                                      color="#fbbf24" 
+                                      style={{ 
+                                        filter: 'drop-shadow(0 0 3px rgba(251, 191, 36, 0.6))',
+                                        animation: 'pulseScale 1s infinite alternate',
+                                        cursor: 'help'
+                                      }} 
+                                    />
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                            <button
+                              onClick={() => handleToggleCompleted(exIdx, setIdx)}
+                              className={`set-checkbox-btn ${set.completed ? 'completed' : ''}`}
+                            >
+                              {set.completed && <Check size={16} />}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1721,6 +1880,122 @@ export default function WorkoutTab({
             </div>
           ))}
 
+        </div>
+      )}
+
+      {/* PB Celebration Modal */}
+      {showCelebrationModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass-panel fade-in" style={{
+            maxWidth: '500px',
+            width: '100%',
+            padding: '30px',
+            textAlign: 'center',
+            border: '1px solid hsla(45, 100%, 50%, 0.3)',
+            boxShadow: '0 0 30px hsla(45, 100%, 50%, 0.25)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            <div>
+              <div style={{
+                fontSize: '3.5rem',
+                animation: 'pulseScale 1s infinite alternate',
+                display: 'inline-block',
+                marginBottom: '10px'
+              }}>
+                🏆
+              </div>
+              <h2 style={{
+                fontSize: '1.8rem',
+                fontWeight: 900,
+                color: '#fbbf24',
+                textShadow: '0 0 15px rgba(251, 191, 36, 0.4)',
+                margin: 0
+              }}>
+                ¡Récords Personales Superados!
+              </h2>
+              <p style={{
+                color: 'hsl(var(--muted))',
+                fontSize: '0.9rem',
+                marginTop: '6px'
+              }}>
+                ¡Excelente trabajo! Has superado marcas previas en esta sesión.
+              </p>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              textAlign: 'left',
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: 'var(--border-radius-md)',
+              padding: '16px',
+              maxHeight: '200px',
+              overflowY: 'auto'
+            }}>
+              {brokenPBs.map((pb, idx) => (
+                <div key={idx} style={{
+                  borderBottom: idx < brokenPBs.length - 1 ? '1px dashed rgba(255, 255, 255, 0.05)' : 'none',
+                  paddingBottom: idx < brokenPBs.length - 1 ? '10px' : 0,
+                  marginBottom: idx < brokenPBs.length - 1 ? '10px' : 0
+                }}>
+                  <strong style={{ fontSize: '0.95rem', color: '#ffffff', display: 'block', marginBottom: '4px' }}>
+                    💪 {pb.exercise}
+                  </strong>
+                  <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.825rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.4' }}>
+                    {pb.details.map((detail: string, dIdx: number) => (
+                      <li key={dIdx}>{detail}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                if (pendingSessionToSave) {
+                  onSaveWorkout(pendingSessionToSave);
+                }
+                setActiveSession(null);
+                setTimerActive(false);
+                setRestTimerActive(false);
+                setRestTimeRemaining(0);
+                setBrokenPBs([]);
+                setPendingSessionToSave(null);
+                setShowCelebrationModal(false);
+              }}
+              className="btn btn-primary"
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: '1rem',
+                fontWeight: 700,
+                background: 'linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%)',
+                borderColor: '#fbbf24',
+                color: '#000000',
+                boxShadow: '0 4px 15px rgba(251, 191, 36, 0.3)',
+                cursor: 'pointer'
+              }}
+            >
+              ¡Genial, Guardar Progreso!
+            </button>
+          </div>
         </div>
       )}
 

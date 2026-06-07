@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import { 
   ResponsiveContainer, 
@@ -10,8 +10,11 @@ import {
   CartesianGrid,
   BarChart,
   Bar,
-  Legend
+  Legend,
+  LineChart,
+  Line
 } from 'recharts';
+import { calculatePBProfiles } from '../utils/ProgressionEngine';
 import { 
   TrendingUp, 
   Calendar, 
@@ -19,7 +22,8 @@ import {
   Activity,
   Award,
   Scale,
-  HeartPulse
+  HeartPulse,
+  X
 } from 'lucide-react';
 
 interface SetRecord {
@@ -143,6 +147,25 @@ export default function DashboardTab({
     }
     return ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs'];
   });
+
+  // PB Sub-tabs & modal state variables
+  const pbProfiles = useMemo(() => calculatePBProfiles(localHistory), [localHistory]);
+  const [pbSubTab, setPbSubTab] = useState<'1rm' | 'weight' | 'volume' | 'reps'>('1rm');
+  const [selectedExerciseForChart, setSelectedExerciseForChart] = useState<string | null>(null);
+  
+  // Default selected exercise for Reps PR tab
+  const uniqueExerciseNames = useMemo(() => {
+    return Object.keys(pbProfiles).sort();
+  }, [pbProfiles]);
+
+  const [selectedExerciseForRepsTab, setSelectedExerciseForRepsTab] = useState<string>('');
+
+  // Set default selected exercise for reps tab when list is calculated
+  useEffect(() => {
+    if (uniqueExerciseNames.length > 0 && !selectedExerciseForRepsTab) {
+      setSelectedExerciseForRepsTab(uniqueExerciseNames[0]);
+    }
+  }, [uniqueExerciseNames]);
 
   // Filter out any hidden widgets (like strength when there is no selectedExercise)
   const activeLayoutOrder = useMemo(() => {
@@ -785,41 +808,234 @@ export default function DashboardTab({
           </div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '1.2rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Award size={20} color="hsl(var(--success))" />
-            Récords de Fuerza Máxima (1RM PR)
-          </h3>
-          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginBottom: '16px' }}>
-            Mejores levantamientos históricos estimados basados en tus datos
-          </p>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto' }}>
-            {Object.entries(stats.bests)
-              .filter(([_, val]) => val > 0)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 7)
-              .map(([exercise, val]) => (
-                <div 
-                  key={exercise} 
-                  style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    padding: '8px 12px',
-                    background: 'rgba(255,255,255,0.02)',
-                    borderRadius: '8px',
-                    border: '1px solid hsl(var(--border))'
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <Award size={20} color="hsl(var(--success))" />
+              Récords Personales (PBs)
+            </h3>
+            <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '4px', marginBottom: 0 }}>
+              Tus mejores marcas registradas. Haz clic en un ejercicio para ver su progreso.
+            </p>
+          </div>
+
+          {/* Sub-tabs pills */}
+          <div style={{ display: 'flex', gap: '6px', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '8px', border: '1px solid hsl(var(--border))', flexWrap: 'wrap' }}>
+            {(['1rm', 'weight', 'volume', 'reps'] as const).map((tab) => {
+              const label = tab === '1rm' ? '1RM Est.' : tab === 'weight' ? 'Peso Máx' : tab === 'volume' ? 'Vol. Máx' : 'Perfil Reps';
+              const active = pbSubTab === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setPbSubTab(tab)}
+                  style={{
+                    flex: 1,
+                    background: active ? 'linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%)' : 'transparent',
+                    border: 'none',
+                    color: active ? '#000000' : 'hsl(var(--muted))',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all var(--transition-fast)',
+                    whiteSpace: 'nowrap'
                   }}
                 >
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {exercise}
-                  </span>
-                  <span className="badge badge-primary" style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
-                    {Math.round(val)} kg Max
-                  </span>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tab Content */}
+          <div style={{ flex: 1, maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+            {pbSubTab === '1rm' && (
+              Object.entries(pbProfiles).length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>No hay registros aún.</div>
+              ) : (
+                Object.entries(pbProfiles)
+                  .sort((a, b) => b[1].maxEst1RM.value - a[1].maxEst1RM.value)
+                  .map(([exercise, profile]) => (
+                    <div 
+                      key={exercise} 
+                      onClick={() => setSelectedExerciseForChart(exercise)}
+                      style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.01)',
+                        borderRadius: '8px',
+                        border: '1px solid hsl(var(--border))',
+                        cursor: 'pointer'
+                      }}
+                      className="hover-card-highlight"
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '70%' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {exercise}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
+                          Logrado: {profile.maxEst1RM.weight}kg x {profile.maxEst1RM.reps} reps
+                        </span>
+                      </div>
+                      <span className="badge badge-primary" style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>
+                        {Math.round(profile.maxEst1RM.value)} kg
+                      </span>
+                    </div>
+                  ))
+              )
+            )}
+
+            {pbSubTab === 'weight' && (
+              Object.entries(pbProfiles).length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>No hay registros aún.</div>
+              ) : (
+                Object.entries(pbProfiles)
+                  .sort((a, b) => b[1].maxWeight.weight - a[1].maxWeight.weight)
+                  .map(([exercise, profile]) => (
+                    <div 
+                      key={exercise} 
+                      onClick={() => setSelectedExerciseForChart(exercise)}
+                      style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.01)',
+                        borderRadius: '8px',
+                        border: '1px solid hsl(var(--border))',
+                        cursor: 'pointer'
+                      }}
+                      className="hover-card-highlight"
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '70%' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {exercise}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
+                          Realizado con {profile.maxWeight.reps} reps
+                        </span>
+                      </div>
+                      <span className="badge badge-secondary" style={{ fontSize: '0.8rem', fontWeight: 'bold', background: 'hsla(var(--secondary) / 0.1)', color: 'hsl(var(--secondary))', border: '1px solid hsla(var(--secondary) / 0.2)' }}>
+                        {profile.maxWeight.weight} kg
+                      </span>
+                    </div>
+                  ))
+              )
+            )}
+
+            {pbSubTab === 'volume' && (
+              Object.entries(pbProfiles).length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>No hay registros aún.</div>
+              ) : (
+                Object.entries(pbProfiles)
+                  .sort((a, b) => b[1].maxVolume.value - a[1].maxVolume.value)
+                  .map(([exercise, profile]) => (
+                    <div 
+                      key={exercise} 
+                      onClick={() => setSelectedExerciseForChart(exercise)}
+                      style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.01)',
+                        borderRadius: '8px',
+                        border: '1px solid hsl(var(--border))',
+                        cursor: 'pointer'
+                      }}
+                      className="hover-card-highlight"
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '65%' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {exercise}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
+                          Máximo acumulado por sesión
+                        </span>
+                      </div>
+                      <span className="badge badge-success" style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>
+                        {profile.maxVolume.value.toLocaleString()} kg
+                      </span>
+                    </div>
+                  ))
+              )
+            )}
+
+            {pbSubTab === 'reps' && (
+              uniqueExerciseNames.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>No hay ejercicios registrados.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', fontWeight: 700 }}>Selecciona Ejercicio:</label>
+                    <select
+                      value={selectedExerciseForRepsTab}
+                      onChange={(e) => setSelectedExerciseForRepsTab(e.target.value)}
+                      style={{
+                        padding: '8px',
+                        background: 'rgba(0,0,0,0.2)',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '6px',
+                        color: '#ffffff',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        width: '100%'
+                      }}
+                    >
+                      {uniqueExerciseNames.map(ex => (
+                        <option key={ex} value={ex}>{ex}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {(() => {
+                    const profile = pbProfiles[selectedExerciseForRepsTab];
+                    if (!profile) return null;
+                    const repsToCheck = [1, 3, 5, 8, 10];
+                    return (
+                      <div 
+                        onClick={() => setSelectedExerciseForChart(selectedExerciseForRepsTab)}
+                        style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: 'repeat(5, 1fr)', 
+                          gap: '6px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {repsToCheck.map(r => {
+                          const record = profile.repPRs[r];
+                          return (
+                            <div 
+                              key={r} 
+                              style={{ 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                alignItems: 'center', 
+                                gap: '4px',
+                                background: 'rgba(255,255,255,0.02)',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '6px',
+                                padding: '6px 4px'
+                              }}
+                              title={record ? `Logrado el ${new Date(record.date).toLocaleDateString('es-ES')}` : 'Sin datos'}
+                            >
+                              <span style={{ fontSize: '0.6rem', color: 'hsl(var(--muted))', fontWeight: 700 }}>{r} Reps</span>
+                              <strong style={{ fontSize: '0.75rem', color: record ? '#fbbf24' : 'rgba(255,255,255,0.1)' }}>
+                                {record ? `${record.weight}kg` : '---'}
+                              </strong>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
-              ))}
+              )
+            )}
           </div>
         </div>
       </div>
@@ -1403,6 +1619,202 @@ export default function DashboardTab({
           </div>
         </>
       )}
+
+      {/* PB Progression Line Chart Modal */}
+      {selectedExerciseForChart && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass-panel fade-in" style={{
+            maxWidth: '600px',
+            width: '100%',
+            padding: '28px',
+            border: '1px solid hsla(var(--primary) / 0.25)',
+            boxShadow: '0 0 30px hsla(var(--primary) / 0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span className="badge badge-primary" style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+                  Historial de Récords
+                </span>
+                <h3 style={{ fontSize: '1.4rem', fontWeight: 900, color: '#ffffff', margin: 0 }}>
+                  {selectedExerciseForChart}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedExerciseForChart(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'hsl(var(--muted))',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background 0.2s'
+                }}
+                className="hover-card-highlight"
+                title="Cerrar modal"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Line Chart */}
+            <div style={{ height: '230px', width: '100%', background: 'rgba(0,0,0,0.15)', border: '1px solid hsl(var(--border))', borderRadius: '8px', padding: '16px 12px 4px 12px' }}>
+              {(() => {
+                const profile = pbProfiles[selectedExerciseForChart];
+                if (!profile || profile.history1RM.length === 0) {
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'hsl(var(--muted))', fontSize: '0.85rem' }}>
+                      Sin historial de levantamientos para este ejercicio.
+                    </div>
+                  );
+                }
+
+                // Prepare chart data format
+                const chartData = profile.history1RM.map(pt => {
+                  const date = new Date(pt.date);
+                  return {
+                    name: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+                    '1RM (kg)': pt.value,
+                    'Peso Levantado (kg)': pt.weight,
+                    reps: pt.reps
+                  };
+                });
+
+                return (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="hsl(var(--muted))" 
+                        fontSize={10}
+                        tickLine={false} 
+                        axisLine={false}
+                      />
+                      <YAxis 
+                        stroke="hsl(var(--muted))" 
+                        fontSize={10}
+                        tickLine={false} 
+                        axisLine={false}
+                        domain={['auto', 'auto']}
+                        tickFormatter={(val) => `${val}kg`}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          background: 'hsl(var(--bg-surface))', 
+                          borderColor: 'hsl(var(--border))',
+                          borderRadius: '8px',
+                          color: '#ffffff',
+                          fontFamily: 'inherit',
+                          fontSize: '0.8rem'
+                        }}
+                        formatter={(value, name) => {
+                          if (name === '1RM (kg)') {
+                            return [`${value} kg`, '1RM Estimado'];
+                          }
+                          return [value, name];
+                        }}
+                        labelFormatter={(label) => `Fecha: ${label}`}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="1RM (kg)" 
+                        stroke="hsl(var(--primary))" 
+                        strokeWidth={3}
+                        activeDot={{ r: 6, stroke: 'hsl(var(--secondary))', strokeWidth: 2 }}
+                        dot={{ r: 4, stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                );
+              })()}
+            </div>
+
+            {/* PB stats cards */}
+            {(() => {
+              const profile = pbProfiles[selectedExerciseForChart];
+              if (!profile) return null;
+              
+              const formatDateStr = (dateStr: string) => {
+                if (!dateStr) return '---';
+                return new Date(dateStr).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+              };
+
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', borderRadius: '8px', padding: '12px' }}>
+                    <div style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))', fontWeight: 700, textTransform: 'uppercase' }}>1RM Histórico Máximo</div>
+                    <strong style={{ fontSize: '1.2rem', color: 'hsl(var(--primary))', display: 'block', marginTop: '4px' }}>
+                      {Math.round(profile.maxEst1RM.value)} kg
+                    </strong>
+                    <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginTop: '2px' }}>
+                      Logrado el {formatDateStr(profile.maxEst1RM.date)} <br />
+                      con {profile.maxEst1RM.weight} kg x {profile.maxEst1RM.reps} reps
+                    </span>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', borderRadius: '8px', padding: '12px' }}>
+                    <div style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))', fontWeight: 700, textTransform: 'uppercase' }}>Peso Máximo Levantado</div>
+                    <strong style={{ fontSize: '1.2rem', color: 'hsl(var(--secondary))', display: 'block', marginTop: '4px' }}>
+                      {profile.maxWeight.weight} kg
+                    </strong>
+                    <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginTop: '2px' }}>
+                      Logrado el {formatDateStr(profile.maxWeight.date)} <br />
+                      con {profile.maxWeight.reps} reps
+                    </span>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', borderRadius: '8px', padding: '12px', gridColumn: 'span 2' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))', fontWeight: 700, textTransform: 'uppercase' }}>Mayor Volumen en una Sesión</div>
+                        <strong style={{ fontSize: '1.1rem', color: 'hsl(var(--success))', display: 'block', marginTop: '4px' }}>
+                          {profile.maxVolume.value.toLocaleString()} kg
+                        </strong>
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', textAlign: 'right' }}>
+                        Logrado el <br /> {formatDateStr(profile.maxVolume.date)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <button
+              type="button"
+              onClick={() => setSelectedExerciseForChart(null)}
+              className="btn btn-secondary"
+              style={{ padding: '10px', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer' }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

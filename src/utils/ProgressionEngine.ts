@@ -165,3 +165,320 @@ export function proposeNextSet(
     };
   }
 }
+
+export interface PBDetail {
+  weight: number;
+  reps: number;
+  date: string;
+}
+
+export interface ExercisePBProfile {
+  maxWeight: PBDetail;
+  maxEst1RM: PBDetail & { value: number };
+  maxVolume: { value: number; date: string };
+  repPRs: { [reps: number]: { weight: number; date: string } };
+  history1RM: { date: string; value: number; weight: number; reps: number }[];
+}
+
+export function calculatePBProfiles(sessions: any[]): { [exercise: string]: ExercisePBProfile } {
+  const profiles: { [exercise: string]: ExercisePBProfile } = {};
+
+  // Sort sessions chronologically ascending so we trace evolution properly
+  const sortedSessions = [...sessions].sort((a, b) => new Date(a.parsedDate).getTime() - new Date(b.parsedDate).getTime());
+
+  sortedSessions.forEach(s => {
+    const dateStr = s.parsedDate;
+
+    s.exercises.forEach((ex: any) => {
+      const title = ex.title;
+      if (!profiles[title]) {
+        profiles[title] = {
+          maxWeight: { weight: 0, reps: 0, date: '' },
+          maxEst1RM: { weight: 0, reps: 0, date: '', value: 0 },
+          maxVolume: { value: 0, date: '' },
+          repPRs: {},
+          history1RM: []
+        };
+      }
+
+      const profile = profiles[title];
+      let currentSessionVolume = 0;
+      let sessionBest1RM = 0;
+      let sessionBestWeightFor1RM = 0;
+      let sessionBestRepsFor1RM = 0;
+
+      ex.sets.forEach((set: any) => {
+        const weight = set.weight_kg || set.weightKg || 0;
+        const reps = set.reps || 0;
+        const completed = set.completed !== false;
+
+        if (completed && weight > 0 && reps > 0) {
+          const est1RM = weight * (1 + reps / 30);
+          
+          if (est1RM > sessionBest1RM) {
+            sessionBest1RM = est1RM;
+            sessionBestWeightFor1RM = weight;
+            sessionBestRepsFor1RM = reps;
+          }
+
+          // 1. Max Weight
+          if (weight > profile.maxWeight.weight) {
+            profile.maxWeight = { weight, reps, date: dateStr };
+          }
+
+          // 2. Max Est 1RM
+          if (est1RM > profile.maxEst1RM.value) {
+            profile.maxEst1RM = { weight, reps, date: dateStr, value: parseFloat(est1RM.toFixed(2)) };
+          }
+
+          // 3. Rep PRs
+          if (!profile.repPRs[reps] || weight > profile.repPRs[reps].weight) {
+            profile.repPRs[reps] = { weight, date: dateStr };
+          }
+
+          currentSessionVolume += weight * reps;
+        }
+      });
+
+      // 4. Max Volume
+      if (currentSessionVolume > profile.maxVolume.value) {
+        profile.maxVolume = { value: currentSessionVolume, date: dateStr };
+      }
+
+      // 5. History of 1RM
+      if (sessionBest1RM > 0) {
+        profile.history1RM.push({
+          date: dateStr,
+          value: parseFloat(sessionBest1RM.toFixed(2)),
+          weight: sessionBestWeightFor1RM,
+          reps: sessionBestRepsFor1RM
+        });
+      }
+    });
+  });
+
+  return profiles;
+}
+
+export function compressAndResizeImage(file: File, maxWidth: number, maxHeight: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas context error'));
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  category: 'strength' | 'consistency' | 'cardio' | 'rehab';
+  tier: 'bronze' | 'silver' | 'gold';
+  isUnlocked: boolean;
+  progressText?: string;
+  icon: string;
+}
+
+export function calculateAchievements(
+  sessions: any[],
+  pbProfiles: { [exercise: string]: ExercisePBProfile },
+  cardioHistory: any[]
+): Achievement[] {
+  const achievements: Achievement[] = [
+    {
+      id: 'first_workout',
+      title: 'Pionero de Fuerza',
+      description: 'Completa tu primera sesión de entrenamiento.',
+      category: 'consistency',
+      tier: 'bronze',
+      isUnlocked: sessions.length >= 1,
+      progressText: `${sessions.length}/1 entrenamientos`,
+      icon: '🏋️'
+    },
+    {
+      id: 'ten_workouts',
+      title: 'Consistencia de Hierro',
+      description: 'Completa 10 sesiones de entrenamiento.',
+      category: 'consistency',
+      tier: 'silver',
+      isUnlocked: sessions.length >= 10,
+      progressText: `${sessions.length}/10 entrenamientos`,
+      icon: '🔥'
+    },
+    {
+      id: 'bench_press_50',
+      title: 'Banco de Bronce',
+      description: 'Supera los 50 kg de récord personal en Press de Banca.',
+      category: 'strength',
+      tier: 'bronze',
+      isUnlocked: (pbProfiles['Bench Press (Barbell)']?.maxWeight.weight || 0) >= 50,
+      progressText: `${Math.round(pbProfiles['Bench Press (Barbell)']?.maxWeight.weight || 0)}/50 kg`,
+      icon: '💪'
+    },
+    {
+      id: 'bench_press_100',
+      title: 'Banco de Oro',
+      description: 'Supera los 100 kg de récord personal en Press de Banca.',
+      category: 'strength',
+      tier: 'gold',
+      isUnlocked: (pbProfiles['Bench Press (Barbell)']?.maxWeight.weight || 0) >= 100,
+      progressText: `${Math.round(pbProfiles['Bench Press (Barbell)']?.maxWeight.weight || 0)}/100 kg`,
+      icon: '👑'
+    },
+    {
+      id: 'squat_80',
+      title: 'Sentadilla de Bronce',
+      description: 'Supera los 80 kg de récord personal en Sentadillas.',
+      category: 'strength',
+      tier: 'bronze',
+      isUnlocked: (pbProfiles['Squat (Barbell)']?.maxWeight.weight || 0) >= 80,
+      progressText: `${Math.round(pbProfiles['Squat (Barbell)']?.maxWeight.weight || 0)}/80 kg`,
+      icon: '🦵'
+    },
+    {
+      id: 'squat_150',
+      title: 'Sentadilla de Oro',
+      description: 'Supera los 150 kg de récord personal en Sentadillas.',
+      category: 'strength',
+      tier: 'gold',
+      isUnlocked: (pbProfiles['Squat (Barbell)']?.maxWeight.weight || 0) >= 150,
+      progressText: `${Math.round(pbProfiles['Squat (Barbell)']?.maxWeight.weight || 0)}/150 kg`,
+      icon: '🦖'
+    },
+    {
+      id: 'deadlift_100',
+      title: 'Muerto de Bronce',
+      description: 'Supera los 100 kg de récord personal en Peso Muerto.',
+      category: 'strength',
+      tier: 'bronze',
+      isUnlocked: (pbProfiles['Deadlift (Barbell)']?.maxWeight.weight || 0) >= 100,
+      progressText: `${Math.round(pbProfiles['Deadlift (Barbell)']?.maxWeight.weight || 0)}/100 kg`,
+      icon: '💀'
+    },
+    {
+      id: 'deadlift_200',
+      title: 'Muerto de Oro',
+      description: 'Supera los 200 kg de récord personal en Peso Muerto.',
+      category: 'strength',
+      tier: 'gold',
+      isUnlocked: (pbProfiles['Deadlift (Barbell)']?.maxWeight.weight || 0) >= 200,
+      progressText: `${Math.round(pbProfiles['Deadlift (Barbell)']?.maxWeight.weight || 0)}/200 kg`,
+      icon: '💎'
+    },
+    {
+      id: 'power_total_300',
+      title: 'Club de los 300 kg',
+      description: 'Suma más de 300 kg combinando tus PBs de Sentadilla, Press de Banca y Peso Muerto.',
+      category: 'strength',
+      tier: 'silver',
+      isUnlocked: false,
+      progressText: '0/300 kg',
+      icon: '⚡'
+    },
+    {
+      id: 'power_total_500',
+      title: 'Club de los 500 kg',
+      description: 'Suma más de 500 kg combinando tus PBs de Sentadilla, Press de Banca y Peso Muerto.',
+      category: 'strength',
+      tier: 'gold',
+      isUnlocked: false,
+      progressText: '0/500 kg',
+      icon: '🔱'
+    },
+    {
+      id: 'rehab_master',
+      title: 'Templo Protegido',
+      description: 'Registra un ejercicio con molestia reportada con éxito para la recuperación activa.',
+      category: 'rehab',
+      tier: 'silver',
+      isUnlocked: false,
+      progressText: '0/1 reportes',
+      icon: '🛡️'
+    },
+    {
+      id: 'cardio_hero',
+      title: 'Corredor Incansable',
+      description: 'Completa una sesión de Cardio de más de 45 minutos.',
+      category: 'cardio',
+      tier: 'silver',
+      isUnlocked: false,
+      progressText: '0/45 min',
+      icon: '🏃'
+    }
+  ];
+
+  // 1. Calculate Big Three Total
+  const bpPB = pbProfiles['Bench Press (Barbell)']?.maxWeight.weight || 0;
+  const sqPB = pbProfiles['Squat (Barbell)']?.maxWeight.weight || 0;
+  const dlPB = pbProfiles['Deadlift (Barbell)']?.maxWeight.weight || 0;
+  const bigThreeTotal = bpPB + sqPB + dlPB;
+
+  const total300 = achievements.find(a => a.id === 'power_total_300')!;
+  total300.isUnlocked = bigThreeTotal >= 300;
+  total300.progressText = `${Math.round(bigThreeTotal)}/300 kg`;
+
+  const total500 = achievements.find(a => a.id === 'power_total_500')!;
+  total500.isUnlocked = bigThreeTotal >= 500;
+  total500.progressText = `${Math.round(bigThreeTotal)}/500 kg`;
+
+  // 2. Calculate Rehab reports
+  let hasRehabReport = false;
+  sessions.forEach(s => {
+    s.exercises?.forEach((e: any) => {
+      e.sets?.forEach((set: any) => {
+        if (set.hasPain || set.has_pain) {
+          hasRehabReport = true;
+        }
+      });
+    });
+  });
+  const rehab = achievements.find(a => a.id === 'rehab_master')!;
+  rehab.isUnlocked = hasRehabReport;
+  rehab.progressText = hasRehabReport ? '1/1 reportado' : '0/1 reportado';
+
+  // 3. Calculate long cardio session
+  let hasLongCardio = false;
+  let maxCardioMin = 0;
+  cardioHistory.forEach(c => {
+    if (c.minutes > maxCardioMin) {
+      maxCardioMin = c.minutes;
+    }
+    if (c.minutes >= 45) {
+      hasLongCardio = true;
+    }
+  });
+  const cardio = achievements.find(a => a.id === 'cardio_hero')!;
+  cardio.isUnlocked = hasLongCardio;
+  cardio.progressText = `${maxCardioMin}/45 min`;
+
+  return achievements;
+}
+
+

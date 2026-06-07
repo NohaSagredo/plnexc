@@ -51,6 +51,10 @@ export default function App() {
   const [cardioTargetMinutes, setCardioTargetMinutes] = useState<number>(150);
   const [cardioHistory, setCardioHistory] = useState<any[]>([]);
 
+  // 7. Manage profile picture and progress photos
+  const [profilePicture, setProfilePicture] = useState<string>('');
+  const [progressPhotos, setProgressPhotos] = useState<any[]>([]);
+
   const handleSetCardioGoalType = (type: 'daily' | 'weekly', skipCloudUpload = false) => {
     setCardioGoalType(type);
     localStorage.setItem('plnexc_cardio_goal_type', type);
@@ -286,6 +290,18 @@ export default function App() {
       setWeightHistory(sampleHistory);
       localStorage.setItem('plnexc_weight_history', JSON.stringify(sampleHistory));
     }
+
+    // Load profile picture
+    const savedProfilePic = localStorage.getItem('plnexc_profile_picture');
+    if (savedProfilePic) {
+      setProfilePicture(savedProfilePic);
+    }
+
+    // Load progress photos
+    const savedProgressPhotos = localStorage.getItem('plnexc_progress_photos');
+    if (savedProgressPhotos) {
+      setProgressPhotos(JSON.parse(savedProgressPhotos));
+    }
   }, []);
 
   // Save active injury to localStorage and sync
@@ -347,6 +363,45 @@ export default function App() {
         console.error('Error auto-syncing workout deletion:', err);
       });
     }
+  };
+
+  const handleSaveProfilePicture = (pic: string) => {
+    setProfilePicture(pic);
+    localStorage.setItem('plnexc_profile_picture', pic);
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      uploadUserData(currentUser.uid, { profilePicture: pic }).catch(err => {
+        console.error('Error auto-syncing profile picture:', err);
+      });
+    }
+  };
+
+  const handleAddProgressPhoto = (photo: { id: string; date: string; weight?: number; photoUrl: string; note?: string }) => {
+    setProgressPhotos(prev => {
+      const newPhotos = [photo, ...prev];
+      localStorage.setItem('plnexc_progress_photos', JSON.stringify(newPhotos));
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        uploadUserData(currentUser.uid, { progressPhotos: newPhotos }).catch(err => {
+          console.error('Error auto-syncing progress photos:', err);
+        });
+      }
+      return newPhotos;
+    });
+  };
+
+  const handleDeleteProgressPhoto = (id: string) => {
+    setProgressPhotos(prev => {
+      const newPhotos = prev.filter(p => p.id !== id);
+      localStorage.setItem('plnexc_progress_photos', JSON.stringify(newPhotos));
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        uploadUserData(currentUser.uid, { progressPhotos: newPhotos }).catch(err => {
+          console.error('Error auto-syncing progress photo deletion:', err);
+        });
+      }
+      return newPhotos;
+    });
   };
 
 
@@ -493,6 +548,10 @@ export default function App() {
             setCardioTargetMinutes={handleSetCardioTargetMinutes}
             cardioHistory={cardioHistory}
             setCardioHistory={setCardioHistory}
+            profilePicture={profilePicture}
+            setProfilePicture={setProfilePicture}
+            progressPhotos={progressPhotos}
+            setProgressPhotos={setProgressPhotos}
           />
         </div>
       </header>
@@ -552,6 +611,13 @@ export default function App() {
               weightHistory={weightHistory}
               onAddWeightRecord={handleAddWeightRecord}
               onDeleteWeightRecord={handleDeleteWeightRecord}
+              profilePicture={profilePicture}
+              onSaveProfilePicture={handleSaveProfilePicture}
+              progressPhotos={progressPhotos}
+              onAddProgressPhoto={handleAddProgressPhoto}
+              onDeleteProgressPhoto={handleDeleteProgressPhoto}
+              localHistory={localHistory}
+              cardioHistory={cardioHistory}
             />
           </div>
         )}

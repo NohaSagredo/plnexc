@@ -19,6 +19,8 @@ export interface SyncedData {
   cardioGoalType?: 'daily' | 'weekly';
   cardioTargetMinutes?: number;
   cardioHistory?: { date: string; minutes: number; type: string; calories: number }[];
+  profilePicture?: string;
+  progressPhotos?: { id: string; date: string; weight?: number; photoUrl: string; note?: string }[];
   updatedAt: string;
 }
 
@@ -63,6 +65,8 @@ export async function uploadUserData(userId: string, data: Partial<SyncedData>):
       cardioGoalType: data.cardioGoalType ?? existing?.cardioGoalType ?? 'daily',
       cardioTargetMinutes: data.cardioTargetMinutes !== undefined ? data.cardioTargetMinutes : (existing?.cardioTargetMinutes ?? 150),
       cardioHistory: data.cardioHistory ?? existing?.cardioHistory ?? [],
+      profilePicture: data.profilePicture !== undefined ? data.profilePicture : (existing?.profilePicture ?? ''),
+      progressPhotos: data.progressPhotos ?? existing?.progressPhotos ?? [],
       updatedAt: new Date().toISOString(),
     };
 
@@ -92,6 +96,8 @@ export function mergeLocalAndCloudData(local: {
   cardioGoalType: 'daily' | 'weekly';
   cardioTargetMinutes: number;
   cardioHistory: any[];
+  profilePicture: string;
+  progressPhotos: any[];
 }, cloud: SyncedData): {
   merged: {
     customRoutines: any[];
@@ -106,6 +112,8 @@ export function mergeLocalAndCloudData(local: {
     cardioGoalType: 'daily' | 'weekly';
     cardioTargetMinutes: number;
     cardioHistory: any[];
+    profilePicture: string;
+    progressPhotos: any[];
   };
   hasChanges: boolean;
 } {
@@ -281,6 +289,32 @@ export function mergeLocalAndCloudData(local: {
   });
   mergedCardioHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // 13. Merge Profile Picture
+  let mergedProfilePic = local.profilePicture || '';
+  if (cloud.profilePicture !== undefined && cloud.profilePicture !== local.profilePicture) {
+    mergedProfilePic = cloud.profilePicture;
+    hasChanges = true;
+  }
+
+  // 14. Merge Progress Photos
+  const mergedProgressPhotos = [...(local.progressPhotos || [])];
+  const cloudProgressPhotos = cloud.progressPhotos ?? [];
+  cloudProgressPhotos.forEach((cloudPhoto) => {
+    const exists = mergedProgressPhotos.some(localPhoto => localPhoto.id === cloudPhoto.id);
+    if (!exists) {
+      mergedProgressPhotos.push(cloudPhoto);
+      hasChanges = true;
+    }
+  });
+  const localPhotosArr = local.progressPhotos || [];
+  localPhotosArr.forEach((localPhoto) => {
+    const exists = cloudProgressPhotos.some(cloudPhoto => cloudPhoto.id === localPhoto.id);
+    if (!exists) {
+      hasChanges = true;
+    }
+  });
+  mergedProgressPhotos.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   return {
     merged: {
       customRoutines: mergedRoutines,
@@ -294,7 +328,9 @@ export function mergeLocalAndCloudData(local: {
       deletedRoutines: mergedDeleted,
       cardioGoalType: mergedCardioGoalType,
       cardioTargetMinutes: mergedCardioTargetMinutes,
-      cardioHistory: mergedCardioHistory
+      cardioHistory: mergedCardioHistory,
+      profilePicture: mergedProfilePic,
+      progressPhotos: mergedProgressPhotos
     },
     hasChanges
   };
