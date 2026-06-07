@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { Scale, User, Trash2, Calendar, Plus, HelpCircle, Calculator, ChevronDown, ChevronUp, Check, Info, Lock, Camera, Award, X, Image as ImageIcon } from 'lucide-react';
 import type { WeightRecord } from '../utils/firebaseSync';
 import { calculatePBProfiles, calculateAchievements, compressAndResizeImage } from '../utils/ProgressionEngine';
+import AlgorithmsTab from './AlgorithmsTab';
 
 interface ProfileTabProps {
   bodyWeight: number;
@@ -46,6 +47,7 @@ export default function ProfileTab({
 }: ProfileTabProps) {
   const [newWeightInput, setNewWeightInput] = useState<string>('');
   const [customDateInput, setCustomDateInput] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [showAlgorithms, setShowAlgorithms] = useState<boolean>(false);
 
   // States for body fat calculator
   const [showFatCalc, setShowFatCalc] = useState<boolean>(false);
@@ -1287,6 +1289,44 @@ export default function ProfileTab({
           `}</style>
         </div>
       )}
+
+      {/* Sección: Motor de Decisiones e Inteligencia (Algoritmos) */}
+      <div className="glass-panel" style={{ padding: '20px' }}>
+        <button
+          type="button"
+          onClick={() => setShowAlgorithms(!showAlgorithms)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#ffffff',
+            width: '100%',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: 0
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ background: 'hsla(var(--primary) / 0.1)', padding: '10px', borderRadius: '10px' }}>
+              <Info size={24} color="hsl(var(--primary))" />
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Motor de Decisiones e Inteligencia</h2>
+              <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
+                Documentación y fundamentos matemáticos del sistema PLNEXC
+              </p>
+            </div>
+          </div>
+          {showAlgorithms ? <ChevronUp size={20} color="hsl(var(--muted))" /> : <ChevronDown size={20} color="hsl(var(--muted))" />}
+        </button>
+
+        {showAlgorithms && (
+          <div style={{ marginTop: '24px', borderTop: '1px solid hsl(var(--border))', paddingTop: '20px' }}>
+            <AlgorithmsTab />
+          </div>
+        )}
+      </div>
 
     </div>
   );

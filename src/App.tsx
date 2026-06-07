@@ -3,7 +3,6 @@ import {
   Dumbbell, 
   HeartPulse, 
   Zap,
-  Info,
   User,
   Flame
 } from 'lucide-react';
@@ -11,7 +10,6 @@ import DashboardTab from './components/DashboardTab';
 import WorkoutTab from './components/WorkoutTab';
 import RehabTab from './components/RehabTab';
 import CardioTab from './components/CardioTab';
-import AlgorithmsTab from './components/AlgorithmsTab';
 import ProfileTab from './components/ProfileTab';
 import SyncPanel from './components/SyncPanel';
 import { uploadUserData } from './utils/firebaseSync';
@@ -20,7 +18,7 @@ import { auth } from './utils/firebase';
 import { useState, useEffect } from 'react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile' | 'algorithms'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile'>('dashboard');
   
   // 1. Manage state of historical workouts
   const [localHistory, setLocalHistory] = useState<any[]>([]);
@@ -513,14 +511,6 @@ export default function App() {
               <User size={18} />
               Perfil
             </button>
-
-            <button 
-              className={`nav-tab ${activeTab === 'algorithms' ? 'active' : ''}`}
-              onClick={() => setActiveTab('algorithms')}
-            >
-              <Info size={18} />
-              Algoritmos
-            </button>
           </nav>
 
           {/* Cloud Synchronization Panel */}
@@ -637,12 +627,6 @@ export default function App() {
             />
           </div>
         )}
-
-        {activeTab === 'algorithms' && (
-          <div className="tab-transition">
-            <AlgorithmsTab />
-          </div>
-        )}
       </main>
 
       {/* Mobile Bottom Tabbar Navigation */}
@@ -688,14 +672,6 @@ export default function App() {
         >
           <User size={22} />
           <span>Perfil</span>
-        </button>
-
-        <button 
-          className={`mobile-tab ${activeTab === 'algorithms' ? 'active' : ''}`}
-          onClick={() => setActiveTab('algorithms')}
-        >
-          <Info size={22} />
-          <span>Algoritmos</span>
         </button>
       </nav>
 
