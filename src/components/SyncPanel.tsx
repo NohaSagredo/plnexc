@@ -18,7 +18,8 @@ import {
   signOut, 
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithRedirect,
+  getRedirectResult
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { 
@@ -99,6 +100,22 @@ export default function SyncPanel({
 
   // Monitor Auth State
   useEffect(() => {
+    // Check if user is returning from Google Redirect
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          console.log('Google redirect sign-in successful');
+        }
+      })
+      .catch((err: any) => {
+        console.error('Error in Google redirect result:', err);
+        let localizedError = `Error al iniciar sesión con Google: ${err.code || err.message}`;
+        if (err.code === 'auth/operation-not-allowed') {
+          localizedError = 'El inicio de sesión con Google está desactivado en la consola de Firebase. Habilítalo en Firebase Console > Authentication > Sign-in method.';
+        }
+        setError(localizedError);
+      });
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -306,19 +323,14 @@ export default function SyncPanel({
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
     } catch (err: any) {
       console.error('Google Sign-In error:', err);
       let localizedError = `Error al iniciar sesión con Google: ${err.code || err.message}`;
-      if (err.code === 'auth/popup-blocked') {
-        localizedError = 'El navegador bloqueó la ventana emergente de Google. Habilita las ventanas emergentes e inténtalo de nuevo.';
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        localizedError = 'La ventana de inicio de sesión de Google se cerró antes de completar el registro.';
-      } else if (err.code === 'auth/operation-not-allowed') {
+      if (err.code === 'auth/operation-not-allowed') {
         localizedError = 'El inicio de sesión con Google está desactivado en la consola de Firebase. Habilítalo en Firebase Console > Authentication > Sign-in method.';
       }
       setError(localizedError);
-    } finally {
       setLoading(false);
     }
   };
