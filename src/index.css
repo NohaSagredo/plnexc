@@ -112,7 +112,7 @@ h1, h2, h3, h4, h5, h6 {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 16px;
-  padding-bottom: 80px; /* Space for bottom tab bar on mobile */
+  padding-bottom: 96px; /* Space for bottom tab bar on mobile */
 }
 
 @media (min-width: 768px) {
@@ -187,7 +187,8 @@ h1, h2, h3, h4, h5, h6 {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 64px;
+  padding-top: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
   background: hsl(var(--bg-surface) / 0.9);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
@@ -196,7 +197,6 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: space-around;
   align-items: center;
   z-index: 100;
-  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .mobile-tab {
