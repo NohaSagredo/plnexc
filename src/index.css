@@ -48,7 +48,7 @@
   padding: 0;
 }
 
-body {
+html, body {
   background-color: hsl(var(--bg-main));
   background-image: 
     radial-gradient(at 0% 0%, rgba(0, 242, 254, 0.05) 0px, transparent 50%),
@@ -112,8 +112,7 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 100vh;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 16px;
-  padding-bottom: 96px; /* Space for bottom tab bar on mobile */
+  padding: env(safe-area-inset-top, 0px) 16px 96px 16px; /* Safe area top for notch, and space for bottom bar */
 }
 
 @media (min-width: 768px) {
