@@ -57,6 +57,7 @@ body {
   color: #ffffff;
   min-height: 100vh;
   overflow-x: hidden;
+  touch-action: manipulation; /* Evita zoom accidental por doble tap y elimina retraso de clic */
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -235,6 +236,9 @@ h1, h2, h3, h4, h5, h6 {
   }
   .desktop-nav {
     display: none; /* Hide desktop tab bar on mobile */
+  }
+  input, select, textarea {
+    font-size: 16px !important; /* Evita que iOS Safari haga zoom automático al enfocar el campo */
   }
 }
 
