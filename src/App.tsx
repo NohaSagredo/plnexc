@@ -555,6 +555,8 @@ export default function App() {
               activeInjury={activeInjury}
               weightHistory={weightHistory}
               cardioHistory={cardioHistory}
+              profilePicture={profilePicture}
+              progressPhotos={progressPhotos}
             />
           </div>
         )}

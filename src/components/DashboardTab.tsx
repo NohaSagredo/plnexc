@@ -23,7 +23,9 @@ import {
   Award,
   Scale,
   HeartPulse,
-  X
+  X,
+  Camera,
+  User
 } from 'lucide-react';
 
 interface SetRecord {
@@ -69,13 +71,17 @@ interface DashboardTabProps {
   } | null;
   weightHistory: { date: string; weight: number }[];
   cardioHistory?: CardioSession[];
+  profilePicture?: string;
+  progressPhotos?: any[];
 }
 
 export default function DashboardTab({ 
   localHistory, 
   activeInjury,
   weightHistory,
-  cardioHistory = []
+  cardioHistory = [],
+  profilePicture = '',
+  progressPhotos = []
 }: DashboardTabProps) {
   const sessions = localHistory as WorkoutSession[];
 
@@ -130,7 +136,7 @@ export default function DashboardTab({
   }, [sessions, selectedExercise]);
 
   // Widget ID Type & Layout States
-  type WidgetId = 'stats' | 'coach' | 'strength' | 'weight' | 'cardio' | 'splits_prs';
+  type WidgetId = 'stats' | 'coach' | 'strength' | 'weight' | 'cardio' | 'splits_prs' | 'progress_photo';
 
   const [isEditingLayout, setIsEditingLayout] = useState<boolean>(false);
   const [layoutOrder, setLayoutOrder] = useState<WidgetId[]>(() => {
@@ -138,14 +144,14 @@ export default function DashboardTab({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const required: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs'];
+        const required: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo'];
         const isValid = parsed.every((id: any) => required.includes(id)) && parsed.length === required.length;
         if (isValid) return parsed;
       } catch (e) {
         // Fallback
       }
     }
-    return ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs'];
+    return ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo'];
   });
 
   // PB Sub-tabs & modal state variables
@@ -1042,6 +1048,125 @@ export default function DashboardTab({
     );
   };
 
+  const renderProgressPhotoWidget = () => {
+    const latestPhoto = progressPhotos && progressPhotos.length > 0 ? progressPhotos[0] : null;
+
+    return (
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Camera size={22} color="hsl(var(--primary))" />
+            Última Foto de Progreso
+          </h2>
+          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
+            Tu evolución física visual en base al historial de fotos de tu perfil
+          </p>
+        </div>
+
+        {!latestPhoto ? (
+          <div style={{
+            border: '2px dashed rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            padding: '40px 20px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+            background: 'rgba(255,255,255,0.01)'
+          }}>
+            <Camera size={40} style={{ color: 'hsl(var(--muted))', opacity: 0.5 }} />
+            <div>
+              <p style={{ fontWeight: 600, fontSize: '0.95rem', margin: '0 0 4px 0', color: '#ffffff' }}>No hay fotos de progreso</p>
+              <p style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', margin: 0, maxWidth: '280px', marginInline: 'auto' }}>
+                Sube fotos de tu progreso corporal en la pestaña de Perfil para realizar un seguimiento visual.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+            gap: '20px',
+            alignItems: 'center'
+          }}>
+            {/* Foto de progreso */}
+            <div style={{ 
+              position: 'relative',
+              borderRadius: '8px', 
+              overflow: 'hidden',
+              background: 'rgba(0, 0, 0, 0.2)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              maxHeight: '260px',
+              aspectRatio: '4/3',
+              width: '100%',
+              margin: '0 auto'
+            }}>
+              <img 
+                src={latestPhoto.photoUrl} 
+                alt="Progreso más reciente" 
+                style={{ 
+                  maxWidth: '100%', 
+                  maxHeight: '260px',
+                  objectFit: 'contain',
+                  display: 'block'
+                }} 
+              />
+            </div>
+
+            {/* Metadatos */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+                  <Calendar size={16} color="hsl(var(--muted))" />
+                  <span style={{ color: 'hsl(var(--muted))' }}>Fecha:</span>
+                  <strong style={{ color: '#ffffff' }}>
+                    {new Date(latestPhoto.date).toLocaleDateString('es-ES', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </strong>
+                </div>
+
+                {latestPhoto.weight && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+                    <Scale size={16} color="hsl(var(--muted))" />
+                    <span style={{ color: 'hsl(var(--muted))' }}>Peso registrado:</span>
+                    <strong style={{ color: 'hsl(var(--primary))' }}>{latestPhoto.weight} kg</strong>
+                  </div>
+                )}
+              </div>
+
+              {latestPhoto.note && (
+                <div style={{
+                  padding: '12px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderLeft: '3px solid hsl(var(--primary))',
+                  borderRadius: '0 8px 8px 0',
+                  fontSize: '0.85rem',
+                  fontStyle: 'italic',
+                  color: 'hsl(var(--muted))',
+                  lineHeight: '1.4'
+                }}>
+                  "{latestPhoto.note}"
+                </div>
+              )}
+
+              <div style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', marginTop: '4px' }}>
+                💡 Puedes subir y gestionar tu historial completo de fotos desde la pestaña <strong>Perfil</strong>.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderWidget = (id: WidgetId) => {
     switch (id) {
       case 'stats':
@@ -1056,6 +1181,8 @@ export default function DashboardTab({
         return renderCardioChart();
       case 'splits_prs':
         return renderSplitsAndPRs();
+      case 'progress_photo':
+        return renderProgressPhotoWidget();
       default:
         return null;
     }
@@ -1581,9 +1708,39 @@ export default function DashboardTab({
         <>
           {/* Dashboard Header with Edit Layout Button */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
-            <div>
-              <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#ffffff' }}>Tu Progreso de Fuerza y Cardio</h1>
-              <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem' }}>Organiza y analiza tu rendimiento a lo largo del tiempo</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {profilePicture ? (
+                <img 
+                  src={profilePicture} 
+                  alt="Perfil" 
+                  style={{ 
+                    width: '46px', 
+                    height: '46px', 
+                    borderRadius: '50%', 
+                    objectFit: 'cover',
+                    border: '2px solid hsl(var(--primary))',
+                    boxShadow: '0 0 10px hsla(var(--primary) / 0.3)'
+                  }} 
+                />
+              ) : (
+                <div style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '50%',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'hsl(var(--muted))'
+                }}>
+                  <User size={22} />
+                </div>
+              )}
+              <div>
+                <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#ffffff', margin: 0 }}>Tu Progreso de Fuerza y Cardio</h1>
+                <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', margin: '2px 0 0 0' }}>Organiza y analiza tu rendimiento a lo largo del tiempo</p>
+              </div>
             </div>
             
             <button 
