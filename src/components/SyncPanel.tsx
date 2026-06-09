@@ -19,7 +19,8 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithRedirect,
-  getRedirectResult
+  getRedirectResult,
+  signInWithPopup
 } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { 
@@ -323,7 +324,16 @@ export default function SyncPanel({
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      await signInWithRedirect(auth, provider);
+      
+      // Flujo híbrido para compatibilidad completa en todos los dominios:
+      // 1. En el dominio oficial de autenticación (firebaseapp.com), usamos la redirección nativa.
+      // 2. En cualquier otro dominio (como web.app o localhost), usamos popup para evitar fallos de redirect_uri_mismatch y cookies de terceros.
+      if (window.location.hostname === 'plnexc-coach.firebaseapp.com') {
+        await signInWithRedirect(auth, provider);
+      } else {
+        const result = await signInWithPopup(auth, provider);
+        console.log('Google popup sign-in successful:', result.user);
+      }
     } catch (err: any) {
       console.error('Google Sign-In error:', err);
       let localizedError = `Error al iniciar sesión con Google: ${err.code || err.message}`;
