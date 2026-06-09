@@ -1287,12 +1287,13 @@ export default function WorkoutTab({
                   left: 0,
                   width: '100%',
                   height: '100%',
-                  background: 'rgba(0, 0, 0, 0.75)',
+                  background: 'rgba(5, 7, 12, 0.85)',
                   backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  zIndex: 999,
+                  zIndex: 9999,
                   padding: '20px'
                 }}
               >
@@ -1302,7 +1303,7 @@ export default function WorkoutTab({
                   style={{ 
                     maxWidth: '500px',
                     width: '100%',
-                    maxHeight: '85vh',
+                    maxHeight: '80vh',
                     overflowY: 'auto',
                     padding: '20px', 
                     display: 'flex', 
@@ -1310,8 +1311,8 @@ export default function WorkoutTab({
                     gap: '16px',
                     border: '1px solid hsla(var(--primary) / 0.3)',
                     borderRadius: 'var(--border-radius-md)',
-                    boxShadow: '0 0 30px hsla(var(--primary) / 0.2)',
-                    background: 'rgba(10, 14, 23, 0.95)'
+                    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.6)',
+                    background: '#0a0e17'
                   }}
                 >
                 {/* Header of the unified details card */}
