@@ -150,6 +150,7 @@ export default function WorkoutTab({
 
 
   const [selectedRoutine, setSelectedRoutine] = useState<string>('');
+  const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
   const [activeSession, setActiveSession] = useState<any | null>(null);
   const [timer, setTimer] = useState<number>(0);
   const [timerActive, setTimerActive] = useState<boolean>(false);
@@ -365,6 +366,7 @@ export default function WorkoutTab({
 
     setTimer(0);
     setTimerActive(true);
+    setShowPreviewModal(false);
   };
 
   // Change input value in real time
@@ -1215,7 +1217,10 @@ export default function WorkoutTab({
                   {routines.map((r) => (
                     <div 
                       key={r.title}
-                      onClick={() => setSelectedRoutine(r.title)}
+                      onClick={() => {
+                        setSelectedRoutine(r.title);
+                        setShowPreviewModal(true);
+                      }}
                       className={`routine-card ${selectedRoutine === r.title ? 'active' : ''} ${r.highlight}`}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1273,9 +1278,9 @@ export default function WorkoutTab({
                 </div>
               </div>
             </div>            {/* Exercise Preview Container */}
-            {previewExercises.length > 0 && selectedRoutineObj && (
+            {showPreviewModal && previewExercises.length > 0 && selectedRoutineObj && (
               <div 
-                onClick={() => setSelectedRoutine('')}
+                onClick={() => setShowPreviewModal(false)}
                 style={{
                   position: 'fixed',
                   top: 0,
@@ -1322,7 +1327,7 @@ export default function WorkoutTab({
                   </div>
                   {/* Minimalist close button */}
                   <button 
-                    onClick={() => setSelectedRoutine('')}
+                    onClick={() => setShowPreviewModal(false)}
                     style={{
                       background: 'transparent',
                       border: 'none',
