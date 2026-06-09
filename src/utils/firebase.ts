@@ -4,9 +4,7 @@ import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: "AIzaSyC1tEq-z5rcFpMHdcF5-7M_banZ1aWpPTU",
-  authDomain: typeof window !== 'undefined' && window.location.hostname && !window.location.hostname.includes('localhost')
-    ? window.location.hostname 
-    : "plnexc-coach.firebaseapp.com",
+  authDomain: "plnexc-coach.firebaseapp.com",
   projectId: "plnexc-coach",
   storageBucket: "plnexc-coach.firebasestorage.app",
   messagingSenderId: "91600480672",
