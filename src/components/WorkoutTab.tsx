@@ -165,6 +165,7 @@ export default function WorkoutTab({
   const [energyScoreInput, setEnergyScoreInput] = useState<number>(3);
 
   const routineGridRef = useRef<HTMLDivElement>(null);
+  const hasInitialScrolled = useRef(false);
 
   useEffect(() => {
     const container = routineGridRef.current;
@@ -182,6 +183,18 @@ export default function WorkoutTab({
       container.removeEventListener('wheel', handleWheel);
     };
   }, [activeSession, showRecoveryWizard, isBuildingRoutine]);
+
+  // Desplazar ligeramente a la derecha al montar para esconder parcialmente la tarjeta de Crear Rutina
+  useEffect(() => {
+    const container = routineGridRef.current;
+    if (container && routines.length > 0 && !hasInitialScrolled.current) {
+      const timer = setTimeout(() => {
+        container.scrollLeft = 145;
+        hasInitialScrolled.current = true;
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+  }, [routines.length]);
 
   const selectedRoutineObj = useMemo(() => {
     return routines.find(r => r.title === selectedRoutine);
@@ -1177,6 +1190,39 @@ export default function WorkoutTab({
                   ref={routineGridRef}
                   className="routine-grid"
                 >
+                  {/* Tarjeta vacía para crear rutina */}
+                  <div 
+                    onClick={() => setIsBuildingRoutine(true)}
+                    className="routine-card"
+                    style={{
+                      borderStyle: 'dashed',
+                      borderWidth: '2px',
+                      borderColor: 'hsla(var(--primary) / 0.3)',
+                      background: 'rgba(255, 255, 255, 0.01)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: '140px',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-smooth)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'hsl(var(--primary))';
+                      e.currentTarget.style.background = 'rgba(0, 242, 254, 0.02)';
+                      e.currentTarget.style.boxShadow = '0 0 15px hsla(var(--primary) / 0.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'hsla(var(--primary) / 0.3)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    <Plus size={28} color="hsl(var(--primary))" style={{ opacity: 0.8 }} />
+                    <span style={{ fontSize: '0.85rem', color: 'hsl(var(--primary))', fontWeight: 700 }}>Crear Rutina</span>
+                  </div>
+
                   {routines.map((r, idx) => (
                     <div 
                       key={r.title}
@@ -1262,40 +1308,6 @@ export default function WorkoutTab({
                       </div>
                     </div>
                   ))}
-
-                  {/* Tarjeta vacía para crear rutina */}
-                  <div 
-                    onClick={() => setIsBuildingRoutine(true)}
-                    className="routine-card"
-                    style={{
-                      borderStyle: 'dashed',
-                      borderWidth: '2px',
-                      borderColor: 'hsla(var(--primary) / 0.3)',
-                      background: 'rgba(255, 255, 255, 0.01)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      minHeight: '140px',
-                      flexDirection: 'column',
-                      gap: '10px',
-                      cursor: 'pointer',
-                      transition: 'all var(--transition-smooth)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'hsl(var(--primary))';
-                      e.currentTarget.style.background = 'rgba(0, 242, 254, 0.02)';
-                      e.currentTarget.style.boxShadow = '0 0 15px hsla(var(--primary) / 0.1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'hsla(var(--primary) / 0.3)';
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  >
-                    <Plus size={28} color="hsl(var(--primary))" style={{ opacity: 0.8 }} />
-                    <span style={{ fontSize: '0.85rem', color: 'hsl(var(--primary))', fontWeight: 700 }}>Crear Rutina</span>
-                  </div>
-
                 </div>
               </div>
             </div>            {/* Exercise Preview Container */}
