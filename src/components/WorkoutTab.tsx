@@ -1196,31 +1196,6 @@ export default function WorkoutTab({
                             className="btn-card-action"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleMoveRoutine(r.title, 'left');
-                            }}
-                            disabled={idx === 0}
-                            style={{ opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'not-allowed' : 'pointer' }}
-                            title="Mover Izquierda"
-                          >
-                            <ChevronLeft size={13} />
-                          </button>
-                          <button 
-                            className="btn-card-action"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMoveRoutine(r.title, 'right');
-                            }}
-                            disabled={idx === routines.length - 1}
-                            style={{ opacity: idx === routines.length - 1 ? 0.3 : 1, cursor: idx === routines.length - 1 ? 'not-allowed' : 'pointer' }}
-                            title="Mover Derecha"
-                          >
-                            <ChevronRight size={13} />
-                          </button>
-
-                          <button 
-                            className="btn-card-action"
-                            onClick={(e) => {
-                              e.stopPropagation();
                               setEditingRoutine({ title: r.title, exercises: r.exercises });
                               setIsBuildingRoutine(true);
                             }}
@@ -1253,9 +1228,38 @@ export default function WorkoutTab({
                         </p>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: 'hsl(var(--primary))', fontWeight: 600 }}>
-                        <Dumbbell size={14} />
-                        <span>{r.exercises.length} {r.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'hsl(var(--primary))' }}>
+                          <Dumbbell size={14} />
+                          <span>{r.exercises.length} {r.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}</span>
+                        </div>
+                        
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button 
+                            className="btn-card-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveRoutine(r.title, 'left');
+                            }}
+                            disabled={idx === 0}
+                            style={{ opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'not-allowed' : 'pointer', width: '24px', height: '24px' }}
+                            title="Mover Izquierda"
+                          >
+                            <ChevronLeft size={12} />
+                          </button>
+                          <button 
+                            className="btn-card-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveRoutine(r.title, 'right');
+                            }}
+                            disabled={idx === routines.length - 1}
+                            style={{ opacity: idx === routines.length - 1 ? 0.3 : 1, cursor: idx === routines.length - 1 ? 'not-allowed' : 'pointer', width: '24px', height: '24px' }}
+                            title="Mover Derecha"
+                          >
+                            <ChevronRight size={12} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
