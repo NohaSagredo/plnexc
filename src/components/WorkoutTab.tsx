@@ -1043,7 +1043,6 @@ export default function WorkoutTab({
 
         .routine-card {
           flex: 0 0 260px;
-          align-self: flex-start;
           background: rgba(255, 255, 255, 0.02);
           border: 1px solid hsl(var(--border));
           border-radius: var(--border-radius-md);
@@ -1066,17 +1065,9 @@ export default function WorkoutTab({
         }
 
         .routine-card.active {
-          flex: 0 0 320px !important;
-          justify-content: flex-start;
           background: hsla(var(--primary) / 0.04);
           border-color: hsl(var(--primary));
           box-shadow: 0 0 20px hsla(var(--primary) / 0.15);
-        }
-
-        @media (max-width: 768px) {
-          .routine-card.active {
-            flex: 0 0 280px !important;
-          }
         }
 
         .routine-card.active::before {
@@ -1221,381 +1212,417 @@ export default function WorkoutTab({
                     <span style={{ fontSize: '0.85rem', color: 'hsl(var(--primary))', fontWeight: 700 }}>Crear Rutina</span>
                   </div>
 
-                  {routines.map((r) => {
-                    const isActive = selectedRoutine === r.title;
+                  {routines.map((r) => (
+                    <div 
+                      key={r.title}
+                      onClick={() => setSelectedRoutine(r.title)}
+                      className={`routine-card ${selectedRoutine === r.title ? 'active' : ''} ${r.highlight}`}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className={`badge ${
+                          r.highlight === 'created' ? 'badge-success' : r.highlight === 'modified' ? 'badge-secondary' : 'badge-primary'
+                        }`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
+                          {r.highlight === 'created' ? '★ Creada por ti' : r.highlight === 'modified' ? '✎ Modificada' : '✦ Prediseñada'}
+                        </span>
+                        
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button 
+                            className="btn-card-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingRoutine({ title: r.title, exercises: r.exercises });
+                              setIsBuildingRoutine(true);
+                            }}
+                            title="Editar Rutina"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button 
+                            className="btn-card-action btn-card-danger" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`¿Estás seguro de que quieres eliminar la rutina "${r.title}"?`)) {
+                                onDeleteRoutine(r.title);
+                                setSelectedRoutine(routines.find(rout => rout.title !== r.title)?.title || '');
+                              }
+                            }}
+                            title="Eliminar Rutina"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#ffffff', margin: '4px 0 2px 0' }}>
+                          {r.title}
+                        </h4>
+                        <p style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '32px', lineHeight: '1.4' }}>
+                          {r.exercises.length > 0 ? r.exercises.join(', ') : 'Sin ejercicios registrados'}
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'hsl(var(--primary))' }}>
+                          <Dumbbell size={14} />
+                          <span>{r.exercises.length} {r.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>            {/* Exercise Preview Container */}
+            {previewExercises.length > 0 && selectedRoutineObj && (
+              <div 
+                onClick={() => setSelectedRoutine('')}
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  background: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(10px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 999,
+                  padding: '20px'
+                }}
+              >
+                <div 
+                  onClick={(e) => e.stopPropagation()}
+                  className="glass-panel fade-in" 
+                  style={{ 
+                    maxWidth: '500px',
+                    width: '100%',
+                    maxHeight: '85vh',
+                    overflowY: 'auto',
+                    padding: '20px', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '16px',
+                    border: '1px solid hsla(var(--primary) / 0.3)',
+                    borderRadius: 'var(--border-radius-md)',
+                    boxShadow: '0 0 30px hsla(var(--primary) / 0.2)',
+                    background: 'rgba(10, 14, 23, 0.95)'
+                  }}
+                >
+                {/* Header of the unified details card */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsla(var(--border) / 0.5)', paddingBottom: '12px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Dumbbell size={18} color="hsl(var(--primary))" />
+                      {selectedRoutineObj.title}
+                    </h3>
+                    <p style={{ color: 'hsl(var(--muted))', fontSize: '0.75rem', margin: '2px 0 0 0' }}>
+                      Vista previa de ejercicios • {previewExercises.length} {previewExercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                    </p>
+                  </div>
+                  {/* Minimalist close button */}
+                  <button 
+                    onClick={() => setSelectedRoutine('')}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'hsl(var(--muted))',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '4px',
+                      borderRadius: '50%',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = 'hsl(var(--muted))'; e.currentTarget.style.background = 'transparent'; }}
+                    title="Cerrar vista previa"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Vertical list of exercises */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {previewExercises.map((ex, index) => {
+                    let willBeSubstituted = false;
+                    let substitutionTitle = '';
+                    let subRule: any = null;
+                    if (activeInjury) {
+                      const rule = getSubstitutedExercise(ex.title);
+                      if (rule) {
+                        willBeSubstituted = true;
+                        substitutionTitle = rule.substitutedExercise;
+                        subRule = rule;
+                      }
+                    }
+
+                    const isStandardsExpanded = !!expandedStandards[ex.title];
+                    const isInstructionsExpanded = !!expandedInstructions[ex.title];
+
                     return (
                       <div 
-                        key={r.title}
-                        onClick={() => setSelectedRoutine(isActive ? '' : r.title)}
-                        className={`routine-card ${isActive ? 'active' : ''} ${r.highlight}`}
+                        key={ex.id + '_' + index}
                         style={{
-                          height: isActive ? 'auto' : '140px'
+                          background: 'rgba(255, 255, 255, 0.01)',
+                          border: '1px solid hsla(var(--border) / 0.5)',
+                          borderRadius: '8px',
+                          padding: '12px 14px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                          transition: 'all var(--transition-smooth)'
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span className={`badge ${
-                            r.highlight === 'created' ? 'badge-success' : r.highlight === 'modified' ? 'badge-secondary' : 'badge-primary'
-                          }`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
-                            {r.highlight === 'created' ? '★ Creada por ti' : r.highlight === 'modified' ? '✎ Modificada' : '✦ Prediseñada'}
-                          </span>
-                          
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button 
-                              className="btn-card-action"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingRoutine({ title: r.title, exercises: r.exercises });
-                                setIsBuildingRoutine(true);
-                              }}
-                              title="Editar Rutina"
-                            >
-                              <Edit2 size={13} />
-                            </button>
-                            <button 
-                              className="btn-card-action btn-card-danger" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (window.confirm(`¿Estás seguro de que quieres eliminar la rutina "${r.title}"?`)) {
-                                  onDeleteRoutine(r.title);
-                                  setSelectedRoutine(routines.find(rout => rout.title !== r.title)?.title || '');
-                                }
-                              }}
-                              title="Eliminar Rutina"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div>
-                          <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#ffffff', margin: '4px 0 2px 0' }}>
-                            {r.title}
-                          </h4>
-                          {!isActive && (
-                            <p style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '32px', lineHeight: '1.4' }}>
-                              {r.exercises.length > 0 ? r.exercises.join(', ') : 'Sin ejercicios registrados'}
-                            </p>
-                          )}
-                        </div>
-
-                        {!isActive && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', fontWeight: 600 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'hsl(var(--primary))' }}>
-                              <Dumbbell size={14} />
-                              <span>{r.exercises.length} {r.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}</span>
+                        {/* Main row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '200px' }}>
+                            {/* Neon cyan dot */}
+                            <span 
+                              style={{ 
+                                display: 'inline-block', 
+                                width: '6px', 
+                                height: '6px', 
+                                borderRadius: '50%', 
+                                background: willBeSubstituted ? 'hsl(var(--warning))' : 'hsl(var(--primary))', 
+                                boxShadow: willBeSubstituted ? '0 0 8px hsl(var(--warning))' : '0 0 8px hsl(var(--primary))',
+                                flexShrink: 0
+                              }} 
+                            />
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>
+                                {ex.title}
+                              </strong>
+                              {willBeSubstituted && (
+                                <span style={{ fontSize: '0.7rem', color: 'hsl(var(--warning))', fontWeight: 600, marginTop: '2px' }}>
+                                  ⚠️ Sustituido por: {substitutionTitle}
+                                </span>
+                              )}
                             </div>
                           </div>
-                        )}
 
-                        {isActive && (
-                          <div 
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              marginTop: '8px',
-                              borderTop: '1px solid hsla(var(--border) / 0.3)',
-                              paddingTop: '8px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '10px',
-                              cursor: 'default',
-                              width: '100%'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '2px' }}>
-                              <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
-                                {previewExercises.length} {previewExercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                          {/* Badges & Actions */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <span className="badge badge-primary" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize' }}>
+                                {ex.muscleGroup}
                               </span>
-                              <button 
-                                onClick={() => setSelectedRoutine('')}
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: 'hsl(var(--muted))',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  padding: '2px',
-                                  borderRadius: '50%',
-                                  transition: 'all var(--transition-fast)'
-                                }}
-                                onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.color = 'hsl(var(--muted))'; e.currentTarget.style.background = 'transparent'; }}
-                                title="Cerrar vista previa"
-                              >
-                                <X size={14} />
-                              </button>
+                              <span className="badge badge-success" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize' }}>
+                                {ex.equipment}
+                              </span>
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              {previewExercises.map((ex, index) => {
-                                let willBeSubstituted = false;
-                                let substitutionTitle = '';
-                                let subRule: any = null;
-                                if (activeInjury) {
-                                  const rule = getSubstitutedExercise(ex.title);
-                                  if (rule) {
-                                    willBeSubstituted = true;
-                                    substitutionTitle = rule.substitutedExercise;
-                                    subRule = rule;
-                                  }
-                                }
-
-                                const isStandardsExpanded = !!expandedStandards[ex.title];
-                                const isInstructionsExpanded = !!expandedInstructions[ex.title];
-
+                            {/* Action Quick Access Toggles */}
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              {/* Strength Standards Toggle */}
+                              {(() => {
+                                const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
+                                if (!standards) return null;
                                 return (
-                                  <div 
-                                    key={ex.id + '_' + index}
+                                  <button
+                                    onClick={() => setExpandedStandards(prev => ({ ...prev, [ex.title]: !isStandardsExpanded }))}
                                     style={{
-                                      background: 'rgba(255, 255, 255, 0.01)',
-                                      border: '1px solid hsla(var(--border) / 0.3)',
+                                      background: isStandardsExpanded ? 'hsla(var(--primary) / 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                      border: '1px solid ' + (isStandardsExpanded ? 'hsl(var(--primary))' : 'hsla(var(--border) / 0.8)'),
                                       borderRadius: '6px',
-                                      padding: '8px 10px',
+                                      padding: '4px 8px',
+                                      fontSize: '0.68rem',
+                                      color: isStandardsExpanded ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
                                       display: 'flex',
-                                      flexDirection: 'column',
-                                      gap: '6px'
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                      transition: 'all var(--transition-fast)'
                                     }}
                                   >
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                                        <span 
-                                          style={{ 
-                                            display: 'inline-block', 
-                                            width: '5px', 
-                                            height: '5px', 
-                                            borderRadius: '50%', 
-                                            background: willBeSubstituted ? 'hsl(var(--warning))' : 'hsl(var(--primary))', 
-                                            boxShadow: willBeSubstituted ? '0 0 6px hsl(var(--warning))' : '0 0 6px hsl(var(--primary))',
-                                            marginTop: '6px',
-                                            flexShrink: 0
-                                          }} 
-                                        />
-                                        <span style={{ fontSize: '0.78rem', color: '#ffffff', fontWeight: 600, lineHeight: 1.2 }}>
-                                          {ex.title}
-                                        </span>
-                                      </div>
-                                      {willBeSubstituted && (
-                                        <span style={{ fontSize: '0.65rem', color: 'hsl(var(--warning))', fontWeight: 600, paddingLeft: '11px' }}>
-                                          ⚠️ {substitutionTitle}
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {/* Badges & Actions */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '11px' }}>
-                                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                        <span className="badge badge-primary" style={{ fontSize: '0.55rem', padding: '1px 4px', textTransform: 'capitalize' }}>
-                                          {ex.muscleGroup}
-                                        </span>
-                                        <span className="badge badge-success" style={{ fontSize: '0.55rem', padding: '1px 4px', textTransform: 'capitalize' }}>
-                                          {ex.equipment}
-                                        </span>
-                                      </div>
-
-                                      <div style={{ display: 'flex', gap: '4px' }}>
-                                        {(() => {
-                                          const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
-                                          if (!standards) return null;
-                                          return (
-                                            <button
-                                              onClick={() => setExpandedStandards(prev => ({ ...prev, [ex.title]: !isStandardsExpanded }))}
-                                              style={{
-                                                background: isStandardsExpanded ? 'hsla(var(--primary) / 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                                                border: '1px solid ' + (isStandardsExpanded ? 'hsl(var(--primary))' : 'hsla(var(--border) / 0.8)'),
-                                                borderRadius: '4px',
-                                                padding: '2px 6px',
-                                                fontSize: '0.62rem',
-                                                color: isStandardsExpanded ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '2px',
-                                                cursor: 'pointer',
-                                                fontWeight: 600
-                                              }}
-                                            >
-                                              <Target size={10} />
-                                              <span>Estándares</span>
-                                            </button>
-                                          );
-                                        })()}
-
-                                        {(() => {
-                                          let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
-                                          if (!foundEx) {
-                                            const cleanTitle = ex.title.toLowerCase();
-                                            if (cleanTitle.includes('squat')) {
-                                              foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
-                                            } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
-                                              foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
-                                            } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
-                                              foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
-                                            } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
-                                              foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
-                                            } else if (cleanTitle.includes('row')) {
-                                              foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
-                                            } else if (cleanTitle.includes('curl')) {
-                                              foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
-                                            } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
-                                              foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
-                                            }
-                                          }
-
-                                          if (!foundEx || !foundEx.instructions) return null;
-                                          return (
-                                            <button
-                                              onClick={() => setExpandedInstructions(prev => ({ ...prev, [ex.title]: !isInstructionsExpanded }))}
-                                              style={{
-                                                background: isInstructionsExpanded ? 'hsla(var(--primary) / 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                                                border: '1px solid ' + (isInstructionsExpanded ? 'hsl(var(--primary))' : 'hsla(var(--border) / 0.8)'),
-                                                borderRadius: '4px',
-                                                padding: '2px 6px',
-                                                fontSize: '0.62rem',
-                                                color: isInstructionsExpanded ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '2px',
-                                                cursor: 'pointer',
-                                                fontWeight: 600
-                                              }}
-                                            >
-                                              <BookOpen size={10} />
-                                              <span>Guía</span>
-                                            </button>
-                                          );
-                                        })()}
-                                      </div>
-                                    </div>
-
-                                    {/* Collapsible details (injury substitution reasons) */}
-                                    {willBeSubstituted && subRule && (
-                                      <div style={{ background: 'hsla(var(--warning) / 0.04)', border: '1px solid hsla(var(--warning) / 0.15)', padding: '6px 8px', borderRadius: '4px', fontSize: '0.68rem', color: 'hsl(var(--warning))', marginLeft: '11px' }}>
-                                        <strong>Motivo:</strong> {subRule.reason} <br />
-                                        <strong>Rehab:</strong> {subRule.rehabTips}
-                                      </div>
-                                    )}
-
-                                    {/* Collapsible Strength Standards */}
-                                    {(() => {
-                                      const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
-                                      if (!standards || !isStandardsExpanded) return null;
-                                      return (
-                                        <div className="standards-container" style={{ margin: '4px 0 0 11px', padding: '6px', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid hsla(var(--border) / 0.4)' }}>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                            <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>Estándares</span>
-                                            <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>{standards.label}</span>
-                                          </div>
-                                          <div className="standards-grid" style={{ gap: '4px', gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                                            <div className="standard-card beginner" style={{ padding: '3px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                              <span style={{ fontSize: '0.5rem', color: 'hsl(var(--muted))' }}>Princ.</span>
-                                              <strong style={{ fontSize: '0.68rem', color: '#93c5fd' }}>{standards.beginner}</strong>
-                                            </div>
-                                            <div className="standard-card intermediate" style={{ padding: '3px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                              <span style={{ fontSize: '0.5rem', color: 'hsl(var(--muted))' }}>Inter.</span>
-                                              <strong style={{ fontSize: '0.68rem', color: 'hsl(var(--primary))' }}>{standards.intermediate}</strong>
-                                            </div>
-                                            <div className="standard-card advanced" style={{ padding: '3px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                              <span style={{ fontSize: '0.5rem', color: 'hsl(var(--muted))' }}>Avan.</span>
-                                              <strong style={{ fontSize: '0.68rem', color: 'hsl(var(--secondary))' }}>{standards.advanced}</strong>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-
-                                    {/* Collapsible Technical Guide */}
-                                    {(() => {
-                                      let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
-                                      if (!foundEx) {
-                                        const cleanTitle = ex.title.toLowerCase();
-                                        if (cleanTitle.includes('squat')) {
-                                          foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
-                                        } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
-                                          foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
-                                        } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
-                                          foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
-                                        } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
-                                          foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
-                                        } else if (cleanTitle.includes('row')) {
-                                          foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
-                                        } else if (cleanTitle.includes('curl')) {
-                                          foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
-                                        } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
-                                          foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
-                                        }
-                                      }
-
-                                      if (!foundEx || !foundEx.instructions || !isInstructionsExpanded) return null;
-                                      return (
-                                        <div className="standards-container" style={{ margin: '4px 0 0 11px', padding: '6px', background: 'rgba(255, 255, 255, 0.01)', borderLeft: '2px solid hsl(var(--primary))', borderTop: '1px solid hsla(var(--border) / 0.4)', borderRight: '1px solid hsla(var(--border) / 0.4)', borderBottom: '1px solid hsla(var(--border) / 0.4)' }}>
-                                          {foundEx.image && (
-                                            <div style={{ width: '100%', maxHeight: '100px', overflow: 'hidden', borderRadius: '4px', border: '1px solid hsl(var(--border))', background: 'rgba(0,0,0,0.2)', marginBottom: '6px' }}>
-                                              <img 
-                                                src={foundEx.image} 
-                                                alt={foundEx.title}
-                                                loading="lazy"
-                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                                onError={(e) => {
-                                                  (e.target as HTMLImageElement).style.display = 'none';
-                                                }}
-                                              />
-                                            </div>
-                                          )}
-                                          <div style={{ maxHeight: '100px', overflowY: 'auto', paddingRight: '2px' }}>
-                                            <ol style={{ margin: 0, paddingLeft: '12px', fontSize: '0.68rem', color: 'rgba(255,255,255,0.8)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                              {foundEx.instructions.map((step, sIdx) => (
-                                                <li key={sIdx}>{step}</li>
-                                              ))}
-                                            </ol>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-                                  </div>
+                                    <Target size={12} />
+                                    <span>Estándares</span>
+                                  </button>
                                 );
-                              })}
-                            </div>
+                              })()}
 
-                            {/* Start Workout Button */}
-                            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '6px', borderTop: '1px solid hsla(var(--border) / 0.3)', paddingTop: '10px' }}>
-                              <button 
-                                className="btn btn-primary" 
-                                onClick={() => {
-                                  const todayStr = new Date().toISOString().split('T')[0];
-                                  const lastRecoveryDate = localStorage.getItem('plnexc_last_recovery_date');
-                                  if (lastRecoveryDate === todayStr) {
-                                    const lastScoreStr = localStorage.getItem('plnexc_last_recovery_score');
-                                    const lastScore = lastScoreStr ? parseInt(lastScoreStr, 10) : 8;
-                                    handleStartWorkout(lastScore);
-                                  } else {
-                                    setWizardStep(1);
-                                    setShowRecoveryWizard(true);
+                              {/* Tech Guide Toggle */}
+                              {(() => {
+                                let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                                if (!foundEx) {
+                                  const cleanTitle = ex.title.toLowerCase();
+                                  if (cleanTitle.includes('squat')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                                  } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                                  } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                                  } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                                  } else if (cleanTitle.includes('row')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                                  } else if (cleanTitle.includes('curl')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                                  } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
                                   }
-                                }}
-                                style={{ 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center', 
-                                  gap: '6px', 
-                                  fontSize: '0.8rem', 
-                                  padding: '10px 16px', 
-                                  fontWeight: 'bold',
-                                  width: '100%',
-                                  borderRadius: 'var(--border-radius-sm)',
-                                  boxShadow: '0 0 10px hsla(var(--primary) / 0.2)'
-                                }}
-                              >
-                                <Play size={14} /> Iniciar Entrenamiento
-                              </button>
+                                }
+
+                                if (!foundEx || !foundEx.instructions) return null;
+                                return (
+                                  <button
+                                    onClick={() => setExpandedInstructions(prev => ({ ...prev, [ex.title]: !isInstructionsExpanded }))}
+                                    style={{
+                                      background: isInstructionsExpanded ? 'hsla(var(--primary) / 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                      border: '1px solid ' + (isInstructionsExpanded ? 'hsl(var(--primary))' : 'hsla(var(--border) / 0.8)'),
+                                      borderRadius: '6px',
+                                      padding: '4px 8px',
+                                      fontSize: '0.68rem',
+                                      color: isInstructionsExpanded ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                      transition: 'all var(--transition-fast)'
+                                    }}
+                                  >
+                                    <BookOpen size={12} />
+                                    <span>Guía</span>
+                                  </button>
+                                );
+                              })()}
                             </div>
                           </div>
+                        </div>
+
+                        {/* Collapsible details (injury substitution reasons) */}
+                        {willBeSubstituted && subRule && (
+                          <div style={{ background: 'hsla(var(--warning) / 0.04)', border: '1px solid hsla(var(--warning) / 0.15)', padding: '10px 12px', borderRadius: '6px', fontSize: '0.75rem', color: 'hsl(var(--warning))' }}>
+                            <strong>Motivo del Cambio:</strong> {subRule.reason} <br />
+                            <strong>Rehab Tips:</strong> {subRule.rehabTips}
+                          </div>
                         )}
+
+                        {/* Collapsible Strength Standards */}
+                        {(() => {
+                          const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
+                          if (!standards || !isStandardsExpanded) return null;
+                          return (
+                            <div className="standards-container" style={{ margin: 0, padding: '10px', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid hsla(var(--border) / 0.4)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+                                  Estándares de Fuerza para tu peso
+                                </span>
+                                <span style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))' }}>{standards.label}</span>
+                              </div>
+                              <div className="standards-grid" style={{ gap: '8px' }}>
+                                <div className="standard-card beginner" style={{ padding: '6px' }}>
+                                  <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>Principiante</span>
+                                  <strong style={{ fontSize: '0.75rem', color: '#93c5fd' }}>{standards.beginner}</strong>
+                                </div>
+                                <div className="standard-card intermediate" style={{ padding: '6px' }}>
+                                  <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>Intermedio</span>
+                                  <strong style={{ fontSize: '0.75rem', color: 'hsl(var(--primary))' }}>{standards.intermediate}</strong>
+                                </div>
+                                <div className="standard-card advanced" style={{ padding: '6px' }}>
+                                  <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>Avanzado</span>
+                                  <strong style={{ fontSize: '0.75rem', color: 'hsl(var(--secondary))' }}>{standards.advanced}</strong>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Collapsible Technical Guide */}
+                        {(() => {
+                          let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                          if (!foundEx) {
+                            const cleanTitle = ex.title.toLowerCase();
+                            if (cleanTitle.includes('squat')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                            } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                            } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                            } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                            } else if (cleanTitle.includes('row')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                            } else if (cleanTitle.includes('curl')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                            } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                            }
+                          }
+
+                          if (!foundEx || !foundEx.instructions || !isInstructionsExpanded) return null;
+                          return (
+                            <div className="standards-container" style={{ margin: 0, padding: '10px', background: 'rgba(255, 255, 255, 0.01)', borderLeft: '3px solid hsl(var(--primary))', borderTop: '1px solid hsla(var(--border) / 0.4)', borderRight: '1px solid hsla(var(--border) / 0.4)', borderBottom: '1px solid hsla(var(--border) / 0.4)' }}>
+                              {foundEx.image && (
+                                <div style={{ width: '100%', maxHeight: '140px', overflow: 'hidden', borderRadius: '6px', border: '1px solid hsl(var(--border))', background: 'rgba(0,0,0,0.2)', marginBottom: '10px' }}>
+                                  <img 
+                                    src={foundEx.image} 
+                                    alt={foundEx.title}
+                                    loading="lazy"
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                              )}
+                              <div style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '4px' }}>
+                                <ol style={{ margin: 0, paddingLeft: '16px', fontSize: '0.72rem', color: 'rgba(255,255,255,0.8)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {foundEx.instructions.map((step, sIdx) => (
+                                    <li key={sIdx}>{step}</li>
+                                  ))}
+                                </ol>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
                 </div>
+
+                {/* Footer of the details card with action button */}
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '8px', borderTop: '1px solid hsla(var(--border) / 0.5)', paddingTop: '16px' }}>
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      const lastRecoveryDate = localStorage.getItem('plnexc_last_recovery_date');
+                      if (lastRecoveryDate === todayStr) {
+                        const lastScoreStr = localStorage.getItem('plnexc_last_recovery_score');
+                        const lastScore = lastScoreStr ? parseInt(lastScoreStr, 10) : 8;
+                        handleStartWorkout(lastScore);
+                      } else {
+                        setWizardStep(1);
+                        setShowRecoveryWizard(true);
+                      }
+                    }}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '8px', 
+                      fontSize: '0.9rem', 
+                      padding: '12px 32px', 
+                      fontWeight: 'bold',
+                      width: '100%',
+                      maxWidth: '300px',
+                      borderRadius: 'var(--border-radius-md)',
+                      boxShadow: '0 0 15px hsla(var(--primary) / 0.3)'
+                    }}
+                  >
+                    <Play size={16} /> Iniciar Entrenamiento
+                  </button>
+                </div>
               </div>
             </div>
+          )}
+
+
           </div>
 
           {/* Historial de Entrenamientos Recientes */}
