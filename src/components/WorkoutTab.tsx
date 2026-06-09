@@ -15,9 +15,7 @@ import {
   Edit2,
   Target,
   BookOpen,
-  Award,
-  ChevronLeft,
-  ChevronRight
+  Award
 } from 'lucide-react';
 import { proposeNextSet, calculatePBProfiles } from '../utils/ProgressionEngine';
 import type { SetData, ProgressionTarget } from '../utils/ProgressionEngine';
@@ -65,7 +63,7 @@ export default function WorkoutTab({
   // Calculate PBs from history
   const pbProfiles = useMemo(() => calculatePBProfiles(localHistory), [localHistory]);
 
-  const [routineOrder, setRoutineOrder] = useState<string[]>(() => {
+  const [routineOrder] = useState<string[]>(() => {
     const saved = localStorage.getItem('plnexc_routine_order');
     return saved ? JSON.parse(saved) : [];
   });
@@ -112,36 +110,44 @@ export default function WorkoutTab({
       })
       .filter(r => !deletedRoutines.includes(r.title));
 
-    if (routineOrder.length > 0) {
-      list.sort((a, b) => {
+    // Build a map of routine title -> last used timestamp
+    const lastUsedMap = new Map<string, number>();
+    localHistory.forEach(session => {
+      if (!session.title || !session.parsedDate) return;
+      const time = new Date(session.parsedDate).getTime();
+      const existing = lastUsedMap.get(session.title) || 0;
+      if (time > existing) {
+        lastUsedMap.set(session.title, time);
+      }
+    });
+
+    list.sort((a, b) => {
+      const timeA = lastUsedMap.get(a.title) || 0;
+      const timeB = lastUsedMap.get(b.title) || 0;
+      
+      if (timeA !== timeB) {
+        return timeB - timeA; // Descending (most recent first)
+      }
+      
+      // Secondary: Manual order in routineOrder (if any)
+      if (routineOrder.length > 0) {
         const idxA = routineOrder.indexOf(a.title);
         const idxB = routineOrder.indexOf(b.title);
-        if (idxA === -1 && idxB === -1) return 0;
-        if (idxA === -1) return 1;
-        if (idxB === -1) return -1;
-        return idxA - idxB;
-      });
-    }
+        if (idxA !== -1 || idxB !== -1) {
+          if (idxA === -1) return 1;
+          if (idxB === -1) return -1;
+          return idxA - idxB;
+        }
+      }
+      
+      // Tertiary: Alphabetical
+      return a.title.localeCompare(b.title);
+    });
+
     return list;
   }, [localHistory, customRoutines, deletedRoutines, routineOrder]);
 
 
-  const handleMoveRoutine = (title: string, direction: 'left' | 'right') => {
-    const currentTitles = routines.map(r => r.title);
-    const index = currentTitles.indexOf(title);
-    if (index === -1) return;
-    
-    const newIndex = direction === 'left' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= currentTitles.length) return;
-    
-    const updatedTitles = [...currentTitles];
-    const temp = updatedTitles[index];
-    updatedTitles[index] = updatedTitles[newIndex];
-    updatedTitles[newIndex] = temp;
-    
-    setRoutineOrder(updatedTitles);
-    localStorage.setItem('plnexc_routine_order', JSON.stringify(updatedTitles));
-  };
 
   const [selectedRoutine, setSelectedRoutine] = useState<string>('');
   const [activeSession, setActiveSession] = useState<any | null>(null);
@@ -1162,24 +1168,7 @@ export default function WorkoutTab({
                   Elige tu rutina o diseña una personalizada. El coach recalculará tu sobrecarga óptima.
                 </p>
               </div>
-              <button 
-                className="btn btn-primary" 
-                onClick={() => {
-                  const todayStr = new Date().toISOString().split('T')[0];
-                  const lastRecoveryDate = localStorage.getItem('plnexc_last_recovery_date');
-                  if (lastRecoveryDate === todayStr) {
-                    const lastScoreStr = localStorage.getItem('plnexc_last_recovery_score');
-                    const lastScore = lastScoreStr ? parseInt(lastScoreStr, 10) : 8;
-                    handleStartWorkout(lastScore);
-                  } else {
-                    setWizardStep(1);
-                    setShowRecoveryWizard(true);
-                  }
-                }}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', padding: '10px 18px', fontWeight: 'bold' }}
-              >
-                <Play size={16} /> Iniciar Entrenamiento
-              </button>
+
             </div>
 
             <div>
@@ -1223,7 +1212,7 @@ export default function WorkoutTab({
                     <span style={{ fontSize: '0.85rem', color: 'hsl(var(--primary))', fontWeight: 700 }}>Crear Rutina</span>
                   </div>
 
-                  {routines.map((r, idx) => (
+                  {routines.map((r) => (
                     <div 
                       key={r.title}
                       onClick={() => setSelectedRoutine(r.title)}
@@ -1278,144 +1267,335 @@ export default function WorkoutTab({
                           <Dumbbell size={14} />
                           <span>{r.exercises.length} {r.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}</span>
                         </div>
-                        
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <button 
-                            className="btn-card-action"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMoveRoutine(r.title, 'left');
-                            }}
-                            disabled={idx === 0}
-                            style={{ opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'not-allowed' : 'pointer', width: '24px', height: '24px' }}
-                            title="Mover Izquierda"
-                          >
-                            <ChevronLeft size={12} />
-                          </button>
-                          <button 
-                            className="btn-card-action"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMoveRoutine(r.title, 'right');
-                            }}
-                            disabled={idx === routines.length - 1}
-                            style={{ opacity: idx === routines.length - 1 ? 0.3 : 1, cursor: idx === routines.length - 1 ? 'not-allowed' : 'pointer', width: '24px', height: '24px' }}
-                            title="Mover Derecha"
-                          >
-                            <ChevronRight size={12} />
-                          </button>
-                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
             </div>            {/* Exercise Preview Container */}
-            {previewExercises.length > 0 && (
-              <div style={{ 
-                marginTop: '8px', 
-                borderTop: '1px solid hsl(var(--border))', 
-                paddingTop: '20px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px'
-              }}>
-                <span style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', fontWeight: 600, display: 'block' }}>
-                  Ejercicios en esta rutina ({previewExercises.length}):
-                </span>
-                
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
-                  gap: '12px' 
-                }}>
+            {previewExercises.length > 0 && selectedRoutineObj && (
+              <div 
+                className="glass-panel" 
+                style={{ 
+                  marginTop: '16px', 
+                  padding: '20px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '16px',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: 'var(--border-radius-md)',
+                  boxShadow: 'var(--shadow-md)',
+                  background: 'rgba(255, 255, 255, 0.015)'
+                }}
+              >
+                {/* Header of the unified details card */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsla(var(--border) / 0.5)', paddingBottom: '12px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Dumbbell size={18} color="hsl(var(--primary))" />
+                      {selectedRoutineObj.title}
+                    </h3>
+                    <p style={{ color: 'hsl(var(--muted))', fontSize: '0.75rem', margin: '2px 0 0 0' }}>
+                      Vista previa de ejercicios • {previewExercises.length} {previewExercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                    </p>
+                  </div>
+                  {/* Minimalist close button */}
+                  <button 
+                    onClick={() => setSelectedRoutine('')}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'hsl(var(--muted))',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '4px',
+                      borderRadius: '50%',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = 'hsl(var(--muted))'; e.currentTarget.style.background = 'transparent'; }}
+                    title="Cerrar vista previa"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Vertical list of exercises */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {previewExercises.map((ex, index) => {
                     let willBeSubstituted = false;
                     let substitutionTitle = '';
+                    let subRule: any = null;
                     if (activeInjury) {
-                      const subRule = getSubstitutedExercise(ex.title);
-                      if (subRule) {
+                      const rule = getSubstitutedExercise(ex.title);
+                      if (rule) {
                         willBeSubstituted = true;
-                        substitutionTitle = subRule.substitutedExercise;
+                        substitutionTitle = rule.substitutedExercise;
+                        subRule = rule;
                       }
                     }
 
+                    const isStandardsExpanded = !!expandedStandards[ex.title];
+                    const isInstructionsExpanded = !!expandedInstructions[ex.title];
+
                     return (
                       <div 
-                        key={ex.id + '_' + index} 
-                        className="glass-panel" 
-                        style={{ 
-                          padding: '12px 14px', 
-                          background: 'rgba(255,255,255,0.01)', 
-                          borderColor: willBeSubstituted ? 'hsla(var(--warning) / 0.4)' : 'hsl(var(--border))',
-                          display: 'flex', 
-                          flexDirection: 'column', 
-                          gap: '6px',
-                          borderRadius: 'var(--border-radius-sm)',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          boxShadow: 'var(--shadow-sm)'
+                        key={ex.id + '_' + index}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.01)',
+                          border: '1px solid hsla(var(--border) / 0.5)',
+                          borderRadius: '8px',
+                          padding: '12px 14px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px',
+                          transition: 'all var(--transition-smooth)'
                         }}
                       >
-                        {/* Left glowing strip */}
-                        <div style={{
-                          position: 'absolute',
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                          width: '3px',
-                          background: willBeSubstituted ? 'hsl(var(--warning))' : 'hsl(var(--primary))'
-                        }} />
-                        
-                        <div style={{ paddingLeft: '6px' }}>
-                          <strong style={{ 
-                            fontSize: '0.85rem', 
-                            color: '#ffffff', 
-                            overflow: 'hidden', 
-                            textOverflow: 'ellipsis', 
-                            whiteSpace: 'nowrap', 
-                            display: 'block', 
-                            maxWidth: '100%' 
-                          }} title={ex.title}>
-                            {ex.title}
-                          </strong>
-                          
-                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                            <span className="badge badge-primary" style={{ fontSize: '0.6rem', padding: '1px 4px', textTransform: 'capitalize' }}>
-                              {ex.muscleGroup}
-                            </span>
-                            <span className="badge badge-success" style={{ fontSize: '0.6rem', padding: '1px 4px', textTransform: 'capitalize' }}>
-                              {ex.equipment}
-                            </span>
-                          </div>
-                          
-                          {(() => {
-                            const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
-                            if (!standards) return null;
-                            return (
-                              <div style={{ fontSize: '0.68rem', color: 'hsl(var(--primary))', marginTop: '6px', fontWeight: 600 }}>
-                                🎯 Intermedio: <strong>{standards.intermediate}</strong>
-                              </div>
-                            );
-                          })()}
-                          
-                          {willBeSubstituted && (
-                            <div style={{ 
-                              fontSize: '0.65rem', 
-                              color: 'hsl(var(--warning))', 
-                              marginTop: '6px', 
-                              fontWeight: 'bold', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '4px' 
-                            }}>
-                              ⚠️ Variante: {substitutionTitle}
+                        {/* Main row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '200px' }}>
+                            {/* Neon cyan dot */}
+                            <span 
+                              style={{ 
+                                display: 'inline-block', 
+                                width: '6px', 
+                                height: '6px', 
+                                borderRadius: '50%', 
+                                background: willBeSubstituted ? 'hsl(var(--warning))' : 'hsl(var(--primary))', 
+                                boxShadow: willBeSubstituted ? '0 0 8px hsl(var(--warning))' : '0 0 8px hsl(var(--primary))',
+                                flexShrink: 0
+                              }} 
+                            />
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>
+                                {ex.title}
+                              </strong>
+                              {willBeSubstituted && (
+                                <span style={{ fontSize: '0.7rem', color: 'hsl(var(--warning))', fontWeight: 600, marginTop: '2px' }}>
+                                  ⚠️ Sustituido por: {substitutionTitle}
+                                </span>
+                              )}
                             </div>
-                          )}
+                          </div>
+
+                          {/* Badges & Actions */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <span className="badge badge-primary" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize' }}>
+                                {ex.muscleGroup}
+                              </span>
+                              <span className="badge badge-success" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize' }}>
+                                {ex.equipment}
+                              </span>
+                            </div>
+
+                            {/* Action Quick Access Toggles */}
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              {/* Strength Standards Toggle */}
+                              {(() => {
+                                const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
+                                if (!standards) return null;
+                                return (
+                                  <button
+                                    onClick={() => setExpandedStandards(prev => ({ ...prev, [ex.title]: !isStandardsExpanded }))}
+                                    style={{
+                                      background: isStandardsExpanded ? 'hsla(var(--primary) / 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                      border: '1px solid ' + (isStandardsExpanded ? 'hsl(var(--primary))' : 'hsla(var(--border) / 0.8)'),
+                                      borderRadius: '6px',
+                                      padding: '4px 8px',
+                                      fontSize: '0.68rem',
+                                      color: isStandardsExpanded ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                      transition: 'all var(--transition-fast)'
+                                    }}
+                                  >
+                                    <Target size={12} />
+                                    <span>Estándares</span>
+                                  </button>
+                                );
+                              })()}
+
+                              {/* Tech Guide Toggle */}
+                              {(() => {
+                                let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                                if (!foundEx) {
+                                  const cleanTitle = ex.title.toLowerCase();
+                                  if (cleanTitle.includes('squat')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                                  } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                                  } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                                  } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                                  } else if (cleanTitle.includes('row')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                                  } else if (cleanTitle.includes('curl')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                                  } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
+                                    foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                                  }
+                                }
+
+                                if (!foundEx || !foundEx.instructions) return null;
+                                return (
+                                  <button
+                                    onClick={() => setExpandedInstructions(prev => ({ ...prev, [ex.title]: !isInstructionsExpanded }))}
+                                    style={{
+                                      background: isInstructionsExpanded ? 'hsla(var(--primary) / 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                      border: '1px solid ' + (isInstructionsExpanded ? 'hsl(var(--primary))' : 'hsla(var(--border) / 0.8)'),
+                                      borderRadius: '6px',
+                                      padding: '4px 8px',
+                                      fontSize: '0.68rem',
+                                      color: isInstructionsExpanded ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                      transition: 'all var(--transition-fast)'
+                                    }}
+                                  >
+                                    <BookOpen size={12} />
+                                    <span>Guía</span>
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </div>
                         </div>
+
+                        {/* Collapsible details (injury substitution reasons) */}
+                        {willBeSubstituted && subRule && (
+                          <div style={{ background: 'hsla(var(--warning) / 0.04)', border: '1px solid hsla(var(--warning) / 0.15)', padding: '10px 12px', borderRadius: '6px', fontSize: '0.75rem', color: 'hsl(var(--warning))' }}>
+                            <strong>Motivo del Cambio:</strong> {subRule.reason} <br />
+                            <strong>Rehab Tips:</strong> {subRule.rehabTips}
+                          </div>
+                        )}
+
+                        {/* Collapsible Strength Standards */}
+                        {(() => {
+                          const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
+                          if (!standards || !isStandardsExpanded) return null;
+                          return (
+                            <div className="standards-container" style={{ margin: 0, padding: '10px', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid hsla(var(--border) / 0.4)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+                                  Estándares de Fuerza para tu peso
+                                </span>
+                                <span style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))' }}>{standards.label}</span>
+                              </div>
+                              <div className="standards-grid" style={{ gap: '8px' }}>
+                                <div className="standard-card beginner" style={{ padding: '6px' }}>
+                                  <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>Principiante</span>
+                                  <strong style={{ fontSize: '0.75rem', color: '#93c5fd' }}>{standards.beginner}</strong>
+                                </div>
+                                <div className="standard-card intermediate" style={{ padding: '6px' }}>
+                                  <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>Intermedio</span>
+                                  <strong style={{ fontSize: '0.75rem', color: 'hsl(var(--primary))' }}>{standards.intermediate}</strong>
+                                </div>
+                                <div className="standard-card advanced" style={{ padding: '6px' }}>
+                                  <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>Avanzado</span>
+                                  <strong style={{ fontSize: '0.75rem', color: 'hsl(var(--secondary))' }}>{standards.advanced}</strong>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Collapsible Technical Guide */}
+                        {(() => {
+                          let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                          if (!foundEx) {
+                            const cleanTitle = ex.title.toLowerCase();
+                            if (cleanTitle.includes('squat')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                            } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                            } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                            } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                            } else if (cleanTitle.includes('row')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                            } else if (cleanTitle.includes('curl')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                            } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
+                              foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                            }
+                          }
+
+                          if (!foundEx || !foundEx.instructions || !isInstructionsExpanded) return null;
+                          return (
+                            <div className="standards-container" style={{ margin: 0, padding: '10px', background: 'rgba(255, 255, 255, 0.01)', borderLeft: '3px solid hsl(var(--primary))', borderTop: '1px solid hsla(var(--border) / 0.4)', borderRight: '1px solid hsla(var(--border) / 0.4)', borderBottom: '1px solid hsla(var(--border) / 0.4)' }}>
+                              {foundEx.image && (
+                                <div style={{ width: '100%', maxHeight: '140px', overflow: 'hidden', borderRadius: '6px', border: '1px solid hsl(var(--border))', background: 'rgba(0,0,0,0.2)', marginBottom: '10px' }}>
+                                  <img 
+                                    src={foundEx.image} 
+                                    alt={foundEx.title}
+                                    loading="lazy"
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                  />
+                                </div>
+                              )}
+                              <div style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '4px' }}>
+                                <ol style={{ margin: 0, paddingLeft: '16px', fontSize: '0.72rem', color: 'rgba(255,255,255,0.8)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {foundEx.instructions.map((step, sIdx) => (
+                                    <li key={sIdx}>{step}</li>
+                                  ))}
+                                </ol>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Footer of the details card with action button */}
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '8px', borderTop: '1px solid hsla(var(--border) / 0.5)', paddingTop: '16px' }}>
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => {
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      const lastRecoveryDate = localStorage.getItem('plnexc_last_recovery_date');
+                      if (lastRecoveryDate === todayStr) {
+                        const lastScoreStr = localStorage.getItem('plnexc_last_recovery_score');
+                        const lastScore = lastScoreStr ? parseInt(lastScoreStr, 10) : 8;
+                        handleStartWorkout(lastScore);
+                      } else {
+                        setWizardStep(1);
+                        setShowRecoveryWizard(true);
+                      }
+                    }}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '8px', 
+                      fontSize: '0.9rem', 
+                      padding: '12px 32px', 
+                      fontWeight: 'bold',
+                      width: '100%',
+                      maxWidth: '300px',
+                      borderRadius: 'var(--border-radius-md)',
+                      boxShadow: '0 0 15px hsla(var(--primary) / 0.3)'
+                    }}
+                  >
+                    <Play size={16} /> Iniciar Entrenamiento
+                  </button>
                 </div>
               </div>
             )}
