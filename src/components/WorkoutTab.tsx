@@ -1165,6 +1165,7 @@ export default function WorkoutTab({
                 <h2 style={{ fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Flame size={24} color="hsl(var(--primary))" />
                   Nueva Sesión de Fuerza
+                  <span style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))', fontWeight: 'normal', opacity: 0.5, marginLeft: '6px' }}>v1.4.0</span>
                 </h2>
                 <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', marginTop: '2px' }}>
                   Elige tu rutina o diseña una personalizada. El coach recalculará tu sobrecarga óptima.
