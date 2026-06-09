@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
+import { auth } from '../utils/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -84,6 +86,34 @@ export default function DashboardTab({
   progressPhotos = []
 }: DashboardTabProps) {
   const sessions = localHistory as WorkoutSession[];
+
+  const [userName, setUserName] = useState<string>('Atleta');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser && currentUser.displayName) {
+        const first = currentUser.displayName.split(' ')[0];
+        setUserName(first);
+      } else {
+        setUserName('Atleta');
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour < 12) return 'Buenos días';
+    if (hour >= 12 && hour < 20) return 'Buenas tardes';
+    return 'Buenas noches';
+  }, []);
+
+  const subtitle = useMemo(() => {
+    if (sessions.length === 0) {
+      return '¡Bienvenido a PLNEXC! Comienza registrando tu primer entrenamiento.';
+    }
+    return `Has completado ${sessions.length} entrenamientos. ¡A seguir superando marcas!`;
+  }, [sessions]);
 
   // 1. Get List of Exercises with enough history for charts
   const exercisesWithHistory = useMemo(() => {
@@ -1738,8 +1768,8 @@ export default function DashboardTab({
                 </div>
               )}
               <div>
-                <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#ffffff', margin: 0 }}>Tu Progreso de Fuerza y Cardio</h1>
-                <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', margin: '2px 0 0 0' }}>Organiza y analiza tu rendimiento a lo largo del tiempo</p>
+                <h1 style={{ fontSize: '1.6rem', fontWeight: 900, color: '#ffffff', margin: 0 }}>¡{greeting}, {userName}!</h1>
+                <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', margin: '4px 0 0 0' }}>{subtitle}</p>
               </div>
             </div>
             
