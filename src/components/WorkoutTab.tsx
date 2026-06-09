@@ -12,7 +12,6 @@ import {
   Minus,
   SkipForward,
   Trash2,
-  BookmarkPlus,
   Edit2,
   Target,
   BookOpen,
@@ -1263,17 +1262,40 @@ export default function WorkoutTab({
                       </div>
                     </div>
                   ))}
-                </div>
 
-                {/* Botón de crear rutina debajo de la lista */}
-                <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '12px' }}>
-                  <button 
-                    className="btn btn-secondary" 
+                  {/* Tarjeta vacía para crear rutina */}
+                  <div 
                     onClick={() => setIsBuildingRoutine(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', borderColor: 'hsl(var(--primary))', color: 'hsl(var(--primary))' }}
+                    className="routine-card"
+                    style={{
+                      borderStyle: 'dashed',
+                      borderWidth: '2px',
+                      borderColor: 'hsla(var(--primary) / 0.3)',
+                      background: 'rgba(255, 255, 255, 0.01)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: '140px',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-smooth)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'hsl(var(--primary))';
+                      e.currentTarget.style.background = 'rgba(0, 242, 254, 0.02)';
+                      e.currentTarget.style.boxShadow = '0 0 15px hsla(var(--primary) / 0.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'hsla(var(--primary) / 0.3)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.01)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
                   >
-                    <BookmarkPlus size={16} /> Crear Rutina
-                  </button>
+                    <Plus size={28} color="hsl(var(--primary))" style={{ opacity: 0.8 }} />
+                    <span style={{ fontSize: '0.85rem', color: 'hsl(var(--primary))', fontWeight: 700 }}>Crear Rutina</span>
+                  </div>
+
                 </div>
               </div>
             </div>            {/* Exercise Preview Container */}
