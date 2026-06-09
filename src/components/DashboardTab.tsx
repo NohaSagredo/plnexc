@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import { auth } from '../utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -16,7 +16,7 @@ import {
   LineChart,
   Line
 } from 'recharts';
-import { calculatePBProfiles } from '../utils/ProgressionEngine';
+import { calculatePBProfiles, compressAndResizeImage } from '../utils/ProgressionEngine';
 import { 
   TrendingUp, 
   Calendar, 
@@ -27,7 +27,10 @@ import {
   HeartPulse,
   X,
   Camera,
-  User
+  User,
+  Plus,
+  Trash2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 interface SetRecord {
@@ -75,6 +78,9 @@ interface DashboardTabProps {
   cardioHistory?: CardioSession[];
   profilePicture?: string;
   progressPhotos?: any[];
+  onAddProgressPhoto?: (photo: { id: string; date: string; weight?: number; photoUrl: string; note?: string }) => void;
+  onDeleteProgressPhoto?: (id: string) => void;
+  bodyWeight?: number;
 }
 
 export default function DashboardTab({ 
@@ -83,11 +89,66 @@ export default function DashboardTab({
   weightHistory,
   cardioHistory = [],
   profilePicture = '',
-  progressPhotos = []
+  progressPhotos = [],
+  onAddProgressPhoto,
+  onDeleteProgressPhoto,
+  bodyWeight = 75
 }: DashboardTabProps) {
   const sessions = localHistory as WorkoutSession[];
 
   const [userName, setUserName] = useState<string>('Atleta');
+
+  // Photo gallery and upload states/refs
+  const fileInputGalleryRef = useRef<HTMLInputElement>(null);
+  const [photoPreview, setPhotoPreview] = useState<string>('');
+  const [photoNote, setPhotoNote] = useState<string>('');
+  const [photoDate, setPhotoDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [photoWeight, setPhotoWeight] = useState<string>(bodyWeight.toString());
+  const [showAddPhoto, setShowAddPhoto] = useState<boolean>(false);
+  const [activeLightboxPhoto, setActiveLightboxPhoto] = useState<any | null>(null);
+
+  // Sync photo weight when bodyWeight updates
+  useEffect(() => {
+    setPhotoWeight(bodyWeight.toString());
+  }, [bodyWeight]);
+
+  // Handle gallery file selection and compression
+  const handleGalleryFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const compressed = await compressAndResizeImage(file, 600, 600);
+        setPhotoPreview(compressed);
+      } catch (err) {
+        console.error('Error compressing gallery image:', err);
+        alert('Error al procesar la imagen.');
+      }
+    }
+  };
+
+  const handleAddPhotoSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!photoPreview) {
+      alert('Por favor selecciona una foto.');
+      return;
+    }
+    const newPhoto = {
+      id: Date.now().toString(),
+      date: photoDate,
+      weight: photoWeight ? parseFloat(photoWeight) : undefined,
+      photoUrl: photoPreview,
+      note: photoNote.trim() || undefined
+    };
+    if (onAddProgressPhoto) {
+      onAddProgressPhoto(newPhoto);
+    }
+    
+    // Reset form
+    setPhotoPreview('');
+    setPhotoNote('');
+    setPhotoDate(new Date().toISOString().split('T')[0]);
+    setShowAddPhoto(false);
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -1083,15 +1144,156 @@ export default function DashboardTab({
 
     return (
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div>
-          <h2 style={{ fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Camera size={22} color="hsl(var(--primary))" />
-            Última Foto de Progreso
-          </h2>
-          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
-            Tu evolución física visual en base al historial de fotos de tu perfil
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <h2 style={{ fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <Camera size={22} color="hsl(var(--primary))" />
+              Última Foto de Progreso
+            </h2>
+            <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px', marginBottom: 0 }}>
+              Tu evolución física visual en base al historial de fotos de tu perfil
+            </p>
+          </div>
+          <button 
+            onClick={() => setShowAddPhoto(!showAddPhoto)}
+            className="btn btn-primary"
+            style={{ padding: '8px 16px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Plus size={16} /> Añadir Foto
+          </button>
         </div>
+
+        {/* Formulario para añadir foto */}
+        {showAddPhoto && (
+          <form 
+            onSubmit={handleAddPhotoSubmit}
+            className="glass-panel fade-in" 
+            style={{ 
+              padding: '20px', 
+              background: 'rgba(255,255,255,0.01)', 
+              borderColor: 'hsla(var(--primary) / 0.2)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderRadius: '8px'
+            }}
+          >
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'hsl(var(--primary))', margin: 0 }}>Añadir Nuevo Registro Visual</h3>
+            
+            <div className="grid-cols-2" style={{ gap: '16px' }}>
+              
+              {/* Carga de Imagen */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed hsl(var(--border))', borderRadius: '10px', padding: '20px', minHeight: '180px', background: 'rgba(255,255,255,0.01)', position: 'relative' }}>
+                {photoPreview ? (
+                  <div style={{ position: 'relative', width: '100%', height: '100%', maxHeight: '180px', display: 'flex', justifyContent: 'center' }}>
+                    <img 
+                      src={photoPreview} 
+                      alt="Vista previa" 
+                      style={{ maxHeight: '180px', objectFit: 'contain', borderRadius: '6px' }} 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setPhotoPreview(''); }}
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        background: 'rgba(7,8,12,0.8)',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '50%',
+                        width: '24px',
+                        height: '24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <div 
+                    onClick={() => fileInputGalleryRef.current?.click()}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer', textAlign: 'center' }}
+                  >
+                    <ImageIcon size={32} color="hsl(var(--muted))" />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Hacer clic para subir foto</span>
+                    <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>Imágenes JPG, PNG. Compresión local automática</span>
+                  </div>
+                )}
+                <input 
+                  type="file" 
+                  ref={fileInputGalleryRef} 
+                  style={{ display: 'none' }} 
+                  accept="image/*" 
+                  onChange={handleGalleryFileSelect} 
+                />
+              </div>
+
+              {/* Formulario Metadatos */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '4px' }}>Fecha</label>
+                    <input 
+                      type="date" 
+                      value={photoDate}
+                      onChange={(e) => setPhotoDate(e.target.value)}
+                      required
+                      style={{ width: '100%', padding: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid hsl(var(--border))', borderRadius: '6px', color: '#fff', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '4px' }}>Peso Corporal (kg)</label>
+                    <input 
+                      type="number" 
+                      step="0.1"
+                      value={photoWeight}
+                      onChange={(e) => setPhotoWeight(e.target.value)}
+                      placeholder="Ej: 75.5"
+                      style={{ width: '100%', padding: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid hsl(var(--border))', borderRadius: '6px', color: '#fff', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '4px' }}>Nota de progreso</label>
+                  <textarea 
+                    value={photoNote}
+                    onChange={(e) => setPhotoNote(e.target.value)}
+                    placeholder="Ej: Fin del ciclo de volumen. Nuevos PBs."
+                    rows={3}
+                    style={{ resize: 'none', width: '100%', padding: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid hsl(var(--border))', borderRadius: '6px', color: '#fff', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '4px' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => { setShowAddPhoto(false); setPhotoPreview(''); setPhotoNote(''); }}
+                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="submit" 
+                className="btn btn-primary"
+                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                disabled={!photoPreview}
+              >
+                Guardar Registro
+              </button>
+            </div>
+          </form>
+        )}
 
         {!latestPhoto ? (
           <div style={{
@@ -1110,7 +1312,7 @@ export default function DashboardTab({
             <div>
               <p style={{ fontWeight: 600, fontSize: '0.95rem', margin: '0 0 4px 0', color: '#ffffff' }}>No hay fotos de progreso</p>
               <p style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', margin: 0, maxWidth: '280px', marginInline: 'auto' }}>
-                Sube fotos de tu progreso corporal en la pestaña de Perfil para realizar un seguimiento visual.
+                Sube fotos de tu progreso corporal directamente o desde la pestaña de Perfil.
               </p>
             </div>
           </div>
@@ -1122,20 +1324,24 @@ export default function DashboardTab({
             alignItems: 'center'
           }}>
             {/* Foto de progreso */}
-            <div style={{ 
-              position: 'relative',
-              borderRadius: '8px', 
-              overflow: 'hidden',
-              background: 'rgba(0, 0, 0, 0.2)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              maxHeight: '260px',
-              aspectRatio: '4/3',
-              width: '100%',
-              margin: '0 auto'
-            }}>
+            <div 
+              onClick={() => setActiveLightboxPhoto(latestPhoto)}
+              style={{ 
+                position: 'relative',
+                borderRadius: '8px', 
+                overflow: 'hidden',
+                background: 'rgba(0, 0, 0, 0.2)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                maxHeight: '260px',
+                aspectRatio: '4/3',
+                width: '100%',
+                margin: '0 auto',
+                cursor: 'pointer'
+              }}
+            >
               <img 
                 src={latestPhoto.photoUrl} 
                 alt="Progreso más reciente" 
@@ -1188,7 +1394,7 @@ export default function DashboardTab({
               )}
 
               <div style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', marginTop: '4px' }}>
-                💡 Puedes subir y gestionar tu historial completo de fotos desde la pestaña <strong>Perfil</strong>.
+                💡 Puedes ver e interactuar con la foto haciendo clic en ella, o gestionarla desde el <strong>Perfil</strong>.
               </div>
             </div>
           </div>
@@ -1999,6 +2205,102 @@ export default function DashboardTab({
               Cerrar
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal */}
+      {activeLightboxPhoto && (
+        <div className="lightbox-backdrop" onClick={() => setActiveLightboxPhoto(null)}>
+          <div 
+            className="lightbox-content" 
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '90%', maxWidth: '850px', maxHeight: '90vh', display: 'flex', flexDirection: 'row', flexWrap: 'wrap' }}
+          >
+            <button 
+              onClick={() => setActiveLightboxPhoto(null)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'rgba(7,8,12,0.6)',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#fff',
+                zIndex: 10
+              }}
+            >
+              <X size={16} />
+            </button>
+
+            <div style={{ flex: 1, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
+              <img 
+                src={activeLightboxPhoto.photoUrl} 
+                alt="Progreso" 
+                style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain' }} 
+              />
+            </div>
+
+            <div style={{ width: '100%', padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px', background: 'hsl(var(--bg-card))', borderLeft: '1px solid hsl(var(--border))' }} className="lightbox-info-panel">
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Detalles del Progreso</h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'hsl(var(--muted))', fontSize: '0.85rem' }}>
+                  <Calendar size={14} />
+                  <span>
+                    {new Date(activeLightboxPhoto.date).toLocaleDateString('es-ES', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </span>
+                </div>
+
+                {activeLightboxPhoto.weight && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'hsl(var(--muted))', fontSize: '0.85rem' }}>
+                    <Scale size={14} />
+                    <span>Peso registrado: <strong>{activeLightboxPhoto.weight} kg</strong></span>
+                  </div>
+                )}
+              </div>
+
+              <hr style={{ border: 'none', borderBottom: '1px solid hsl(var(--border))', margin: '8px 0' }} />
+
+              <div>
+                <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nota / Comentario</span>
+                <p style={{ fontSize: '0.9rem', color: '#fff', marginTop: '6px', lineHeight: '1.4', whiteSpace: 'pre-wrap', fontStyle: activeLightboxPhoto.note ? 'normal' : 'italic', margin: 0 }}>
+                  {activeLightboxPhoto.note || 'Sin anotaciones para este registro.'}
+                </p>
+              </div>
+
+              {onDeleteProgressPhoto && (
+                <button 
+                  onClick={() => {
+                    if (window.confirm('¿Estás seguro de que deseas eliminar esta foto de progreso permanentemente?')) {
+                      onDeleteProgressPhoto(activeLightboxPhoto.id);
+                      setActiveLightboxPhoto(null);
+                    }
+                  }}
+                  className="btn btn-danger"
+                  style={{ marginTop: 'auto', padding: '10px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                >
+                  <Trash2 size={14} /> Eliminar Foto
+                </button>
+              )}
+            </div>
+          </div>
+          <style>{`
+            @media (min-width: 768px) {
+              .lightbox-info-panel {
+                width: 320px !important;
+              }
+            }
+          `}</style>
         </div>
       )}
 

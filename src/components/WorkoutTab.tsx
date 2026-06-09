@@ -16,7 +16,9 @@ import {
   Edit2,
   Target,
   BookOpen,
-  Award
+  Award,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { proposeNextSet, calculatePBProfiles } from '../utils/ProgressionEngine';
 import type { SetData, ProgressionTarget } from '../utils/ProgressionEngine';
@@ -64,6 +66,11 @@ export default function WorkoutTab({
   // Calculate PBs from history
   const pbProfiles = useMemo(() => calculatePBProfiles(localHistory), [localHistory]);
 
+  const [routineOrder, setRoutineOrder] = useState<string[]>(() => {
+    const saved = localStorage.getItem('plnexc_routine_order');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // 1. Group exercises into routines from historical logs and custom creations
   const routines = useMemo(() => {
     const map = new Map<string, string[]>(); // Title -> Exercise List
@@ -92,15 +99,50 @@ export default function WorkoutTab({
       map.set(r.title, r.exercises);
     });
     
-    return Array.from(map.entries())
-      .map(([title, exercises]) => ({
-        title,
-        exercises,
-        isCustom: customRoutines.some(cr => cr.title === title),
-        isPreset: DEFAULT_PRESETS.some(dp => dp.title === title)
-      }))
+    const list = Array.from(map.entries())
+      .map(([title, exercises]) => {
+        const isCustom = customRoutines.some(cr => cr.title === title);
+        const isPreset = DEFAULT_PRESETS.some(dp => dp.title === title);
+        return {
+          title,
+          exercises,
+          isCustom,
+          isPreset,
+          highlight: (isCustom && isPreset) ? 'modified' : (isCustom && !isPreset) ? 'created' : 'preset'
+        };
+      })
       .filter(r => !deletedRoutines.includes(r.title));
-  }, [localHistory, customRoutines, deletedRoutines]);
+
+    if (routineOrder.length > 0) {
+      list.sort((a, b) => {
+        const idxA = routineOrder.indexOf(a.title);
+        const idxB = routineOrder.indexOf(b.title);
+        if (idxA === -1 && idxB === -1) return 0;
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+      });
+    }
+    return list;
+  }, [localHistory, customRoutines, deletedRoutines, routineOrder]);
+
+
+  const handleMoveRoutine = (title: string, direction: 'left' | 'right') => {
+    const currentTitles = routines.map(r => r.title);
+    const index = currentTitles.indexOf(title);
+    if (index === -1) return;
+    
+    const newIndex = direction === 'left' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= currentTitles.length) return;
+    
+    const updatedTitles = [...currentTitles];
+    const temp = updatedTitles[index];
+    updatedTitles[index] = updatedTitles[newIndex];
+    updatedTitles[newIndex] = temp;
+    
+    setRoutineOrder(updatedTitles);
+    localStorage.setItem('plnexc_routine_order', JSON.stringify(updatedTitles));
+  };
 
   const [selectedRoutine, setSelectedRoutine] = useState<string>('');
   const [activeSession, setActiveSession] = useState<any | null>(null);
@@ -819,12 +861,14 @@ export default function WorkoutTab({
                 handleStartWorkout(calculatedScore);
                 setShowRecoveryWizard(false);
                 setWizardStep(1);
+                const todayStr = new Date().toISOString().split('T')[0];
+                localStorage.setItem('plnexc_last_recovery_date', todayStr);
+                localStorage.setItem('plnexc_last_recovery_score', calculatedScore.toString());
               }}
               style={{ width: '100%', padding: '14px', fontSize: '1rem', fontWeight: 'bold' }}
             >
               Iniciar Entrenamiento Activo 🔥
-            </button>
-          </div>
+            </button>          </div>
         )}
 
         {/* Wizard Footer Nav */}
@@ -1018,6 +1062,53 @@ export default function WorkoutTab({
           background: hsl(var(--primary));
         }
 
+        /* Highlights para rutinas creadas y modificadas */
+        .routine-card.created {
+          background: hsla(142, 70%, 50%, 0.02);
+          border-color: hsla(142, 70%, 50%, 0.25);
+        }
+        .routine-card.created:hover {
+          border-color: hsl(142, 70%, 50%);
+          box-shadow: 0 4px 20px hsla(142, 70%, 50%, 0.1);
+        }
+        .routine-card.created.active {
+          background: hsla(142, 70%, 50%, 0.06);
+          border-color: hsl(142, 70%, 50%);
+          box-shadow: 0 0 20px hsla(142, 70%, 50%, 0.25);
+        }
+        .routine-card.created.active::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 4px;
+          height: 100%;
+          background: hsl(142, 70%, 50%);
+        }
+
+        .routine-card.modified {
+          background: hsla(262, 80%, 50%, 0.02);
+          border-color: hsla(262, 80%, 50%, 0.25);
+        }
+        .routine-card.modified:hover {
+          border-color: hsl(262, 80%, 50%);
+          box-shadow: 0 4px 20px hsla(262, 80%, 50%, 0.1);
+        }
+        .routine-card.modified.active {
+          background: hsla(262, 80%, 50%, 0.06);
+          border-color: hsl(262, 80%, 50%);
+          box-shadow: 0 0 20px hsla(262, 80%, 50%, 0.25);
+        }
+        .routine-card.modified.active::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 4px;
+          height: 100%;
+          background: hsl(262, 80%, 50%);
+        }
+
         .btn-card-action {
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid rgba(255, 255, 255, 0.05);
@@ -1060,11 +1151,22 @@ export default function WorkoutTab({
                 </p>
               </div>
               <button 
-                className="btn btn-secondary" 
-                onClick={() => setIsBuildingRoutine(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', borderColor: 'hsl(var(--primary))', color: 'hsl(var(--primary))' }}
+                className="btn btn-primary" 
+                onClick={() => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const lastRecoveryDate = localStorage.getItem('plnexc_last_recovery_date');
+                  if (lastRecoveryDate === todayStr) {
+                    const lastScoreStr = localStorage.getItem('plnexc_last_recovery_score');
+                    const lastScore = lastScoreStr ? parseInt(lastScoreStr, 10) : 8;
+                    handleStartWorkout(lastScore);
+                  } else {
+                    setWizardStep(1);
+                    setShowRecoveryWizard(true);
+                  }
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', padding: '10px 18px', fontWeight: 'bold' }}
               >
-                <BookmarkPlus size={16} /> Crear Rutina
+                <Play size={16} /> Iniciar Entrenamiento
               </button>
             </div>
 
@@ -1076,18 +1178,45 @@ export default function WorkoutTab({
                   ref={routineGridRef}
                   className="routine-grid"
                 >
-                  {routines.map(r => (
+                  {routines.map((r, idx) => (
                     <div 
                       key={r.title}
                       onClick={() => setSelectedRoutine(r.title)}
-                      className={`routine-card ${selectedRoutine === r.title ? 'active' : ''}`}
+                      className={`routine-card ${selectedRoutine === r.title ? 'active' : ''} ${r.highlight}`}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className={`badge ${r.isCustom ? 'badge-secondary' : 'badge-primary'}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
-                          {r.isCustom ? '★ Personalizada' : '✦ Prediseñada'}
+                        <span className={`badge ${
+                          r.highlight === 'created' ? 'badge-success' : r.highlight === 'modified' ? 'badge-secondary' : 'badge-primary'
+                        }`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
+                          {r.highlight === 'created' ? '★ Creada por ti' : r.highlight === 'modified' ? '✎ Modificada' : '✦ Prediseñada'}
                         </span>
                         
                         <div style={{ display: 'flex', gap: '6px' }}>
+                          <button 
+                            className="btn-card-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveRoutine(r.title, 'left');
+                            }}
+                            disabled={idx === 0}
+                            style={{ opacity: idx === 0 ? 0.3 : 1, cursor: idx === 0 ? 'not-allowed' : 'pointer' }}
+                            title="Mover Izquierda"
+                          >
+                            <ChevronLeft size={13} />
+                          </button>
+                          <button 
+                            className="btn-card-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveRoutine(r.title, 'right');
+                            }}
+                            disabled={idx === routines.length - 1}
+                            style={{ opacity: idx === routines.length - 1 ? 0.3 : 1, cursor: idx === routines.length - 1 ? 'not-allowed' : 'pointer' }}
+                            title="Mover Derecha"
+                          >
+                            <ChevronRight size={13} />
+                          </button>
+
                           <button 
                             className="btn-card-action"
                             onClick={(e) => {
@@ -1131,10 +1260,19 @@ export default function WorkoutTab({
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
 
-            {/* Exercise Preview Container */}
+                {/* Botón de crear rutina debajo de la lista */}
+                <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: '12px' }}>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setIsBuildingRoutine(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', borderColor: 'hsl(var(--primary))', color: 'hsl(var(--primary))' }}
+                  >
+                    <BookmarkPlus size={16} /> Crear Rutina
+                  </button>
+                </div>
+              </div>
+            </div>            {/* Exercise Preview Container */}
             {previewExercises.length > 0 && (
               <div style={{ 
                 marginTop: '8px', 
@@ -1244,16 +1382,7 @@ export default function WorkoutTab({
               </div>
             )}
 
-            <button 
-              className="btn btn-primary" 
-              onClick={() => {
-                setWizardStep(1);
-                setShowRecoveryWizard(true);
-              }} 
-              style={{ width: '100%', padding: '12px' }}
-            >
-              <Play size={18} /> Iniciar Entrenamiento
-            </button>
+
           </div>
 
           {/* Historial de Entrenamientos Recientes */}

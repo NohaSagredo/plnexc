@@ -557,6 +557,9 @@ export default function App() {
               cardioHistory={cardioHistory}
               profilePicture={profilePicture}
               progressPhotos={progressPhotos}
+              onAddProgressPhoto={handleAddProgressPhoto}
+              onDeleteProgressPhoto={handleDeleteProgressPhoto}
+              bodyWeight={bodyWeight}
             />
           </div>
         )}
