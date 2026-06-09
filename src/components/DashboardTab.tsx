@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import { auth } from '../utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -2014,7 +2015,7 @@ export default function DashboardTab({
       )}
 
       {/* PB Progression Line Chart Modal */}
-      {selectedExerciseForChart && (
+      {selectedExerciseForChart && createPortal(
         <div style={{
           position: 'fixed',
           top: 0,
@@ -2205,11 +2206,12 @@ export default function DashboardTab({
               Cerrar
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Lightbox Modal */}
-      {activeLightboxPhoto && (
+      {activeLightboxPhoto && createPortal(
         <div className="lightbox-backdrop" onClick={() => setActiveLightboxPhoto(null)}>
           <div 
             className="lightbox-content" 
@@ -2301,7 +2303,8 @@ export default function DashboardTab({
               }
             }
           `}</style>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
