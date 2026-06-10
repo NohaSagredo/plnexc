@@ -63,6 +63,7 @@ export const TRANSLATIONS = {
     weeklySetsSubtitle: 'Series completadas en la semana activa frente al objetivo saludable (10-20 series)',
     weeklySetsCompletedOfTarget: '{completed} de {target} series',
     weeklySetsGoalAchieved: '¡Meta Semanal Lograda!',
+    weeklySetsTip: '💡 Nota: Los ejercicios compuestos suman 1.0 serie a su músculo principal y 0.5 series a sus músculos secundarios (sinergistas).',
 
     // PBs/PRs tab keys
     pbTab1RM: '1RM Est.',
@@ -497,6 +498,7 @@ export const TRANSLATIONS = {
     weeklySetsSubtitle: 'Completed sets in the current week vs. target healthy volume (10-20 sets)',
     weeklySetsCompletedOfTarget: '{completed} of {target} sets',
     weeklySetsGoalAchieved: 'Weekly Goal Achieved!',
+    weeklySetsTip: '💡 Note: Compound exercises add 1.0 set to their primary muscle and 0.5 sets to their secondary muscles (synergists).',
 
     // PBs/PRs tab keys
     pbTab1RM: 'Est. 1RM',

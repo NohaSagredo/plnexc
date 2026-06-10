@@ -1555,6 +1555,9 @@ export default function DashboardTab({
           <p style={{ color: 'hsl(var(--muted))', fontSize: '0.78rem', margin: '4px 0 0 0', lineHeight: '1.4' }}>
             {t.weeklySetsSubtitle || 'Series completadas en la semana activa frente al objetivo saludable (10-20 series)'}
           </p>
+          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.75rem', fontStyle: 'italic', margin: '6px 0 0 0', lineHeight: '1.4', opacity: 0.85 }}>
+            {t.weeklySetsTip || '💡 Nota: Los ejercicios compuestos suman 1.0 serie a su músculo principal y 0.5 series a sus músculos secundarios (sinergistas).'}
+          </p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '4px' }}>

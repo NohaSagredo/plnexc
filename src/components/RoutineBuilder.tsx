@@ -181,7 +181,7 @@ export default function RoutineBuilder({
                     <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '65%' }}>
                       <strong style={{ fontSize: '0.9rem' }}>{ex.title}</strong>
                       <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
-                        {ex.muscleGroup} • {ex.equipment}
+                        {ex.muscleGroup} {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 ? `(+ ${ex.secondaryMuscleGroups.join(', ')})` : ''} • {ex.equipment}
                       </span>
                     </div>
 
@@ -300,6 +300,11 @@ export default function RoutineBuilder({
                       <strong style={{ fontSize: '0.85rem' }}>{ex.title}</strong>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{ex.muscleGroup}</span>
+                        {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 && (
+                          <span className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '1px 4px', background: 'rgba(255, 255, 255, 0.05)', color: 'hsl(var(--muted))', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                            + {ex.secondaryMuscleGroups.join(', ')}
+                          </span>
+                        )}
                         <span className="badge badge-success" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{ex.equipment}</span>
                         <span className="badge badge-warning" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{ex.difficulty}</span>
                       </div>

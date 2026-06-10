@@ -1608,8 +1608,27 @@ export default function WorkoutTab({
                     <Dumbbell size={18} color="hsl(var(--primary))" />
                     {ex.title}
                   </h3>
+                  {(() => {
+                    const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
+                    if (!dbEx) return null;
+                    return (
+                      <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                        <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'capitalize' }}>
+                          {translateMuscleGroup(dbEx.muscleGroup)}
+                        </span>
+                        {dbEx.secondaryMuscleGroups && dbEx.secondaryMuscleGroups.length > 0 && (
+                          <span className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'capitalize', background: 'rgba(255, 255, 255, 0.05)', color: 'hsl(var(--muted))', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                            + {dbEx.secondaryMuscleGroups.map(m => translateMuscleGroup(m)).join(', ')}
+                          </span>
+                        )}
+                        <span className="badge badge-success" style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'capitalize' }}>
+                          {translateEquipment(dbEx.equipment)}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   {ex.isSubstituted && (
-                    <span className="badge badge-warning" style={{ marginTop: '6px' }}>
+                    <span className="badge badge-warning" style={{ marginTop: '8px', display: 'inline-block' }}>
                       {language === 'es' ? '⚠️ Variante PLNEXC por dolor en' : '⚠️ PLNEXC variation due to pain in'} {activeInjury ? (translateEngineText(MILO_REHAB_PROTOCOLS[activeInjury.joint]?.displayName || '', language) || activeInjury.joint) : ''}
                     </span>
                   )}
@@ -2236,12 +2255,22 @@ export default function WorkoutTab({
                         </div>
                       </div>
 
-                      {/* Badges & Actions */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', gap: '6px' }}>
                           <span className="badge badge-primary" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize' }}>
                             {translateMuscleGroup(ex.muscleGroup)}
                           </span>
+                          {(() => {
+                            const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
+                            if (dbEx && dbEx.secondaryMuscleGroups && dbEx.secondaryMuscleGroups.length > 0) {
+                              return (
+                                <span className="badge badge-secondary" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize', background: 'rgba(255, 255, 255, 0.05)', color: 'hsl(var(--muted))', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                  + {dbEx.secondaryMuscleGroups.map(m => translateMuscleGroup(m)).join(', ')}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                           <span className="badge badge-success" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize' }}>
                             {translateEquipment(ex.equipment)}
                           </span>
