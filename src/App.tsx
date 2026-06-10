@@ -532,29 +532,6 @@ export default function App() {
             </button>
           </nav>
 
-          {/* Language Toggle Button */}
-          <button 
-            onClick={handleToggleLanguage}
-            style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid hsl(var(--border))',
-              borderRadius: '8px',
-              padding: '8px 12px',
-              color: '#ffffff',
-              fontSize: '0.85rem',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              transition: 'all var(--transition-fast)'
-            }}
-            className="hover-card-highlight"
-            title={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
-          >
-            🌐 {language === 'es' ? 'ES' : 'EN'}
-          </button>
-
           {/* Cloud Synchronization Panel */}
           <SyncPanel 
             customRoutines={customRoutines}
@@ -661,6 +638,7 @@ export default function App() {
               localHistory={localHistory}
               cardioHistory={cardioHistory}
               language={language}
+              onToggleLanguage={handleToggleLanguage}
             />
           </div>
         )}

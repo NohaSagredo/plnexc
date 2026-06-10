@@ -353,6 +353,9 @@ export const TRANSLATIONS = {
     cardioZone4Detail: 'Alta intensidad (>80%). Trabajo por intervalos cortos de esfuerzo máximo. Excelente para aumentar el metabolismo post-ejercicio (EPOC) en poco tiempo.',
 
     // Profile Tab
+    profileSectionSettings: 'Configuración de la Aplicación',
+    profileSettingsLanguageLabel: 'Idioma de la Interfaz',
+    profileSettingsLanguageDesc: 'Cambia el idioma global de los textos y ejercicios.',
     profileTitle: 'Perfil del Atleta',
     profileSubtitle: 'Ajustes Antropométricos y Medallas',
     profileAvatarChange: 'Cambiar',
@@ -784,6 +787,9 @@ export const TRANSLATIONS = {
     cardioZone4Detail: 'High intensity (>80%). Short interval work at maximum effort. Excellent for increasing post-exercise metabolism (EPOC) in a short time.',
 
     // Profile Tab
+    profileSectionSettings: 'App Settings',
+    profileSettingsLanguageLabel: 'Interface Language',
+    profileSettingsLanguageDesc: 'Change the global language for text and exercises.',
     profileTitle: 'Athlete Profile',
     profileSubtitle: 'Anthropometric Settings & Medals',
     profileAvatarChange: 'Change',
