@@ -7,6 +7,8 @@ export interface Exercise {
   description: string;
   instructions?: string[];
   image?: string;
+  nameEs?: string;
+  nameEn?: string;
 }
 
 export const EXERCISES_DB: Exercise[] = [
@@ -846,5 +848,35 @@ export const EXERCISES_DB: Exercise[] = [
     equipment: 'Banda',
     difficulty: 'Principiante',
     description: 'Extensión terminal de rodilla de pie resistida por banda elástica. Excelente para tendón rotuliano y vasto medial.'
+  },
+  {
+    id: 'single_leg_squat',
+    title: 'Single-Leg Squat',
+    muscleGroup: 'Piernas',
+    equipment: 'Peso Corporal',
+    difficulty: 'Avanzado',
+    description: 'Sentadilla a una sola pierna manteniendo la otra pierna extendida o flexionada. Alta demanda de estabilidad y fuerza unilateral.',
+    nameEs: 'Sentadilla a una Pierna',
+    nameEn: 'Single-Leg Squat'
+  },
+  {
+    id: 'pistol_squat',
+    title: 'Pistol Squat',
+    muscleGroup: 'Piernas',
+    equipment: 'Peso Corporal',
+    difficulty: 'Avanzado',
+    description: 'Sentadilla de pistola a rango completo con una pierna estirada al frente. Exige fuerza, equilibrio y movilidad de tobillo excelentes.',
+    nameEs: 'Sentadilla Pistola',
+    nameEn: 'Pistol Squat'
+  },
+  {
+    id: 'bodyweight_squat',
+    title: 'Bodyweight Squat',
+    muscleGroup: 'Piernas',
+    equipment: 'Peso Corporal',
+    difficulty: 'Principiante',
+    description: 'Sentadilla básica libre con el propio peso corporal. Ejercicio elemental de movimiento inferior.',
+    nameEs: 'Sentadilla con Peso Corporal',
+    nameEn: 'Bodyweight Squat'
   }
 ];

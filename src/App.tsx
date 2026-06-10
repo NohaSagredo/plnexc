@@ -16,9 +16,28 @@ import { uploadUserData } from './utils/firebaseSync';
 import { auth } from './utils/firebase';
 
 import { useState, useEffect } from 'react';
+import { TRANSLATIONS } from './utils/translations';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile'>('dashboard');
+  const [language, setLanguage] = useState<'es' | 'en'>(() => {
+    const saved = localStorage.getItem('plnexc_language');
+    return (saved === 'es' || saved === 'en') ? saved : 'es';
+  });
+
+  const t = TRANSLATIONS[language];
+
+  const handleToggleLanguage = () => {
+    const newLang = language === 'es' ? 'en' : 'es';
+    setLanguage(newLang);
+    localStorage.setItem('plnexc_language', newLang);
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      uploadUserData(currentUser.uid, { language: newLang }).catch(err => {
+        console.error('Error auto-syncing language:', err);
+      });
+    }
+  };
   
   // 1. Manage state of historical workouts
   const [localHistory, setLocalHistory] = useState<any[]>([]);
@@ -473,7 +492,7 @@ export default function App() {
               onClick={() => setActiveTab('dashboard')}
             >
               <TrendingUp size={18} />
-              Progreso
+              {t.progreso}
             </button>
             
             <button 
@@ -481,7 +500,7 @@ export default function App() {
               onClick={() => setActiveTab('workout')}
             >
               <Dumbbell size={18} />
-              Entrenar
+              {t.entrenar}
             </button>
 
             <button 
@@ -489,7 +508,7 @@ export default function App() {
               onClick={() => setActiveTab('cardio')}
             >
               <Flame size={18} />
-              Cardio
+              {t.cardio}
             </button>
             
             <button 
@@ -501,7 +520,7 @@ export default function App() {
               }}
             >
               <HeartPulse size={18} />
-              {activeInjury ? 'PLNEXC Rehab (Activo)' : 'Rehab PLNEXC'}
+              {activeInjury ? (language === 'es' ? 'PLNEXC Rehab (Activo)' : 'PLNEXC Rehab (Active)') : (language === 'es' ? 'Rehab PLNEXC' : 'PLNEXC Rehab')}
             </button>
 
             <button 
@@ -509,9 +528,32 @@ export default function App() {
               onClick={() => setActiveTab('profile')}
             >
               <User size={18} />
-              Perfil
+              {t.perfil}
             </button>
           </nav>
+
+          {/* Language Toggle Button */}
+          <button 
+            onClick={handleToggleLanguage}
+            style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              color: '#ffffff',
+              fontSize: '0.85rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all var(--transition-fast)'
+            }}
+            className="hover-card-highlight"
+            title={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
+          >
+            🌐 {language === 'es' ? 'ES' : 'EN'}
+          </button>
 
           {/* Cloud Synchronization Panel */}
           <SyncPanel 
@@ -542,6 +584,8 @@ export default function App() {
             setProfilePicture={setProfilePicture}
             progressPhotos={progressPhotos}
             setProgressPhotos={setProgressPhotos}
+            language={language}
+            setLanguage={setLanguage}
           />
         </div>
       </header>
@@ -560,6 +604,7 @@ export default function App() {
               onAddProgressPhoto={handleAddProgressPhoto}
               onDeleteProgressPhoto={handleDeleteProgressPhoto}
               bodyWeight={bodyWeight}
+              language={language}
             />
           </div>
         )}
@@ -579,6 +624,7 @@ export default function App() {
               height={height}
               gender={gender}
               bodyFat={bodyFat}
+              language={language}
             />
           </div>
         )}
@@ -588,6 +634,7 @@ export default function App() {
             <RehabTab 
               activeInjury={activeInjury} 
               setActiveInjury={handleSetInjury} 
+              language={language}
             />
           </div>
         )}
@@ -613,6 +660,7 @@ export default function App() {
               onDeleteProgressPhoto={handleDeleteProgressPhoto}
               localHistory={localHistory}
               cardioHistory={cardioHistory}
+              language={language}
             />
           </div>
         )}
@@ -629,6 +677,7 @@ export default function App() {
               onDeleteCardioSession={handleDeleteCardioSession}
               bodyWeight={bodyWeight}
               bodyFat={bodyFat}
+              language={language}
             />
           </div>
         )}
@@ -641,7 +690,7 @@ export default function App() {
           onClick={() => setActiveTab('dashboard')}
         >
           <TrendingUp size={22} />
-          <span>Progreso</span>
+          <span>{t.progreso}</span>
         </button>
         
         <button 
@@ -649,7 +698,7 @@ export default function App() {
           onClick={() => setActiveTab('workout')}
         >
           <Dumbbell size={22} />
-          <span>Entrenar</span>
+          <span>{t.entrenar}</span>
         </button>
 
         <button 
@@ -657,7 +706,7 @@ export default function App() {
           onClick={() => setActiveTab('cardio')}
         >
           <Flame size={22} />
-          <span>Cardio</span>
+          <span>{t.cardio}</span>
         </button>
         
         <button 
@@ -668,7 +717,7 @@ export default function App() {
           }}
         >
           <HeartPulse size={22} />
-          <span>{activeInjury ? 'PLNEXC Rehab' : 'Rehab'}</span>
+          <span>{activeInjury ? 'PLNEXC Rehab' : t.rehab}</span>
         </button>
 
         <button 
@@ -676,7 +725,7 @@ export default function App() {
           onClick={() => setActiveTab('profile')}
         >
           <User size={22} />
-          <span>Perfil</span>
+          <span>{t.perfil}</span>
         </button>
       </nav>
 

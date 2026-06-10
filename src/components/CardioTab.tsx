@@ -12,6 +12,7 @@ import {
   Target,
   Heart
 } from 'lucide-react';
+import { TRANSLATIONS } from '../utils/translations';
 
 interface CardioSession {
   date: string; // ISO string
@@ -30,6 +31,7 @@ interface CardioTabProps {
   onDeleteCardioSession: (dateStr: string) => void;
   bodyWeight: number;
   bodyFat: number;
+  language: 'es' | 'en';
 }
 
 export default function CardioTab({
@@ -41,8 +43,10 @@ export default function CardioTab({
   onAddCardioSession,
   onDeleteCardioSession,
   bodyWeight,
-  bodyFat
+  bodyFat,
+  language
 }: CardioTabProps) {
+  const t = TRANSLATIONS[language];
   // Timer States
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
   const [secondsElapsed, setSecondsElapsed] = useState<number>(0);
@@ -108,7 +112,7 @@ export default function CardioTab({
   const handleSaveTimerSession = () => {
     const minutesCompleted = Math.round((secondsElapsed / 60) * 10) / 10;
     if (minutesCompleted < 0.5) {
-      alert('La sesión debe durar al menos 30 segundos para ser registrada.');
+      alert(t.cardioTimerMinDuration || 'La sesión debe durar al menos 30 segundos para ser registrada.');
       return;
     }
 
@@ -129,7 +133,7 @@ export default function CardioTab({
     e.preventDefault();
     const mins = parseFloat(manualMinutes);
     if (isNaN(mins) || mins <= 0) {
-      alert('Ingresa una cantidad de minutos válida.');
+      alert(t.cardioManualMinAlert || 'Ingresa una cantidad de minutos válida.');
       return;
     }
 
@@ -265,7 +269,11 @@ export default function CardioTab({
     } else {
       setCardioTargetMinutes(smartAdjusterResults.weeklyMinutesNeeded);
     }
-    alert(`Meta de minutos de cardio ajustada a: ${cardioGoalType === 'daily' ? smartAdjusterResults.dailyMinutesNeeded + ' min diarios' : smartAdjusterResults.weeklyMinutesNeeded + ' min semanales'}`);
+    const valStr = cardioGoalType === 'daily' 
+      ? `${smartAdjusterResults.dailyMinutesNeeded} ${language === 'es' ? 'min diarios' : 'daily min'}` 
+      : `${smartAdjusterResults.weeklyMinutesNeeded} ${language === 'es' ? 'min semanales' : 'weekly min'}`;
+    const alertMsg = (t.cardioFatLossApplyGoalSuccess || 'Meta de minutos de cardio ajustada a: {goal}').replace('{goal}', valStr);
+    alert(alertMsg);
   };
 
   // 4. Heart Rate Zones (Karvonen)
@@ -295,7 +303,7 @@ export default function CardioTab({
   // Clean date representation
   const formatSessionDate = (isoString: string) => {
     const d = new Date(isoString);
-    return d.toLocaleDateString('es-ES', {
+    return d.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
       day: 'numeric',
       month: 'short',
       hour: '2-digit',
@@ -315,10 +323,10 @@ export default function CardioTab({
             <div>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Target size={22} color="hsl(var(--primary))" />
-                Progreso de Cardio
+                {t.cardioTitle || 'Progreso de Cardio'}
               </h2>
               <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
-                Meta actual: {cardioTargetMinutes} min {cardioGoalType === 'daily' ? 'Diarios' : 'Semanales'}
+                {(t.cardioGoalLabel || 'Meta actual: {mins} min {type}').replace('{mins}', cardioTargetMinutes.toString()).replace('{type}', cardioGoalType === 'daily' ? (t.cardioGoalDaily || 'Diarios') : (t.cardioGoalWeekly || 'Semanales'))}
               </p>
             </div>
             
@@ -337,7 +345,7 @@ export default function CardioTab({
                   fontWeight: cardioGoalType === 'daily' ? 'bold' : 'normal'
                 }}
               >
-                Diario
+                {t.cardioGoalDaily || 'Diario'}
               </button>
               <button 
                 onClick={() => setCardioGoalType('weekly')}
@@ -352,39 +360,39 @@ export default function CardioTab({
                   fontWeight: cardioGoalType === 'weekly' ? 'bold' : 'normal'
                 }}
               >
-                Semanal
+                {t.cardioGoalWeekly || 'Semanal'}
               </button>
             </div>
           </div>
 
           {/* Quick Target Modifier Form */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '-4px' }}>
-            <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>Ajustar meta:</span>
+            <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>{t.cardioAdjustGoal || 'Ajustar meta:'}</span>
             <input 
               type="number"
               value={cardioTargetMinutes}
               onChange={(e) => setCardioTargetMinutes(Math.max(1, parseInt(e.target.value) || 0))}
               style={{ width: '70px', padding: '4px 8px', fontSize: '0.8rem', borderRadius: '6px', textAlign: 'center' }}
             />
-            <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>minutos</span>
+            <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>{t.cardioMinutes || 'minutos'}</span>
           </div>
 
           {/* PROGRESS METRICS */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid hsl(var(--border))', borderRadius: '12px', padding: '12px' }}>
             <div style={{ textAlign: 'center' }}>
-              <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hoy</span>
+              <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.cardioToday || 'Hoy'}</span>
               <strong style={{ fontSize: '1.15rem', color: '#ffffff', display: 'block', marginTop: '2px' }}>
                 {Math.round(weeklyStats.minutesToday)} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'hsl(var(--muted))' }}>min</span>
               </strong>
             </div>
             <div style={{ textAlign: 'center', borderLeft: '1px solid hsl(var(--border))', borderRight: '1px solid hsl(var(--border))' }}>
-              <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Esta Semana</span>
+              <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.cardioThisWeek || 'Esta Semana'}</span>
               <strong style={{ fontSize: '1.15rem', color: '#ffffff', display: 'block', marginTop: '2px' }}>
                 {Math.round(weeklyStats.minutesThisWeek)} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'hsl(var(--muted))' }}>min</span>
               </strong>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Faltan</span>
+              <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.cardioRemaining || 'Faltan'}</span>
               <strong style={{ fontSize: '1.15rem', color: 'hsl(var(--secondary))', display: 'block', marginTop: '2px' }}>
                 {Math.round(weeklyStats.remainingMinutes)} <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'hsl(var(--muted))' }}>min</span>
               </strong>
@@ -394,7 +402,7 @@ export default function CardioTab({
           {/* GLOWING WEEKLY PROGRESS BAR (Required) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-              <span>Progreso hacia el objetivo semanal ({weeklyStats.weeklyGoalMins} min)</span>
+              <span>{(t.cardioGoalProgress || 'Progreso hacia el objetivo semanal ({mins} min)').replace('{mins}', weeklyStats.weeklyGoalMins.toString())}</span>
               <strong style={{ color: 'hsl(var(--primary))' }}>{weeklyStats.weeklyProgressPercent}%</strong>
             </div>
             
@@ -435,7 +443,7 @@ export default function CardioTab({
           <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Activity size={18} color="hsl(var(--secondary))" />
-              Cronómetro de Cardio
+              {t.cardioCronometer || 'Cronómetro de Cardio'}
             </h3>
             
             <button 
@@ -443,18 +451,18 @@ export default function CardioTab({
               onClick={() => setShowManualEntry(!showManualEntry)}
               style={{ padding: '4px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
-              <Plus size={14} /> Log Manual
+              <Plus size={14} /> {t.cardioManualLog || 'Log Manual'}
             </button>
           </div>
 
           {showManualEntry ? (
             /* MANUAL LOG EXPANSION */
             <form onSubmit={handleAddManualSession} className="fade-in" style={{ width: '100%', background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: 700, borderBottom: '1px solid hsl(var(--border))', paddingBottom: '6px' }}>Registrar Cardio Manualmente</h4>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 700, borderBottom: '1px solid hsl(var(--border))', paddingBottom: '6px' }}>{t.cardioManualTitle || 'Registrar Cardio Manualmente'}</h4>
               
               <div className="grid-cols-2" style={{ gap: '10px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>Duración (minutos)</label>
+                  <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.cardioManualDuration || 'Duración (minutos)'}</label>
                   <input 
                     type="number"
                     step="0.1"
@@ -465,20 +473,20 @@ export default function CardioTab({
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>Intensidad / Tipo</label>
+                  <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.cardioManualIntensity || 'Intensidad / Tipo'}</label>
                   <select 
                     value={manualType} 
                     onChange={(e) => setManualType(e.target.value as any)}
                   >
-                    <option value="LISS">LISS (Zona 2 / Suave)</option>
-                    <option value="MISS">MISS (Zona 3 / Moderado)</option>
-                    <option value="HIIT">HIIT (Zona 4-5 / Intervalos)</option>
+                    <option value="LISS">{t.cardioManualIntensityLISS || 'LISS (Zona 2 / Suave)'}</option>
+                    <option value="MISS">{t.cardioManualIntensityMISS || 'MISS (Zona 3 / Moderado)'}</option>
+                    <option value="HIIT">{t.cardioManualIntensityHIIT || 'HIIT (Zona 4-5 / Intervalos)'}</option>
                   </select>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}>Guardar Sesión</button>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowManualEntry(false)} style={{ padding: '8px', fontSize: '0.8rem' }}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, padding: '8px', fontSize: '0.8rem' }}>{t.cardioManualSave || 'Guardar Sesión'}</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowManualEntry(false)} style={{ padding: '8px', fontSize: '0.8rem' }}>{t.cancel || 'Cancelar'}</button>
               </div>
             </form>
           ) : (
@@ -586,7 +594,7 @@ export default function CardioTab({
                         alignItems: 'center',
                         justifyContent: 'center'
                       }}
-                      title="Reiniciar"
+                      title={t.cardioTimerReset || 'Reiniciar'}
                     >
                       <Square size={16} />
                     </button>
@@ -609,7 +617,7 @@ export default function CardioTab({
                         boxShadow: '0 4px 15px hsla(var(--secondary) / 0.3)'
                       }}
                     >
-                      Guardar Sesión
+                      {t.cardioTimerSave || 'Guardar Sesión'}
                     </button>
                   </>
                 )}
@@ -622,13 +630,13 @@ export default function CardioTab({
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Activity size={18} color="hsl(var(--primary))" />
-            Historial de Cardio Reciente
+            {t.cardioRecentHistory || 'Historial de Cardio Reciente'}
           </h3>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
             {cardioHistory.length === 0 ? (
               <div style={{ color: 'hsl(var(--muted))', fontSize: '0.8rem', textAlign: 'center', padding: '20px' }}>
-                No hay sesiones registradas aún. ¡Usa el cronómetro para iniciar!
+                {t.cardioHistoryEmpty || 'No hay sesiones registradas aún. ¡Usa el cronómetro para iniciar!'}
               </div>
             ) : (
               cardioHistory.slice(0, 10).map((s, idx) => {
@@ -668,7 +676,7 @@ export default function CardioTab({
                       <button 
                         onClick={() => onDeleteCardioSession(s.date)}
                         style={{ background: 'transparent', border: 'none', color: 'hsl(var(--muted))', cursor: 'pointer', padding: '4px' }}
-                        title="Eliminar registro"
+                        title={t.cardioHistoryDeleteTooltip || 'Eliminar registro'}
                       >
                         <Trash2 size={14} className="hover-danger" />
                       </button>
@@ -689,25 +697,26 @@ export default function CardioTab({
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <TrendingDown size={22} color="hsl(var(--secondary))" />
-              Déficit e Ajuste de Cardio Inteligente
+              {t.cardioFatLossCoach || 'Déficit e Ajuste de Cardio Inteligente'}
             </h2>
             <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
-              Calcula y ajusta la dosis de cardio ideal según tu objetivo de grasa corporal
+              {t.cardioFatLossCoachDesc || 'Calcula y ajusta la dosis de cardio ideal según tu objetivo de grasa corporal'}
             </p>
           </div>
 
           <div style={{ background: 'hsla(var(--primary) / 0.03)', border: '1px solid hsla(var(--primary) / 0.15)', borderRadius: '12px', padding: '14px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
             <Scale size={18} color="hsl(var(--primary))" style={{ marginTop: '2px', flexShrink: 0 }} />
             <div style={{ fontSize: '0.8rem', lineHeight: '1.4' }}>
-              <span style={{ color: 'hsl(var(--muted))', display: 'block' }}>Composición Corporal Actual:</span>
-              <strong>Peso:</strong> {bodyWeight} kg | <strong>Grasa Corporal:</strong> {bodyFat}%
+              {t.cardioFatLossCoachStatus
+                ? t.cardioFatLossCoachStatus.replace('{weight}', bodyWeight.toString()).replace('{fat}', bodyFat.toString())
+                : `Composición Corporal Actual: Peso: ${bodyWeight} kg | Grasa: ${bodyFat}%`}
             </div>
           </div>
 
           {/* Form Inputs */}
           <div className="grid-cols-2" style={{ gap: '12px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>Grasa Corporal Objetivo (%)</label>
+              <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.cardioFatLossGoalFat || 'Grasa Corporal Objetivo (%)'}</label>
               <input 
                 type="number"
                 value={targetFat}
@@ -716,7 +725,7 @@ export default function CardioTab({
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>Plazo Límite (Semanas)</label>
+              <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.cardioFatLossWeeks || 'Plazo Límite (Semanas)'}</label>
               <input 
                 type="number"
                 value={weeksToGoal}
@@ -727,15 +736,15 @@ export default function CardioTab({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>Modalidad de Cardio para Prescribir</label>
+            <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.cardioFatLossMode || 'Modalidad de Cardio para Prescribir'}</label>
             <select 
               value={selectedAdjusterType} 
               onChange={(e) => setSelectedAdjusterType(e.target.value as any)}
               style={{ width: '100%' }}
             >
-              <option value="LISS">LISS (Suave / Zona 2 - Caminata rápida)</option>
-              <option value="MISS">MISS (Moderado / Zona 3 - Trote/Bici)</option>
-              <option value="HIIT">HIIT (Fuerte / Zona 4-5 - Sprints/Intervalos)</option>
+              <option value="LISS">{t.cardioIntensityLissOption || 'LISS (Suave / Zona 2 - Caminata rápida)'}</option>
+              <option value="MISS">{t.cardioIntensityMissOption || 'MISS (Moderado / Zona 3 - Trote/Bici)'}</option>
+              <option value="HIIT">{t.cardioIntensityHiitOption || 'HIIT (Fuerte / Zona 4-5 - Sprints/Intervalos)'}</option>
             </select>
           </div>
 
@@ -743,43 +752,47 @@ export default function CardioTab({
           {smartAdjusterResults ? (
             <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', borderRadius: '12px', padding: '16px' }}>
               <h4 style={{ fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', color: 'hsl(var(--secondary))', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '6px' }}>
-                Prescripción de Fuerza & Cardio
+                {t.cardioFatLossPrescriptionTitle || 'Prescripción de Fuerza & Cardio'}
               </h4>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.825rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'hsl(var(--muted))' }}>Peso Objetivo Estimado:</span>
+                  <span style={{ color: 'hsl(var(--muted))' }}>{t.cardioFatLossTargetWeight || 'Peso Objetivo Estimado:'}</span>
                   <strong>{smartAdjusterResults.targetWeight} kg</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'hsl(var(--muted))' }}>Grasa Total a Perder:</span>
+                  <span style={{ color: 'hsl(var(--muted))' }}>{t.cardioFatLossToLose || 'Grasa Total a Perder:'}</span>
                   <strong style={{ color: 'hsl(var(--danger))' }}>{smartAdjusterResults.fatToLoseKg} kg</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'hsl(var(--muted))' }}>Déficit Diario Requerido:</span>
-                  <strong>{smartAdjusterResults.dailyKcalDeficit} kcal / día</strong>
+                  <span style={{ color: 'hsl(var(--muted))' }}>{t.cardioFatLossRequiredDeficit || 'Déficit Diario Requerido:'}</span>
+                  <strong>{smartAdjusterResults.dailyKcalDeficit} kcal / {language === 'es' ? 'día' : 'day'}</strong>
                 </div>
                 
                 <hr style={{ border: 'none', borderBottom: '1px solid hsl(var(--border))', opacity: 0.5 }} />
 
                 <div style={{ background: 'hsla(var(--secondary) / 0.04)', border: '1px solid hsla(var(--secondary) / 0.15)', padding: '10px', borderRadius: '8px', lineHeight: '1.4' }}>
                   <span style={{ color: 'hsl(var(--secondary))', fontWeight: 'bold', display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Distribución de Déficit Recomendado (40% Cardio)
+                    {t.cardioFatLossRecomendedTitle || 'Distribución de Déficit Recomendado (40% Cardio)'}
                   </span>
                   <p style={{ margin: 0, fontSize: '0.8rem' }}>
-                    Se sugiere un corte nutricional de <strong>{Math.round(smartAdjusterResults.dailyKcalDeficit * 0.6)} kcal</strong> de comida y quemar <strong>{smartAdjusterResults.dailyCardioKcalTarget} kcal</strong> mediante cardio.
+                    {t.cardioFatLossRecomendedText
+                      ? t.cardioFatLossRecomendedText
+                          .replace('{diet}', Math.round(smartAdjusterResults.dailyKcalDeficit * 0.6).toString())
+                          .replace('{cardio}', smartAdjusterResults.dailyCardioKcalTarget.toString())
+                      : `Se sugiere un corte nutricional de ${Math.round(smartAdjusterResults.dailyKcalDeficit * 0.6)} kcal de comida y quemar ${smartAdjusterResults.dailyCardioKcalTarget} kcal mediante cardio.`}
                   </p>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', padding: '10px', borderRadius: '8px' }}>
-                  <span style={{ fontWeight: 'bold', display: 'block', fontSize: '0.75rem', textTransform: 'uppercase' }}>Dosis de Cardio Sugerida:</span>
+                  <span style={{ fontWeight: 'bold', display: 'block', fontSize: '0.75rem', textTransform: 'uppercase' }}>{t.cardioFatLossSuggestedDose || 'Dosis de Cardio Sugerida:'}</span>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                    <span>Meta Diaria:</span>
-                    <strong style={{ color: 'hsl(var(--primary))' }}>{smartAdjusterResults.dailyMinutesNeeded} minutos / día</strong>
+                    <span>{t.cardioFatLossSuggestedDaily || 'Meta Diaria:'}</span>
+                    <strong style={{ color: 'hsl(var(--primary))' }}>{smartAdjusterResults.dailyMinutesNeeded} {language === 'es' ? 'minutos / día' : 'minutes / day'}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Meta Semanal:</span>
-                    <strong style={{ color: 'hsl(var(--primary))' }}>{smartAdjusterResults.weeklyMinutesNeeded} minutos / sem</strong>
+                    <span>{t.cardioFatLossSuggestedWeekly || 'Meta Semanal:'}</span>
+                    <strong style={{ color: 'hsl(var(--primary))' }}>{smartAdjusterResults.weeklyMinutesNeeded} {language === 'es' ? 'minutos / sem' : 'minutes / week'}</strong>
                   </div>
                 </div>
               </div>
@@ -790,12 +803,18 @@ export default function CardioTab({
                 onClick={handleApplyCalculatedGoal}
                 style={{ width: '100%', padding: '10px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%)', color: '#000000', fontWeight: 'bold' }}
               >
-                <Target size={16} /> Aplicar como Meta {cardioGoalType === 'daily' ? 'Diaria' : 'Semanal'}
+                <Target size={16} /> {t.cardioFatLossApplyGoalBtn
+                  ? t.cardioFatLossApplyGoalBtn.replace('{type}', cardioGoalType === 'daily' 
+                      ? (language === 'es' ? 'Diaria' : 'Daily') 
+                      : (language === 'es' ? 'Semanal' : 'Weekly'))
+                  : `Aplicar como Meta ${cardioGoalType === 'daily' ? 'Diaria' : 'Semanal'}`}
               </button>
             </div>
           ) : (
             <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid hsl(var(--border))', borderRadius: '12px', padding: '16px', color: 'hsl(var(--muted))', fontSize: '0.8rem', textAlign: 'center' }}>
-              💡 Ingresa un objetivo de grasa inferior a tu grasa actual ({bodyFat}%) para ver la prescripción personalizada de cardio.
+              {t.cardioFatLossInstructionTip
+                ? t.cardioFatLossInstructionTip.replace('{fat}', bodyFat.toString())
+                : `💡 Ingresa un objetivo de grasa inferior a tu grasa actual (${bodyFat}%) para ver la prescripción personalizada de cardio.`}
             </div>
           )}
         </div>
@@ -805,17 +824,17 @@ export default function CardioTab({
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Heart size={22} color="hsl(var(--danger))" />
-              Zonas de Frecuencia Cardíaca (Karvonen)
+              {t.cardioKarvonenTitle || 'Zonas de Frecuencia Cardíaca (Karvonen)'}
             </h2>
             <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
-              Ajusta la intensidad de tus sesiones monitoreando tus rangos de pulso cardíaco
+              {t.cardioKarvonenDesc || 'Ajusta la intensidad de tus sesiones monitoreando tus rangos de pulso cardíaco'}
             </p>
           </div>
 
           {/* Age & RHR Inputs */}
           <div className="grid-cols-2" style={{ gap: '12px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>Tu Edad (Años)</label>
+              <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.cardioKarvonenAgeLabel || 'Tu Edad (Años)'}</label>
               <input 
                 type="number"
                 value={age}
@@ -824,7 +843,7 @@ export default function CardioTab({
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>Pulso en Reposo (RHR)</label>
+              <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.cardioKarvonenRhrLabel || 'Pulso en Reposo (RHR)'}</label>
               <input 
                 type="number"
                 value={rhr}
@@ -844,11 +863,11 @@ export default function CardioTab({
                 </div>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '8px' }}>
-                    <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>Cardio LISS (Lipólisis)</strong>
-                    <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>{hrZones.zone2.min} - {hrZones.zone2.max} PPM</span>
+                    <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>{t.cardioKarvonenZone2Title || 'Cardio LISS (Lipólisis)'}</strong>
+                    <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>{hrZones.zone2.min} - {hrZones.zone2.max} {language === 'es' ? 'PPM' : 'BPM'}</span>
                   </div>
                   <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginTop: '2px', lineHeight: '1.3' }}>
-                    Intensidad suave (60-70%). Excelente para maximizar la oxidación de grasas y mejorar la salud mitocondrial sin interferir en la recuperación de tus entrenamientos de fuerza.
+                    {t.cardioZone2Detail || 'Intensidad suave (60-70%). Excelente para maximizar la oxidación de grasas y mejorar la salud mitocondrial sin interferir en la recuperación de tus entrenamientos de fuerza.'}
                   </span>
                 </div>
               </div>
@@ -860,11 +879,11 @@ export default function CardioTab({
                 </div>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '8px' }}>
-                    <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>Cardio MISS (Aeróbico)</strong>
-                    <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>{hrZones.zone3.min} - {hrZones.zone3.max} PPM</span>
+                    <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>{t.cardioKarvonenZone3Title || 'Cardio MISS (Aeróbico)'}</strong>
+                    <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>{hrZones.zone3.min} - {hrZones.zone3.max} {language === 'es' ? 'PPM' : 'BPM'}</span>
                   </div>
                   <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginTop: '2px', lineHeight: '1.3' }}>
-                    Intensidad moderada (70-80%). Desarrolla resistencia cardiovascular general y acondicionamiento aeróbico medio.
+                    {t.cardioZone3Detail || 'Intensidad moderada (70-80%). Desarrolla resistencia cardiovascular general y acondicionamiento aeróbico medio.'}
                   </span>
                 </div>
               </div>
@@ -876,11 +895,11 @@ export default function CardioTab({
                 </div>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '8px' }}>
-                    <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>Cardio HIIT (Anaeróbico)</strong>
-                    <span className="badge badge-danger" style={{ fontSize: '0.65rem' }}>{hrZones.zone4.min} - {hrZones.hrMax} PPM</span>
+                    <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>{t.cardioKarvonenZone4Title || 'Cardio HIIT (Anaeróbico)'}</strong>
+                    <span className="badge badge-danger" style={{ fontSize: '0.65rem' }}>{hrZones.zone4.min} - {hrZones.hrMax} {language === 'es' ? 'PPM' : 'BPM'}</span>
                   </div>
                   <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginTop: '2px', lineHeight: '1.3' }}>
-                    Alta intensidad (&gt;80%). Trabajo por intervalos cortos de esfuerzo máximo. Excelente para aumentar el metabolismo post-ejercicio (EPOC) en poco tiempo.
+                    {t.cardioZone4Detail || 'Alta intensidad (>80%). Trabajo por intervalos cortos de esfuerzo máximo. Excelente para aumentar el metabolismo post-ejercicio (EPOC) en poco tiempo.'}
                   </span>
                 </div>
               </div>
@@ -888,7 +907,7 @@ export default function CardioTab({
             </div>
           ) : (
             <div style={{ color: 'hsl(var(--muted))', fontSize: '0.8rem', textAlign: 'center' }}>
-              Ingresa una edad y pulso válidos para calcular tus zonas cardíacas personalizadas.
+              {t.cardioKarvonenInstructionTip || 'Ingresa una edad y pulso válidos para calcular tus zonas cardíacas personalizadas.'}
             </div>
           )}
 
@@ -896,10 +915,10 @@ export default function CardioTab({
           <div style={{ borderTop: '1px solid hsl(var(--border))', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <h4 style={{ fontSize: '0.85rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Info size={14} color="hsl(var(--primary))" />
-              Recomendación de Fuerza
+              {t.cardioPrescriptionTitle || 'Recomendación de Fuerza'}
             </h4>
             <p style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', lineHeight: '1.4', margin: 0 }}>
-              Si tu prioridad principal es mantener la masa muscular mientras pierdes grasa corporal, es sumamente recomendable realizar cardio de tipo <strong>LISS (Zona 2)</strong>. Produce un estrés neuromuscular mínimo y te permite rendir al máximo en tus levantamientos de fuerza principales.
+              {t.cardioPrescriptionText || 'Si tu prioridad principal es mantener la masa muscular mientras pierdes grasa corporal, es sumamente recomendable realizar cardio de tipo LISS (Zona 2). Produce un estrés neuromuscular mínimo y te permite rendir al máximo en tus levantamientos de fuerza principales.'}
             </p>
           </div>
         </div>

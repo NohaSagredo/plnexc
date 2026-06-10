@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import { auth } from '../utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { EXERCISES_DB } from '../data/exercises_db';
+import { TRANSLATIONS, getExerciseName } from '../utils/translations';
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -82,6 +84,7 @@ interface DashboardTabProps {
   onAddProgressPhoto?: (photo: { id: string; date: string; weight?: number; photoUrl: string; note?: string }) => void;
   onDeleteProgressPhoto?: (id: string) => void;
   bodyWeight?: number;
+  language: 'es' | 'en';
 }
 
 export default function DashboardTab({ 
@@ -93,9 +96,33 @@ export default function DashboardTab({
   progressPhotos = [],
   onAddProgressPhoto,
   onDeleteProgressPhoto,
-  bodyWeight = 75
+  bodyWeight = 75,
+  language
 }: DashboardTabProps) {
+  const t = TRANSLATIONS[language];
   const sessions = localHistory as WorkoutSession[];
+
+  const translateMuscleGroup = (m: string) => {
+    if (language === 'es') return m;
+    const mapping: any = {
+      'Piernas': 'Legs',
+      'Brazos': 'Arms',
+      'Core': 'Core',
+      'Hombros': 'Shoulders',
+      'Pecho': 'Chest',
+      'Espalda': 'Back',
+      'Cuello': 'Neck',
+      'Cardio': 'Cardio'
+    };
+    return mapping[m] || m;
+  };
+
+  const resolveExerciseDisplayName = (title: string) => {
+    const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === title.toLowerCase() || e.id === title.toLowerCase());
+    const id = dbEx ? dbEx.id : title.toLowerCase().replace(/\s+/g, '_');
+    return getExerciseName(id, dbEx ? dbEx.title : title, language);
+  };
+
 
   const [userName, setUserName] = useState<string>('Atleta');
 
@@ -209,7 +236,7 @@ export default function DashboardTab({
       .map(s => {
         const exercise = s.exercises.find(e => e.title === selectedExercise)!;
         const date = new Date(s.parsedDate);
-        const formattedDate = date.toLocaleDateString('es-ES', { 
+        const formattedDate = date.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { 
           day: 'numeric', 
           month: 'short' 
         });
@@ -228,23 +255,81 @@ export default function DashboardTab({
   }, [sessions, selectedExercise]);
 
   // Widget ID Type & Layout States
-  type WidgetId = 'stats' | 'coach' | 'strength' | 'weight' | 'cardio' | 'splits_prs' | 'progress_photo';
+  type WidgetId = 'stats' | 'coach' | 'strength' | 'weight' | 'cardio' | 'splits_prs' | 'progress_photo' | 'weekly_sets';
 
   const [isEditingLayout, setIsEditingLayout] = useState<boolean>(false);
   const [layoutOrder, setLayoutOrder] = useState<WidgetId[]>(() => {
     const saved = localStorage.getItem('plnexc_dashboard_layout');
+    const required: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo', 'weekly_sets'];
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const required: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo'];
-        const isValid = parsed.every((id: any) => required.includes(id)) && parsed.length === required.length;
-        if (isValid) return parsed;
+        const hasAll = required.every(id => parsed.includes(id));
+        if (hasAll && parsed.length === required.length) return parsed;
+
+        const filtered = parsed.filter((id: any) => required.includes(id)) as WidgetId[];
+        required.forEach(id => {
+          if (!filtered.includes(id)) {
+            filtered.push(id);
+          }
+        });
+        return filtered;
       } catch (e) {
         // Fallback
       }
     }
-    return ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo'];
+    return required;
   });
+
+  // Calculate Weekly Sets per Muscle Group (Monday-Sunday local time)
+  const weeklySetsByMuscle = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMonday = now.getDate() - (day === 0 ? 6 : day - 1);
+    const monday = new Date(now.setDate(diffToMonday));
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    const muscles = {
+      Pecho: 0,
+      Espalda: 0,
+      Piernas: 0,
+      Hombros: 0,
+      Brazos: 0,
+      Core: 0
+    };
+
+    sessions.forEach(session => {
+      if (!session.parsedDate) return;
+      const sessionDate = new Date(session.parsedDate);
+      if (sessionDate >= monday && sessionDate <= sunday) {
+        session.exercises.forEach(ex => {
+          const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
+          if (dbEx) {
+            const muscleGroup = dbEx.muscleGroup;
+            let completedSets = 0;
+            ex.sets.forEach((s: any) => {
+              const isCompleted = s.completed !== undefined ? s.completed : ((s.weight_kg !== null && s.weight_kg > 0) && (s.reps !== null && s.reps > 0));
+              if (isCompleted) {
+                completedSets++;
+              }
+            });
+
+            if (muscles.hasOwnProperty(muscleGroup)) {
+              muscles[muscleGroup as keyof typeof muscles] += completedSets;
+            } else if (muscleGroup === 'Cuello') {
+              muscles['Espalda'] += completedSets;
+            }
+          }
+        });
+      }
+    });
+
+    return muscles;
+  }, [sessions]);
 
   // PB Sub-tabs & modal state variables
   const pbProfiles = useMemo(() => calculatePBProfiles(localHistory), [localHistory]);
@@ -321,7 +406,7 @@ export default function DashboardTab({
         calories += s.calories;
       });
       
-      const dateLabel = d.toLocaleDateString('es-ES', { 
+      const dateLabel = d.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { 
         day: 'numeric', 
         month: 'short' 
       });
@@ -352,10 +437,10 @@ export default function DashboardTab({
           <div>
             <h2 style={{ fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <HeartPulse size={22} color="hsl(var(--danger))" />
-              Evolución y Gasto de Cardio
+              {language === 'es' ? 'Evolución y Gasto de Cardio' : 'Cardio Progress & Expenditure'}
             </h2>
             <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
-              Visualiza tus minutos de cardio e intensidad, o el gasto calórico diario
+              {language === 'es' ? 'Visualiza tus minutos de cardio e intensidad, o el gasto calórico diario' : 'View your cardio minutes and intensity, or daily calorie burn'}
             </p>
           </div>
 
@@ -374,7 +459,7 @@ export default function DashboardTab({
                   fontWeight: cardioMetric === 'minutes' ? 'bold' : 'normal'
                 }}
               >
-                Minutos (Barras)
+                {language === 'es' ? 'Minutos (Barras)' : 'Minutes (Bars)'}
               </button>
               <button 
                 onClick={() => setCardioMetric('calories')}
@@ -389,7 +474,7 @@ export default function DashboardTab({
                   fontWeight: cardioMetric === 'calories' ? 'bold' : 'normal'
                 }}
               >
-                Calorías (Área)
+                {language === 'es' ? 'Calorías (Área)' : 'Calories (Area)'}
               </button>
             </div>
 
@@ -407,7 +492,7 @@ export default function DashboardTab({
                   fontWeight: cardioTimeRange === '7' ? 'bold' : 'normal'
                 }}
               >
-                7 Días
+                {language === 'es' ? '7 Días' : '7 Days'}
               </button>
               <button 
                 onClick={() => setCardioTimeRange('30')}
@@ -422,7 +507,7 @@ export default function DashboardTab({
                   fontWeight: cardioTimeRange === '30' ? 'bold' : 'normal'
                 }}
               >
-                30 Días
+                {language === 'es' ? '30 Días' : '30 Days'}
               </button>
             </div>
           </div>
@@ -455,9 +540,9 @@ export default function DashboardTab({
                     }} 
                   />
                   <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '0.8rem' }} />
-                  <Bar dataKey="LISS" name="LISS (Bajo)" stackId="a" fill="hsl(var(--success))" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="MISS" name="MISS (Medio)" stackId="a" fill="hsl(var(--primary))" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="HIIT" name="HIIT (Alto)" stackId="a" fill="hsl(var(--danger))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="LISS" name={`LISS (${language === 'es' ? 'Bajo' : 'Low'})`} stackId="a" fill="hsl(var(--success))" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="MISS" name={`MISS (${language === 'es' ? 'Medio' : 'Medium'})`} stackId="a" fill="hsl(var(--primary))" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="HIIT" name={`HIIT (${language === 'es' ? 'Alto' : 'High'})`} stackId="a" fill="hsl(var(--danger))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               ) : (
                 <AreaChart data={cardioChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
@@ -491,6 +576,7 @@ export default function DashboardTab({
                   <Area 
                     type="monotone" 
                     dataKey="Calorías (kcal)" 
+                    name={language === 'es' ? 'Calorías (kcal)' : 'Calories (kcal)'}
                     stroke="hsl(var(--danger))" 
                     strokeWidth={3}
                     fillOpacity={1} 
@@ -501,8 +587,17 @@ export default function DashboardTab({
             </ResponsiveContainer>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'hsl(var(--muted))', fontSize: '0.85rem', textAlign: 'center', padding: '0 20px', lineHeight: '1.5' }}>
-              No hay registros de cardio para los últimos {cardioTimeRange} días.<br />
-              Usa el cronómetro en la pestaña de Cardio para registrar tu primera sesión.
+              {language === 'es' ? (
+                <>
+                  No hay registros de cardio para los últimos {cardioTimeRange} días.<br />
+                  Usa el cronómetro en la pestaña de Cardio para registrar tu primera sesión.
+                </>
+              ) : (
+                <>
+                  No cardio logs found for the last {cardioTimeRange} days.<br />
+                  Use the stopwatch in the Cardio tab to log your first session.
+                </>
+              )}
             </div>
           )}
         </div>
@@ -516,46 +611,46 @@ export default function DashboardTab({
         <div className="glass-panel premium-stat-card" style={{ color: 'hsl(var(--primary))' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 1 }}>
             <div>
-              <span className="stat-label">Sesiones de Fuerza</span>
+              <span className="stat-label">{language === 'es' ? 'Sesiones de Fuerza' : 'Strength Sessions'}</span>
               <span className="stat-value" style={{ display: 'block', marginTop: '8px' }}>{stats.totalWorkouts}</span>
             </div>
             <div style={{ background: 'hsla(var(--primary) / 0.1)', padding: '8px', borderRadius: '12px' }}>
               <Calendar size={20} color="hsl(var(--primary))" />
             </div>
           </div>
-          <span className="stat-desc" style={{ zIndex: 1, marginTop: '12px' }}>Entrenamientos registrados de por vida</span>
+          <span className="stat-desc" style={{ zIndex: 1, marginTop: '12px' }}>{language === 'es' ? 'Entrenamientos registrados de por vida' : 'Lifetime registered workouts'}</span>
           <Calendar size={90} className="stat-icon-bg" />
         </div>
 
         <div className="glass-panel premium-stat-card" style={{ color: 'hsl(var(--secondary))' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 1 }}>
             <div>
-              <span className="stat-label">Series Completadas</span>
+              <span className="stat-label">{language === 'es' ? 'Series Completadas' : 'Completed Sets'}</span>
               <span className="stat-value" style={{ display: 'block', marginTop: '8px' }}>{stats.totalSets}</span>
             </div>
             <div style={{ background: 'hsla(var(--secondary) / 0.1)', padding: '8px', borderRadius: '12px' }}>
               <Dumbbell size={20} color="hsl(var(--secondary))" />
             </div>
           </div>
-          <span className="stat-desc" style={{ zIndex: 1, marginTop: '12px' }}>Sets de trabajo y calentamientos</span>
+          <span className="stat-desc" style={{ zIndex: 1, marginTop: '12px' }}>{language === 'es' ? 'Sets de trabajo y calentamientos' : 'Work and warmup sets'}</span>
           <Dumbbell size={90} className="stat-icon-bg" />
         </div>
 
         <div className="glass-panel premium-stat-card" style={{ color: 'hsl(var(--success))' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 1 }}>
             <div>
-              <span className="stat-label">Fuerza Promedio (1RM PR)</span>
+              <span className="stat-label">{language === 'es' ? 'Fuerza Promedio (1RM PR)' : 'Average Strength (1RM PR)'}</span>
               <span className="stat-value" style={{ display: 'block', marginTop: '8px' }}>
                 {stats.bests['Bench Press (Barbell)'] 
                   ? `${Math.round(stats.bests['Bench Press (Barbell)'])} kg` 
-                  : 'Lista para medir'}
+                  : (language === 'es' ? 'Lista para medir' : 'Ready to measure')}
               </span>
             </div>
             <div style={{ background: 'hsla(var(--success) / 0.1)', padding: '8px', borderRadius: '12px' }}>
               <Award size={20} color="hsl(var(--success))" />
             </div>
           </div>
-          <span className="stat-desc" style={{ zIndex: 1, marginTop: '12px' }}>Récord máximo en Press de Banca</span>
+          <span className="stat-desc" style={{ zIndex: 1, marginTop: '12px' }}>{language === 'es' ? 'Récord máximo en Press de Banca' : 'Bench Press all-time record'}</span>
           <Award size={90} className="stat-icon-bg" />
         </div>
       </div>
@@ -568,10 +663,10 @@ export default function DashboardTab({
         <div>
           <h2 style={{ fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Activity size={22} color="hsl(var(--primary))" />
-            Análisis de Puntos Débiles y Plan de Acción
+            {language === 'es' ? 'Análisis de Puntos Débiles y Plan de Acción' : 'Weakness Analysis & Action Plan'}
           </h2>
           <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
-            Diagnóstico inteligente en base a volumen, frecuencia, tiempo y estado de lesiones (PLNEXC)
+            {language === 'es' ? 'Diagnóstico inteligente en base a volumen, frecuencia, tiempo y estado de lesiones (PLNEXC)' : 'Smart diagnosis based on volume, frequency, time and injury status (PLNEXC)'}
           </p>
         </div>
 
@@ -579,33 +674,33 @@ export default function DashboardTab({
           {/* Gráfico de Prioridades y Puntos Débiles */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, borderBottom: '1px solid hsl(var(--border))', paddingBottom: '8px', color: 'hsl(var(--primary))' }}>
-              Índice de Prioridad y Debilidad
+              {language === 'es' ? 'Índice de Prioridad y Debilidad' : 'Priority & Weakness Index'}
             </h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {weaknessAnalysis.map(item => {
                 let badgeColor = 'badge-success';
-                let badgeText = 'Óptimo';
+                let badgeText = language === 'es' ? 'Óptimo' : 'Optimal';
                 let barColor = 'hsl(var(--success))';
                 
                 if (item.status === 'lesion') {
                   badgeColor = 'badge-danger';
-                  badgeText = `⚠️ Rehab PLNEXC (Fase ${activeInjury?.phase})`;
+                  badgeText = language === 'es' ? `⚠️ Rehab PLNEXC (Fase ${activeInjury?.phase})` : `⚠️ Rehab PLNEXC (Phase ${activeInjury?.phase})`;
                   barColor = 'hsl(var(--danger))';
                 } else if (item.status === 'desentrenado') {
                   badgeColor = 'badge-warning';
-                  badgeText = `💤 Desentrenado (${item.daysSince}d)`;
+                  badgeText = language === 'es' ? `💤 Desentrenado (${item.daysSince}d)` : `💤 Detrained (${item.daysSince}d)`;
                   barColor = 'hsl(var(--warning))';
                 } else if (item.status === 'bajo') {
                   badgeColor = 'badge-primary';
-                  badgeText = `📉 Bajo Volumen (${item.volShare.toFixed(1)}%)`;
+                  badgeText = language === 'es' ? `📉 Bajo Volumen (${item.volShare.toFixed(1)}%)` : `📉 Low Volume (${item.volShare.toFixed(1)}%)`;
                   barColor = 'hsl(var(--primary))';
                 }
 
                 return (
                   <div key={item.group} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-                      <strong style={{ fontSize: '0.85rem' }}>{item.group}</strong>
+                      <strong style={{ fontSize: '0.85rem' }}>{translateMuscleGroup(item.group)}</strong>
                       <span className={`badge ${badgeColor}`} style={{ fontSize: '0.65rem', padding: '2px 6px' }}>
                         {badgeText}
                       </span>
@@ -632,13 +727,13 @@ export default function DashboardTab({
           {/* Tarjetas de Plan de Acción */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, borderBottom: '1px solid hsl(var(--border))', paddingBottom: '8px', color: 'hsl(var(--secondary))' }}>
-              Plan de Acción para el Siguiente Entrenamiento
+              {language === 'es' ? 'Plan de Acción para el Siguiente Entrenamiento' : 'Next Workout Action Plan'}
             </h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
               {weaknessAnalysis.filter(item => item.score > 25 || item.status !== 'optimo').length === 0 ? (
                 <div style={{ background: 'hsla(var(--success) / 0.05)', border: '1px solid hsla(var(--success) / 0.2)', padding: '16px', borderRadius: '12px', color: 'hsl(var(--success))', fontSize: '0.875rem', textAlign: 'center' }}>
-                  🎉 ¡Excelente! Todos tus grupos musculares están balanceados y en estado óptimo. Sigue entrenando de forma regular.
+                  {language === 'es' ? '🎉 ¡Excelente! Todos tus grupos musculares están balanceados y en estado óptimo. Sigue entrenando de forma regular.' : '🎉 Excellent! All your muscle groups are balanced and in optimal status. Keep training regularly.'}
                 </div>
               ) : (
                 weaknessAnalysis
@@ -651,31 +746,41 @@ export default function DashboardTab({
                     let titleColor = '#ffffff';
                     let advice = '';
 
+                    const groupTrans = translateMuscleGroup(item.group);
+
                     if (item.status === 'lesion') {
                       cardBg = 'hsla(var(--danger) / 0.04)';
                       cardBorder = 'hsla(var(--danger) / 0.3)';
                       titleIcon = '⚠️';
                       titleColor = 'hsl(var(--danger))';
                       const jointName = activeInjury ? (MILO_REHAB_PROTOCOLS[activeInjury.joint]?.displayName || activeInjury.joint) : '';
-                      advice = `Tu articulación (${jointName}) está en fase ${activeInjury?.phase} de recuperación PLNEXC. Evita levantar pesos máximos en ejercicios de ${item.group}. Prioriza la movilidad y la fuerza isométrica.`;
+                      advice = language === 'es'
+                        ? `Tu articulación (${jointName}) está en fase ${activeInjury?.phase} de recuperación PLNEXC. Evita levantar pesos máximos en ejercicios de ${item.group}. Prioriza la movilidad y la fuerza isométrica.`
+                        : `Your joint (${jointName}) is in phase ${activeInjury?.phase} of PLNEXC rehab. Avoid lifting maximum weights in ${groupTrans} exercises. Prioritize mobility and isometric strength.`;
                     } else if (item.status === 'desentrenado') {
                       cardBg = 'hsla(var(--warning) / 0.04)';
                       cardBorder = 'hsla(var(--warning) / 0.3)';
                       titleIcon = '💤';
                       titleColor = 'hsl(var(--warning))';
-                      advice = `Llevas ${item.daysSince} días sin entrenar ${item.group}. En tu próxima sesión de fuerza, prioriza ejercicios para este grupo para evitar pérdida de adaptaciones neuromusculares.`;
+                      advice = language === 'es'
+                        ? `Llevas ${item.daysSince} días sin entrenar ${item.group}. En tu próxima sesión de fuerza, prioriza ejercicios para este grupo para evitar pérdida de adaptaciones neuromusculares.`
+                        : `You have not trained ${groupTrans} for ${item.daysSince} days. In your next strength session, prioritize exercises for this group to prevent loss of neuromuscular adaptations.`;
                     } else if (item.status === 'bajo') {
                       cardBg = 'hsla(var(--primary) / 0.04)';
                       cardBorder = 'hsla(var(--primary) / 0.3)';
                       titleIcon = '📉';
                       titleColor = 'hsl(var(--primary))';
-                      advice = `El volumen semanal de ${item.group} es bajo (solo representa el ${item.volShare.toFixed(1)}% de tu volumen de trabajo total). Añade 1 ejercicio o 2 series de trabajo extra en tu siguiente rutina.`;
+                      advice = language === 'es'
+                        ? `El volumen semanal de ${item.group} es bajo (solo representa el ${item.volShare.toFixed(1)}% de tu volumen de trabajo total). Añade 1 ejercicio o 2 series de trabajo extra en tu siguiente rutina.`
+                        : `Weekly volume for ${groupTrans} is low (only represents ${item.volShare.toFixed(1)}% of your total work volume). Add 1 exercise or 2 work sets in your next routine.`;
                     } else if (item.hasRegression) {
                       cardBg = 'hsla(var(--secondary) / 0.04)';
                       cardBorder = 'hsla(var(--secondary) / 0.3)';
                       titleIcon = '📊';
                       titleColor = 'hsl(var(--secondary))';
-                      advice = `Se detectó una regresión del 1RM estimado en los levantamientos principales de ${item.group}. Asegura al menos 2 minutos de descanso entre series pesadas y controla la fatiga mental.`;
+                      advice = language === 'es'
+                        ? `Se detectó una regresión del 1RM estimado en los levantamientos principales de ${item.group}. Asegura al menos 2 minutos de descanso entre series pesadas y controla la fatiga mental.`
+                        : `Estimated 1RM regression was detected in the main lifts of ${groupTrans}. Ensure at least 2 minutes of rest between heavy sets and manage mental fatigue.`;
                     }
 
                     return (
@@ -693,7 +798,7 @@ export default function DashboardTab({
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold', fontSize: '0.85rem', color: titleColor }}>
                           <span>{titleIcon}</span>
-                          <span>Prioridad: {item.group}</span>
+                          <span>{language === 'es' ? 'Prioridad:' : 'Priority:'} {groupTrans}</span>
                         </div>
                         <p style={{ fontSize: '0.8rem', color: '#c7d2fe', lineHeight: '1.4' }}>
                           {advice}
@@ -717,10 +822,10 @@ export default function DashboardTab({
           <div>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <TrendingUp size={24} color="hsl(var(--primary))" />
-              Curva de Fuerza Inteligente
+              {language === 'es' ? 'Curva de Fuerza Inteligente' : 'Smart Strength Curve'}
             </h2>
             <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', marginTop: '2px' }}>
-              Progreso del Récord Teórico 1RM (Fórmula Epley)
+              {language === 'es' ? 'Progreso del Récord Teórico 1RM (Fórmula Epley)' : 'Estimated 1RM Theoretical Progress (Epley Formula)'}
             </p>
           </div>
           
@@ -731,7 +836,7 @@ export default function DashboardTab({
               style={{ padding: '8px 12px' }}
             >
               {exercisesWithHistory.map(ex => (
-                <option key={ex} value={ex}>{ex}</option>
+                <option key={ex} value={ex}>{resolveExerciseDisplayName(ex)}</option>
               ))}
             </select>
           </div>
@@ -772,6 +877,7 @@ export default function DashboardTab({
                 <Area 
                   type="monotone" 
                   dataKey="1RM Estimado (kg)" 
+                  name={language === 'es' ? '1RM Estimado (kg)' : 'Estimated 1RM (kg)'}
                   stroke="hsl(var(--primary))" 
                   strokeWidth={3}
                   fillOpacity={1} 
@@ -781,7 +887,7 @@ export default function DashboardTab({
             </ResponsiveContainer>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'hsl(var(--muted))' }}>
-              Cargando datos históricos...
+              {language === 'es' ? 'Cargando datos históricos...' : 'Loading history data...'}
             </div>
           )}
         </div>
@@ -792,7 +898,7 @@ export default function DashboardTab({
   const renderWeightChart = () => {
     const weightChartData = weightHistory.map(record => {
       const dateObj = new Date(record.date);
-      const formattedDate = dateObj.toLocaleDateString('es-ES', { 
+      const formattedDate = dateObj.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { 
         day: 'numeric', 
         month: 'short' 
       });
@@ -807,10 +913,10 @@ export default function DashboardTab({
         <div>
           <h2 style={{ fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Scale size={22} color="hsl(var(--primary))" />
-            Evolución del Peso Corporal
+            {t.bodyWeightEvolTitle}
           </h2>
           <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
-            Historial de pesajes registrados en tu perfil a lo largo del tiempo
+            {t.bodyWeightEvolSubtitle}
           </p>
         </div>
 
@@ -849,6 +955,7 @@ export default function DashboardTab({
                 <Area 
                   type="monotone" 
                   dataKey="Peso (kg)" 
+                  name={language === 'es' ? 'Peso (kg)' : 'Weight (kg)'}
                   stroke="hsl(var(--secondary))" 
                   strokeWidth={3}
                   fillOpacity={1} 
@@ -857,8 +964,8 @@ export default function DashboardTab({
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'hsl(var(--muted))' }}>
-              Registra tu peso en la pestaña de Perfil para ver la gráfica de progreso.
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'hsl(var(--muted))', padding: '0 20px', textAlign: 'center', fontSize: '0.85rem' }}>
+              {t.bodyWeightNoHistory}
             </div>
           )}
         </div>
@@ -872,10 +979,10 @@ export default function DashboardTab({
         <div className="glass-panel" style={{ padding: '24px' }}>
           <h3 style={{ fontSize: '1.2rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Activity size={20} color="hsl(var(--secondary))" />
-            Distribución de Carga Semanal
+            {t.loadDistributionTitle || 'Distribución de Carga Semanal'}
           </h3>
           <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginBottom: '16px' }}>
-            Volumen acumulado por grupo muscular (kg totales en tu historial)
+            {t.loadDistributionDesc || 'Volumen acumulado por grupo muscular (kg totales en tu historial)'}
           </p>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -887,7 +994,7 @@ export default function DashboardTab({
                 return (
                   <div key={muscle} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600 }}>
-                      <span>{muscle}</span>
+                      <span>{translateMuscleGroup(muscle)}</span>
                       <span style={{ color: 'hsl(var(--muted))' }}>{formatVolume(vol)}</span>
                     </div>
                     <div style={{ height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
@@ -910,17 +1017,17 @@ export default function DashboardTab({
           <div>
             <h3 style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
               <Award size={20} color="hsl(var(--success))" />
-              Récords Personales (PBs)
+              {t.pbTitle || 'Récords Personales (PBs)'}
             </h3>
             <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '4px', marginBottom: 0 }}>
-              Tus mejores marcas registradas. Haz clic en un ejercicio para ver su progreso.
+              {t.pbDesc || 'Tus mejores marcas registradas. Haz clic en un ejercicio para ver su progreso.'}
             </p>
           </div>
 
           {/* Sub-tabs pills */}
           <div style={{ display: 'flex', gap: '6px', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '8px', border: '1px solid hsl(var(--border))', flexWrap: 'wrap' }}>
             {(['1rm', 'weight', 'volume', 'reps'] as const).map((tab) => {
-              const label = tab === '1rm' ? '1RM Est.' : tab === 'weight' ? 'Peso Máx' : tab === 'volume' ? 'Vol. Máx' : 'Perfil Reps';
+              const label = tab === '1rm' ? t.pbTab1RM : tab === 'weight' ? t.pbTabMaxWeight : tab === 'volume' ? t.pbTabMaxVolume : t.pbTabRepsProfile;
               const active = pbSubTab === tab;
               return (
                 <button
@@ -951,7 +1058,7 @@ export default function DashboardTab({
           <div style={{ flex: 1, maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
             {pbSubTab === '1rm' && (
               Object.entries(pbProfiles).length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>No hay registros aún.</div>
+                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>{t.pbNoHistory || 'Sin historial de levantamientos para este ejercicio.'}</div>
               ) : (
                 Object.entries(pbProfiles)
                   .sort((a, b) => b[1].maxEst1RM.value - a[1].maxEst1RM.value)
@@ -973,10 +1080,12 @@ export default function DashboardTab({
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '70%' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {exercise}
+                          {resolveExerciseDisplayName(exercise)}
                         </span>
                         <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
-                          Logrado: {profile.maxEst1RM.weight}kg x {profile.maxEst1RM.reps} reps
+                          {t.pbEst1RMWithReps 
+                            ? t.pbEst1RMWithReps.replace('{weight}', profile.maxEst1RM.weight.toString()).replace('{reps}', profile.maxEst1RM.reps.toString())
+                            : `Logrado: ${profile.maxEst1RM.weight}kg x ${profile.maxEst1RM.reps} reps`}
                         </span>
                       </div>
                       <span className="badge badge-primary" style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>
@@ -989,7 +1098,7 @@ export default function DashboardTab({
 
             {pbSubTab === 'weight' && (
               Object.entries(pbProfiles).length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>No hay registros aún.</div>
+                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>{t.pbNoHistory || 'Sin historial de levantamientos para este ejercicio.'}</div>
               ) : (
                 Object.entries(pbProfiles)
                   .sort((a, b) => b[1].maxWeight.weight - a[1].maxWeight.weight)
@@ -1011,10 +1120,12 @@ export default function DashboardTab({
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '70%' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {exercise}
+                          {resolveExerciseDisplayName(exercise)}
                         </span>
                         <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
-                          Realizado con {profile.maxWeight.reps} reps
+                          {t.pbMaxWeightWithReps 
+                            ? t.pbMaxWeightWithReps.replace('{reps}', profile.maxWeight.reps.toString())
+                            : `Realizado con ${profile.maxWeight.reps} reps`}
                         </span>
                       </div>
                       <span className="badge badge-secondary" style={{ fontSize: '0.8rem', fontWeight: 'bold', background: 'hsla(var(--secondary) / 0.1)', color: 'hsl(var(--secondary))', border: '1px solid hsla(var(--secondary) / 0.2)' }}>
@@ -1027,7 +1138,7 @@ export default function DashboardTab({
 
             {pbSubTab === 'volume' && (
               Object.entries(pbProfiles).length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>No hay registros aún.</div>
+                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>{t.pbNoHistory || 'Sin historial de levantamientos para este ejercicio.'}</div>
               ) : (
                 Object.entries(pbProfiles)
                   .sort((a, b) => b[1].maxVolume.value - a[1].maxVolume.value)
@@ -1049,10 +1160,10 @@ export default function DashboardTab({
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '65%' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {exercise}
+                          {resolveExerciseDisplayName(exercise)}
                         </span>
                         <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
-                          Máximo acumulado por sesión
+                          {t.pbMaxAccumulatedVolume || 'Máximo acumulado por sesión'}
                         </span>
                       </div>
                       <span className="badge badge-success" style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>
@@ -1065,11 +1176,11 @@ export default function DashboardTab({
 
             {pbSubTab === 'reps' && (
               uniqueExerciseNames.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>No hay ejercicios registrados.</div>
+                <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>{t.pbHistoryNoExercises || 'No hay ejercicios registrados.'}</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', fontWeight: 700 }}>Selecciona Ejercicio:</label>
+                    <label style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', fontWeight: 700 }}>{t.pbSelectExercise || 'Selecciona Ejercicio:'}</label>
                     <select
                       value={selectedExerciseForRepsTab}
                       onChange={(e) => setSelectedExerciseForRepsTab(e.target.value)}
@@ -1085,7 +1196,7 @@ export default function DashboardTab({
                       }}
                     >
                       {uniqueExerciseNames.map(ex => (
-                        <option key={ex} value={ex}>{ex}</option>
+                        <option key={ex} value={ex}>{resolveExerciseDisplayName(ex)}</option>
                       ))}
                     </select>
                   </div>
@@ -1106,6 +1217,7 @@ export default function DashboardTab({
                       >
                         {repsToCheck.map(r => {
                           const record = profile.repPRs[r];
+                          const dateLocaleStr = record ? new Date(record.date).toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US') : '';
                           return (
                             <div 
                               key={r} 
@@ -1119,11 +1231,11 @@ export default function DashboardTab({
                                 borderRadius: '6px',
                                 padding: '6px 4px'
                               }}
-                              title={record ? `Logrado el ${new Date(record.date).toLocaleDateString('es-ES')}` : 'Sin datos'}
+                              title={record ? (t.pbLogDate ? t.pbLogDate.replace('{date}', dateLocaleStr) : `Logrado el ${dateLocaleStr}`) : (t.pbNoData || 'Sin datos')}
                             >
-                              <span style={{ fontSize: '0.6rem', color: 'hsl(var(--muted))', fontWeight: 700 }}>{r} Reps</span>
+                              <span style={{ fontSize: '0.6rem', color: 'hsl(var(--muted))', fontWeight: 700 }}>{r} {t.pbRepsSuffix || 'Reps'}</span>
                               <strong style={{ fontSize: '0.75rem', color: record ? '#fbbf24' : 'rgba(255,255,255,0.1)' }}>
-                                {record ? `${record.weight}kg` : '---'}
+                                {record ? `${record.weight}${t.pbWeightSuffix || 'kg'}` : '---'}
                               </strong>
                             </div>
                           );
@@ -1138,9 +1250,7 @@ export default function DashboardTab({
         </div>
       </div>
     );
-  };
-
-  const renderProgressPhotoWidget = () => {
+  };  const renderProgressPhotoWidget = () => {
     const latestPhoto = progressPhotos && progressPhotos.length > 0 ? progressPhotos[0] : null;
 
     return (
@@ -1149,10 +1259,10 @@ export default function DashboardTab({
           <div>
             <h2 style={{ fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
               <Camera size={22} color="hsl(var(--primary))" />
-              Última Foto de Progreso
+              {t.latestProgressPhoto || 'Última Foto de Progreso'}
             </h2>
             <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px', marginBottom: 0 }}>
-              Tu evolución física visual en base al historial de fotos de tu perfil
+              {t.photoWidgetSubtitle || 'Tu evolución física visual en base al historial de fotos de tu perfil'}
             </p>
           </div>
           <button 
@@ -1160,7 +1270,7 @@ export default function DashboardTab({
             className="btn btn-primary"
             style={{ padding: '8px 16px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <Plus size={16} /> Añadir Foto
+            <Plus size={16} /> {t.profilePhotosFormBtn || 'Añadir Foto'}
           </button>
         </div>
 
@@ -1181,7 +1291,7 @@ export default function DashboardTab({
               borderRadius: '8px'
             }}
           >
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'hsl(var(--primary))', margin: 0 }}>Añadir Nuevo Registro Visual</h3>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'hsl(var(--primary))', margin: 0 }}>{t.photoWidgetFormTitle || 'Añadir Nuevo Registro Visual'}</h3>
             
             <div className="grid-cols-2" style={{ gap: '16px' }}>
               
@@ -1222,8 +1332,8 @@ export default function DashboardTab({
                     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer', textAlign: 'center' }}
                   >
                     <ImageIcon size={32} color="hsl(var(--muted))" />
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Hacer clic para subir foto</span>
-                    <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>Imágenes JPG, PNG. Compresión local automática</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{t.photoWidgetUploadClick || 'Hacer clic para subir foto'}</span>
+                    <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>{t.photoWidgetUploadHint || 'Imágenes JPG, PNG. Compresión local automática'}</span>
                   </div>
                 )}
                 <input 
@@ -1239,7 +1349,7 @@ export default function DashboardTab({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '4px' }}>Fecha</label>
+                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '4px' }}>{t.photoWidgetDate || 'Fecha'}</label>
                     <input 
                       type="date" 
                       value={photoDate}
@@ -1249,7 +1359,7 @@ export default function DashboardTab({
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '4px' }}>Peso Corporal (kg)</label>
+                    <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '4px' }}>{t.profileWeightInput || 'Peso Corporal (kg)'}</label>
                     <input 
                       type="number" 
                       step="0.1"
@@ -1262,11 +1372,11 @@ export default function DashboardTab({
                 </div>
                 
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '4px' }}>Nota de progreso</label>
+                  <label style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '4px' }}>{t.profilePhotosFormNote || 'Nota de progreso'}</label>
                   <textarea 
                     value={photoNote}
                     onChange={(e) => setPhotoNote(e.target.value)}
-                    placeholder="Ej: Fin del ciclo de volumen. Nuevos PBs."
+                    placeholder={language === 'es' ? 'Ej: Fin del ciclo de volumen. Nuevos PBs.' : 'E.g. End of volume cycle. New PBs.'}
                     rows={3}
                     style={{ resize: 'none', width: '100%', padding: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid hsl(var(--border))', borderRadius: '6px', color: '#fff', fontSize: '0.85rem' }}
                   />
@@ -1282,7 +1392,7 @@ export default function DashboardTab({
                 onClick={() => { setShowAddPhoto(false); setPhotoPreview(''); setPhotoNote(''); }}
                 style={{ padding: '8px 16px', fontSize: '0.85rem' }}
               >
-                Cancelar
+                {t.cancel || 'Cancelar'}
               </button>
               <button 
                 type="submit" 
@@ -1290,7 +1400,7 @@ export default function DashboardTab({
                 style={{ padding: '8px 16px', fontSize: '0.85rem' }}
                 disabled={!photoPreview}
               >
-                Guardar Registro
+                {t.photoWidgetSaveBtn || 'Guardar Registro'}
               </button>
             </div>
           </form>
@@ -1311,9 +1421,9 @@ export default function DashboardTab({
           }}>
             <Camera size={40} style={{ color: 'hsl(var(--muted))', opacity: 0.5 }} />
             <div>
-              <p style={{ fontWeight: 600, fontSize: '0.95rem', margin: '0 0 4px 0', color: '#ffffff' }}>No hay fotos de progreso</p>
+              <p style={{ fontWeight: 600, fontSize: '0.95rem', margin: '0 0 4px 0', color: '#ffffff' }}>{t.photoWidgetNoPhotos || 'No hay fotos de progreso'}</p>
               <p style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', margin: 0, maxWidth: '280px', marginInline: 'auto' }}>
-                Sube fotos de tu progreso corporal directamente o desde la pestaña de Perfil.
+                {t.photoWidgetNoPhotosHint || 'Sube fotos de tu progreso corporal directamente o desde la pestaña de Perfil.'}
               </p>
             </div>
           </div>
@@ -1345,7 +1455,7 @@ export default function DashboardTab({
             >
               <img 
                 src={latestPhoto.photoUrl} 
-                alt="Progreso más reciente" 
+                alt="Progreso" 
                 style={{ 
                   maxWidth: '100%', 
                   maxHeight: '260px',
@@ -1360,9 +1470,9 @@ export default function DashboardTab({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
                   <Calendar size={16} color="hsl(var(--muted))" />
-                  <span style={{ color: 'hsl(var(--muted))' }}>Fecha:</span>
+                  <span style={{ color: 'hsl(var(--muted))' }}>{t.photoWidgetDate || 'Fecha:'}</span>
                   <strong style={{ color: '#ffffff' }}>
-                    {new Date(latestPhoto.date).toLocaleDateString('es-ES', {
+                    {new Date(latestPhoto.date).toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
                       day: 'numeric',
                       month: 'long',
                       year: 'numeric'
@@ -1373,7 +1483,7 @@ export default function DashboardTab({
                 {latestPhoto.weight && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
                     <Scale size={16} color="hsl(var(--muted))" />
-                    <span style={{ color: 'hsl(var(--muted))' }}>Peso registrado:</span>
+                    <span style={{ color: 'hsl(var(--muted))' }}>{t.profilePhotosDetailWeightLabel || 'Peso registrado:'}</span>
                     <strong style={{ color: 'hsl(var(--primary))' }}>{latestPhoto.weight} kg</strong>
                   </div>
                 )}
@@ -1395,11 +1505,85 @@ export default function DashboardTab({
               )}
 
               <div style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', marginTop: '4px' }}>
-                💡 Puedes ver e interactuar con la foto haciendo clic en ella, o gestionarla desde el <strong>Perfil</strong>.
+                {t.photoWidgetClickDetail || '💡 Puedes ver e interactuar con la foto haciendo clic en ella, o gestionarla desde el Perfil.'}
               </div>
             </div>
           </div>
         )}
+      </div>
+    );
+  };
+  const renderWeeklySets = () => {
+    return (
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Activity size={20} color="hsl(var(--primary))" />
+            {t.weeklySetsTitle || 'Volumen de Series Semanal por Músculo'}
+          </h3>
+          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.78rem', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+            {t.weeklySetsSubtitle || 'Series completadas en la semana activa frente al objetivo saludable (10-20 series)'}
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '4px' }}>
+          {Object.entries(weeklySetsByMuscle).map(([muscle, completed]) => {
+            const target = 10;
+            const percentage = Math.min((completed / target) * 100, 100);
+            const isGoalAchieved = completed >= target;
+            
+            // Neon colors depending on muscle
+            let color = '0, 242, 254'; // cyan default
+            if (muscle === 'Pecho') color = '0, 242, 254'; // cyan
+            if (muscle === 'Espalda') color = '147, 51, 234'; // purple
+            if (muscle === 'Piernas') color = '245, 158, 11'; // amber/orange
+            if (muscle === 'Hombros') color = '236, 72, 153'; // pink
+            if (muscle === 'Brazos') color = '16, 185, 129'; // emerald green
+            if (muscle === 'Core') color = '59, 130, 246'; // blue
+
+            const translatedMuscle = language === 'es' ? muscle : (
+              muscle === 'Pecho' ? 'Chest' :
+              muscle === 'Espalda' ? 'Back' :
+              muscle === 'Piernas' ? 'Legs' :
+              muscle === 'Hombros' ? 'Shoulders' :
+              muscle === 'Brazos' ? 'Arms' :
+              muscle === 'Core' ? 'Core' : muscle
+            );
+
+            return (
+              <div key={muscle} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
+                  <span style={{ fontWeight: 700, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: `rgb(${color})`, boxShadow: `0 0 8px rgb(${color})` }} />
+                    {translatedMuscle}
+                  </span>
+                  <span style={{ color: isGoalAchieved ? 'hsl(var(--success))' : 'hsl(var(--muted))', fontWeight: 600 }}>
+                    {isGoalAchieved ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        🎉 {t.weeklySetsGoalAchieved || '¡Meta Semanal Lograda!'} ({completed})
+                      </span>
+                    ) : (
+                      t.weeklySetsCompletedOfTarget ? t.weeklySetsCompletedOfTarget.replace('{completed}', completed.toString()).replace('{target}', target.toString()) : `${completed} de ${target} series`
+                    )}
+                  </span>
+                </div>
+                
+                <div style={{ height: '8px', width: '100%', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '4px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.02)' }}>
+                  <div 
+                    style={{ 
+                      height: '100%', 
+                      width: `${percentage}%`, 
+                      background: `linear-gradient(90deg, rgba(${color}, 0.6) 0%, rgb(${color}) 100%)`, 
+                      borderRadius: '4px',
+                      boxShadow: `0 0 10px rgba(${color}, 0.5)`,
+                      transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)'
+                    }} 
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -1420,6 +1604,8 @@ export default function DashboardTab({
         return renderSplitsAndPRs();
       case 'progress_photo':
         return renderProgressPhotoWidget();
+      case 'weekly_sets':
+        return renderWeeklySets();
       default:
         return null;
     }
@@ -1458,7 +1644,7 @@ export default function DashboardTab({
             }}
           >
             <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'flex', alignItems: 'center', padding: '0 4px', fontWeight: 'bold' }}>
-              Posición
+              {language === 'es' ? 'Posición' : 'Position'}
             </span>
             <button 
               onClick={() => handleMoveWidget(index, 'up')}
@@ -1472,7 +1658,7 @@ export default function DashboardTab({
                 padding: '2px 6px',
                 fontSize: '0.8rem'
               }}
-              title="Mover Arriba"
+              title={language === 'es' ? 'Mover Arriba' : 'Move Up'}
             >
               🔼
             </button>
@@ -1488,7 +1674,7 @@ export default function DashboardTab({
                 padding: '2px 6px',
                 fontSize: '0.8rem'
               }}
-              title="Mover Abajo"
+              title={language === 'es' ? 'Mover Abajo' : 'Move Down'}
             >
               🔽
             </button>
@@ -1788,10 +1974,10 @@ export default function DashboardTab({
 
             <div style={{ maxWidth: '600px' }}>
               <h1 style={{ fontSize: '1.8rem', fontWeight: 900, letterSpacing: '-0.025em', color: '#ffffff', marginBottom: '8px' }}>
-                ¡Bienvenido a PLN<span style={{ color: 'hsl(var(--primary))' }}>EXC</span>!
+                {t.welcomeTitle || '¡Bienvenido a PLNEXC!'}
               </h1>
               <p style={{ color: 'hsl(var(--muted))', fontSize: '0.95rem', lineHeight: '1.6' }}>
-                Tu camino hacia una fuerza óptima y libre de lesiones comienza aquí. Registra tu primer entrenamiento para activar los análisis biométricos e identificar tus puntos débiles.
+                {t.welcomeDesc}
               </p>
             </div>
 
@@ -1808,37 +1994,37 @@ export default function DashboardTab({
               gap: '12px'
             }}>
               <h4 style={{ fontSize: '0.9rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--secondary))', marginBottom: '4px' }}>
-                ¿Qué se activará al registrar tu primera sesión?
+                {t.onboardingTitle}
               </h4>
               
               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '1.2rem', lineHeight: '1' }}>📊</span>
                 <div>
-                  <strong style={{ fontSize: '0.85rem', color: '#ffffff', display: 'block' }}>Curva de Fuerza 1RM Inteligente</strong>
-                  <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.4' }}>Calculamos y proyectamos tu máximo teórico estimado por ejercicio a lo largo del tiempo.</span>
+                  <strong style={{ fontSize: '0.85rem', color: '#ffffff', display: 'block' }}>{t.onboardingItem1Title}</strong>
+                  <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.4' }}>{t.onboardingItem1Desc}</span>
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '1.2rem', lineHeight: '1' }}>🩹</span>
                 <div>
-                  <strong style={{ fontSize: '0.85rem', color: '#ffffff', display: 'block' }}>Análisis de Desbalance y Lesiones</strong>
-                  <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.4' }}>Monitoreamos la distribución de carga y adaptamos tus rutinas ante molestias activas en articulaciones.</span>
+                  <strong style={{ fontSize: '0.85rem', color: '#ffffff', display: 'block' }}>{t.onboardingItem2Title}</strong>
+                  <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.4' }}>{t.onboardingItem2Desc}</span>
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: '1.2rem', lineHeight: '1' }}>⚡</span>
                 <div>
-                  <strong style={{ fontSize: '0.85rem', color: '#ffffff', display: 'block' }}>Plan de Acción de Sobrecarga</strong>
-                  <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.4' }}>Recomendaciones de volumen y frecuencia para dar prioridad a tus grupos musculares desentrenados.</span>
+                  <strong style={{ fontSize: '0.85rem', color: '#ffffff', display: 'block' }}>{t.onboardingItem3Title}</strong>
+                  <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.4' }}>{t.onboardingItem3Desc}</span>
                 </div>
               </div>
             </div>
 
             <div style={{ marginTop: '8px' }}>
               <span style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '10px' }}>
-                ¿Listo para dar el primer paso?
+                {language === 'es' ? '¿Listo para dar el primer paso?' : 'Ready to take the first step?'}
               </span>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                 <div 
@@ -1856,7 +2042,7 @@ export default function DashboardTab({
                     gap: '8px'
                   }}
                 >
-                  <Dumbbell size={16} /> Ve a la pestaña "Entrenar" para comenzar
+                  <Dumbbell size={16} /> {t.onboardingCta}
                 </div>
               </div>
             </div>
@@ -1866,7 +2052,7 @@ export default function DashboardTab({
           {(() => {
             const weightChartData = weightHistory.map(record => {
               const dateObj = new Date(record.date);
-              const formattedDate = dateObj.toLocaleDateString('es-ES', { 
+              const formattedDate = dateObj.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { 
                 day: 'numeric', 
                 month: 'short' 
               });
@@ -1881,10 +2067,10 @@ export default function DashboardTab({
                 <div>
                   <h2 style={{ fontSize: '1.3rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Scale size={22} color="hsl(var(--primary))" />
-                    Evolución del Peso Corporal
+                    {t.bodyWeightEvolTitle}
                   </h2>
                   <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '2px' }}>
-                    Historial de pesajes registrados en tu perfil a lo largo del tiempo
+                    {t.bodyWeightEvolSubtitle}
                   </p>
                 </div>
 
@@ -1932,7 +2118,7 @@ export default function DashboardTab({
                     </ResponsiveContainer>
                   ) : (
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'hsl(var(--muted))' }}>
-                      Registra tu peso en la pestaña de Perfil para ver la gráfica de progreso.
+                      {t.bodyWeightNoHistory}
                     </div>
                   )}
                 </div>
@@ -2080,7 +2266,7 @@ export default function DashboardTab({
                 if (!profile || profile.history1RM.length === 0) {
                   return (
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'hsl(var(--muted))', fontSize: '0.85rem' }}>
-                      Sin historial de levantamientos para este ejercicio.
+                      {t.pbNoHistory || 'Sin historial de levantamientos para este ejercicio.'}
                     </div>
                   );
                 }
@@ -2089,7 +2275,7 @@ export default function DashboardTab({
                 const chartData = profile.history1RM.map(pt => {
                   const date = new Date(pt.date);
                   return {
-                    name: date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+                    name: date.toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { day: 'numeric', month: 'short' }),
                     '1RM (kg)': pt.value,
                     'Peso Levantado (kg)': pt.weight,
                     reps: pt.reps
@@ -2126,11 +2312,11 @@ export default function DashboardTab({
                         }}
                         formatter={(value, name) => {
                           if (name === '1RM (kg)') {
-                            return [`${value} kg`, '1RM Estimado'];
+                            return [`${value} kg`, t.pbTab1RM || '1RM Estimado'];
                           }
                           return [value, name];
                         }}
-                        labelFormatter={(label) => `Fecha: ${label}`}
+                        labelFormatter={(label) => `${language === 'es' ? 'Fecha' : 'Date'}: ${label}`}
                       />
                       <Line 
                         type="monotone" 
@@ -2153,7 +2339,7 @@ export default function DashboardTab({
               
               const formatDateStr = (dateStr: string) => {
                 if (!dateStr) return '---';
-                return new Date(dateStr).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                return new Date(dateStr).toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' });
               };
 
               return (
@@ -2247,15 +2433,14 @@ export default function DashboardTab({
                 style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain' }} 
               />
             </div>
-
             <div style={{ width: '100%', padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px', background: 'hsl(var(--bg-card))', borderLeft: '1px solid hsl(var(--border))' }} className="lightbox-info-panel">
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>Detalles del Progreso</h3>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>{t.profilePhotosDetailTitle || 'Detalles del Progreso'}</h3>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'hsl(var(--muted))', fontSize: '0.85rem' }}>
                   <Calendar size={14} />
                   <span>
-                    {new Date(activeLightboxPhoto.date).toLocaleDateString('es-ES', {
+                    {new Date(activeLightboxPhoto.date).toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
                       day: 'numeric',
                       month: 'long',
                       year: 'numeric'
@@ -2266,7 +2451,7 @@ export default function DashboardTab({
                 {activeLightboxPhoto.weight && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'hsl(var(--muted))', fontSize: '0.85rem' }}>
                     <Scale size={14} />
-                    <span>Peso registrado: <strong>{activeLightboxPhoto.weight} kg</strong></span>
+                    <span>{t.profilePhotosDetailWeightLabel || 'Peso registrado:'} <strong>{activeLightboxPhoto.weight} kg</strong></span>
                   </div>
                 )}
               </div>
@@ -2274,16 +2459,16 @@ export default function DashboardTab({
               <hr style={{ border: 'none', borderBottom: '1px solid hsl(var(--border))', margin: '8px 0' }} />
 
               <div>
-                <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nota / Comentario</span>
+                <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.profilePhotosNotesLabel || 'Nota / Comentario'}</span>
                 <p style={{ fontSize: '0.9rem', color: '#fff', marginTop: '6px', lineHeight: '1.4', whiteSpace: 'pre-wrap', fontStyle: activeLightboxPhoto.note ? 'normal' : 'italic', margin: 0 }}>
-                  {activeLightboxPhoto.note || 'Sin anotaciones para este registro.'}
+                  {activeLightboxPhoto.note || (t.profilePhotosNotesEmpty || 'Sin anotaciones para este registro.')}
                 </p>
               </div>
 
               {onDeleteProgressPhoto && (
                 <button 
                   onClick={() => {
-                    if (window.confirm('¿Estás seguro de que deseas eliminar esta foto de progreso permanentemente?')) {
+                    if (window.confirm(t.photoDeleteConfirm || '¿Estás seguro de que deseas eliminar esta foto de progreso permanentemente?')) {
                       onDeleteProgressPhoto(activeLightboxPhoto.id);
                       setActiveLightboxPhoto(null);
                     }

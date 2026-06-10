@@ -26,6 +26,7 @@ import RoutineBuilder from './RoutineBuilder';
 import { DEFAULT_PRESETS } from '../data/default_routines';
 import { EXERCISES_DB } from '../data/exercises_db';
 import { getStrengthStandards } from '../utils/StrengthStandards';
+import { TRANSLATIONS, getExerciseName, translateEngineText } from '../utils/translations';
 
 interface WorkoutTabProps {
   activeInjury: {
@@ -45,6 +46,7 @@ interface WorkoutTabProps {
   height: number;
   gender: 'Masculino' | 'Femenino';
   bodyFat: number;
+  language: 'es' | 'en';
 }
 
 export default function WorkoutTab({ 
@@ -59,8 +61,55 @@ export default function WorkoutTab({
   bodyWeight,
   height,
   gender,
-  bodyFat
+  bodyFat,
+  language
 }: WorkoutTabProps) {
+  const t = TRANSLATIONS[language];
+
+  const getLocalDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const resolveExerciseDisplayName = (title: string) => {
+    const found = EXERCISES_DB.find(ex => ex.title.toLowerCase() === title.toLowerCase() || ex.id === title);
+    if (found) {
+      return getExerciseName(found.id, found.title, language);
+    }
+    return title;
+  };
+
+  const translateMuscleGroup = (m: string) => {
+    if (language === 'es') return m;
+    const mapping: any = {
+      'Piernas': 'Legs',
+      'Brazos': 'Arms',
+      'Core': 'Core',
+      'Hombros': 'Shoulders',
+      'Pecho': 'Chest',
+      'Espalda': 'Back',
+      'Cuello': 'Neck',
+      'Cardio': 'Cardio'
+    };
+    return mapping[m] || m;
+  };
+
+  const translateEquipment = (e: string) => {
+    if (language === 'es') return e;
+    const mapping: any = {
+      'Barra': 'Barbell',
+      'Mancuerna': 'Dumbbell',
+      'Peso Corporal': 'Bodyweight',
+      'Polea/Cable': 'Cable',
+      'Banda': 'Band',
+      'Otro': 'Other'
+    };
+    return mapping[e] || e;
+  };
+
   // Calculate PBs from history
   const pbProfiles = useMemo(() => calculatePBProfiles(localHistory), [localHistory]);
 
@@ -494,7 +543,8 @@ export default function WorkoutTab({
           weight_kg: weight || null,
           reps: reps || null,
           rpe: s.rpe || null,
-          hasPain: s.hasPain || false
+          hasPain: s.hasPain || false,
+          completed: s.completed || false
         };
       });
 
@@ -556,12 +606,19 @@ export default function WorkoutTab({
         const details: string[] = [];
 
         if (maxWeightInSession > oldMaxWeight) {
-          details.push(`Peso Máximo: de ${oldMaxWeight} kg a ${maxWeightInSession} kg (x ${sessionMaxWeightReps} reps)`);
+          details.push(t.pbCelebrationDetailMaxWeight
+            .replace('{old}', oldMaxWeight.toString())
+            .replace('{new}', maxWeightInSession.toString())
+            .replace('{reps}', sessionMaxWeightReps.toString())
+          );
           exerciseBroken = true;
         }
 
         if (maxEst1RMInSession > oldMaxEst1RM) {
-          details.push(`1RM Estimado: de ${Math.round(oldMaxEst1RM)} kg a ${Math.round(maxEst1RMInSession)} kg`);
+          details.push(t.pbCelebrationDetailEst1RM
+            .replace('{old}', Math.round(oldMaxEst1RM).toString())
+            .replace('{new}', Math.round(maxEst1RMInSession).toString())
+          );
           exerciseBroken = true;
         }
 
@@ -570,7 +627,11 @@ export default function WorkoutTab({
           const reps = parseInt(repsStr, 10);
           const oldRepPR = profile.repPRs[reps]?.weight || 0;
           if (oldRepPR > 0 && weight > oldRepPR) {
-            details.push(`Récord para ${reps} reps: de ${oldRepPR} kg a ${weight} kg`);
+            details.push(t.pbCelebrationDetailRepPR
+              .replace('{reps}', reps.toString())
+              .replace('{old}', oldRepPR.toString())
+              .replace('{new}', weight.toString())
+            );
             exerciseBroken = true;
           }
         });
@@ -703,8 +764,8 @@ export default function WorkoutTab({
         {/* Wizard Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <span className="badge badge-primary" style={{ marginBottom: '4px' }}>Cuestionario de Preparación (Readiness)</span>
-            <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Evaluación de Recuperación</h2>
+            <span className="badge badge-primary" style={{ marginBottom: '4px' }}>{t.readinessTitle}</span>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{t.readinessSubtitle}</h2>
           </div>
           <button 
             onClick={() => {
@@ -720,8 +781,8 @@ export default function WorkoutTab({
         {/* Wizard Progress Bar */}
         <div className="wizard-progress-container">
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'hsl(var(--muted))', marginBottom: '6px' }}>
-            <span>Paso {wizardStep} de 5</span>
-            <span>{Math.round((wizardStep / 5) * 100)}% Completado</span>
+            <span>{t.readinessStep.replace('{step}', wizardStep.toString())}</span>
+            <span>{t.readinessPercent.replace('{percent}', Math.round((wizardStep / 5) * 100).toString())}</span>
           </div>
           <div className="wizard-progress-track">
             <div className="wizard-progress-bar" style={{ width: `${(wizardStep / 5) * 100}%` }} />
@@ -731,13 +792,13 @@ export default function WorkoutTab({
         {/* STEP 1: SLEEP */}
         {wizardStep === 1 && (
           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>💤 Paso 1: ¿Cómo evalúas tu descanso y sueño de anoche?</h3>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{t.readinessQ1}</h3>
             <div className="wizard-cards-grid">
               {[
-                { val: 1, label: 'Insuficiente / Interrumpido', desc: 'Dormí menos de 5 horas o me desperté constantemente.' },
-                { val: 2, label: 'Regular / Incompleto', desc: 'Dormí unas 6 horas, me siento cansado.' },
-                { val: 3, label: 'Bueno / Descansado', desc: 'Dormí 7-8 horas, me siento recuperado.' },
-                { val: 4, label: 'Excelente / Profundo', desc: 'Descanso ideal, dormí más de 8 horas sin interrupción.' }
+                { val: 1, label: t.readinessO1_1, desc: t.readinessO1_1D },
+                { val: 2, label: t.readinessO1_2, desc: t.readinessO1_2D },
+                { val: 3, label: t.readinessO1_3, desc: t.readinessO1_3D },
+                { val: 4, label: t.readinessO1_4, desc: t.readinessO1_4D }
               ].map(opt => (
                 <div 
                   key={opt.val}
@@ -758,13 +819,13 @@ export default function WorkoutTab({
         {/* STEP 2: FATIGUE */}
         {wizardStep === 2 && (
           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>🩹 Paso 2: ¿Tienes agujetas o cansancio muscular de tus últimos entrenamientos?</h3>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{t.readinessQ2}</h3>
             <div className="wizard-cards-grid">
               {[
-                { val: 1, label: 'Fatiga Extrema / Agujetas Fuertes', desc: 'Siento dolor agudo o agujetas intensas en los músculos que voy a entrenar hoy.' },
-                { val: 2, label: 'Fatiga Moderada', desc: 'Siento tensión y cansancio acumulado, pero tolerable.' },
-                { val: 3, label: 'Fatiga Leve', desc: 'Alguna molestia menor, pero en general me siento bien.' },
-                { val: 4, label: 'Totalmente Recuperado', desc: 'Músculos frescos y listos para rendir al máximo.' }
+                { val: 1, label: t.readinessO2_1, desc: t.readinessO2_1D },
+                { val: 2, label: t.readinessO2_2, desc: t.readinessO2_2D },
+                { val: 3, label: t.readinessO2_3, desc: t.readinessO2_3D },
+                { val: 4, label: t.readinessO2_4, desc: t.readinessO2_4D }
               ].map(opt => (
                 <div 
                   key={opt.val}
@@ -785,13 +846,13 @@ export default function WorkoutTab({
         {/* STEP 3: STRESS */}
         {wizardStep === 3 && (
           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>🧠 Paso 3: ¿Cuál es tu nivel de estrés mental y capacidad de foco hoy?</h3>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{t.readinessQ3}</h3>
             <div className="wizard-cards-grid">
               {[
-                { val: 1, label: 'Estrés Alto / Muy Distraído', desc: 'Mucha sobrecarga mental, ansiedad o problemas para concentrarme.' },
-                { val: 2, label: 'Estrés Moderado', desc: 'Con algunas preocupaciones de fondo, foco normal.' },
-                { val: 3, label: 'Bajo Estrés', desc: 'Buena disposición mental, concentración adecuada.' },
-                { val: 4, label: 'Foco Máximo / Motivado', desc: 'Mente despejada, determinación de acero y listo para entrenar.' }
+                { val: 1, label: t.readinessO3_1, desc: t.readinessO3_1D },
+                { val: 2, label: t.readinessO3_2, desc: t.readinessO3_2D },
+                { val: 3, label: t.readinessO3_3, desc: t.readinessO3_3D },
+                { val: 4, label: t.readinessO3_4, desc: t.readinessO3_4D }
               ].map(opt => (
                 <div 
                   key={opt.val}
@@ -812,13 +873,13 @@ export default function WorkoutTab({
         {/* STEP 4: ENERGY */}
         {wizardStep === 4 && (
           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>⚡ Paso 4: ¿Qué tan enérgico y motivado te sientes físicamente hoy?</h3>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{t.readinessQ4}</h3>
             <div className="wizard-cards-grid">
               {[
-                { val: 1, label: 'Sin Energía / Cansado', desc: 'Siento pesadez en el cuerpo y falta de ganas de entrenar.' },
-                { val: 2, label: 'Energía Moderada', desc: 'Nivel estable, listo para cumplir el plan de entrenamiento.' },
-                { val: 3, label: 'Con Energía / Fuerte', desc: 'Siento buena potencia y motivación para entrenar intenso.' },
-                { val: 4, label: 'Energía Máxima / Explosivo', desc: 'Sensación de fuerza ideal, listo para romper récords personales.' }
+                { val: 1, label: t.readinessO4_1, desc: t.readinessO4_1D },
+                { val: 2, label: t.readinessO4_2, desc: t.readinessO4_2D },
+                { val: 3, label: t.readinessO4_3, desc: t.readinessO4_3D },
+                { val: 4, label: t.readinessO4_4, desc: t.readinessO4_4D }
               ].map(opt => (
                 <div 
                   key={opt.val}
@@ -840,12 +901,16 @@ export default function WorkoutTab({
         {wizardStep === 5 && (
           <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ textAlign: 'center', padding: '10px 0' }}>
-              <span style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Cálculo de Preparación Física</span>
+              <span style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>{t.readinessSubtitle}</span>
               <div style={{ fontSize: '3rem', fontWeight: 900, color: 'hsl(var(--primary))', margin: '8px 0', textShadow: '0 0 15px hsla(var(--primary) / 0.3)' }}>
                 {calculatedScore}/10
               </div>
               <strong style={{ fontSize: '1.05rem', color: '#fff' }}>
-                {calculatedScore <= 4 ? '⚠️ Fatiga Alta / Deload Aconsejado' : calculatedScore >= 8 ? '🔥 Energía Excelente / Sobrecarga Normal' : '✅ Estado Óptimo / Recuperación Adecuada'}
+                {calculatedScore <= 4 
+                  ? (language === 'es' ? '⚠️ Fatiga Alta / Deload Aconsejado' : '⚠️ High Fatigue / Deload Advised') 
+                  : calculatedScore >= 8 
+                    ? (language === 'es' ? '🔥 Energía Excelente / Sobrecarga Normal' : '🔥 Excellent Energy / Normal Overload') 
+                    : (language === 'es' ? '✅ Estado Óptimo / Recuperación Adecuada' : '✅ Optimal State / Adequate Recovery')}
               </strong>
             </div>
 
@@ -861,17 +926,11 @@ export default function WorkoutTab({
               }}
             >
               {calculatedScore <= 4 ? (
-                <span>
-                  <strong>Decisión del Coach:</strong> Tu cuerpo está acumulando fatiga. Hoy realizaremos un <strong>Deload (descarga)</strong> en las cargas propuestas. Esto te ayudará a restaurar tu sistema nervioso y evitar lesiones, manteniendo el estímulo sin sobrecargar.
-                </span>
+                <span>{t.readinessDeloadDecision}</span>
               ) : calculatedScore >= 8 ? (
-                <span>
-                  <strong>Decisión del Coach:</strong> Tu cuerpo está en perfectas condiciones. Aplicaremos una <strong>Sobrecarga Progresiva Normal</strong> basada en tu historial. ¡Prepárate para entrenar al máximo y buscar progresiones!
-                </span>
+                <span>{t.readinessNormalDecision}</span>
               ) : (
-                <span>
-                  <strong>Decisión del Coach:</strong> Tienes un nivel de recuperación estable. Mantendremos cargas estándares de tu ciclo de progreso actual para seguir sumando volumen de forma segura.
-                </span>
+                <span>{t.readinessStableDecision}</span>
               )}
             </div>
 
@@ -882,14 +941,15 @@ export default function WorkoutTab({
                 handleStartWorkout(calculatedScore);
                 setShowRecoveryWizard(false);
                 setWizardStep(1);
-                const todayStr = new Date().toISOString().split('T')[0];
+                const todayStr = getLocalDateString();
                 localStorage.setItem('plnexc_last_recovery_date', todayStr);
                 localStorage.setItem('plnexc_last_recovery_score', calculatedScore.toString());
               }}
               style={{ width: '100%', padding: '14px', fontSize: '1rem', fontWeight: 'bold' }}
             >
-              Iniciar Entrenamiento Activo 🔥
-            </button>          </div>
+              {t.readinessStartBtn}
+            </button>
+          </div>
         )}
 
         {/* Wizard Footer Nav */}
@@ -900,7 +960,7 @@ export default function WorkoutTab({
               onClick={() => setWizardStep(wizardStep - 1)}
               style={{ padding: '6px 16px', fontSize: '0.85rem' }}
             >
-              Atrás
+              {t.readinessBackBtn}
             </button>
           ) : (
             <div />
@@ -914,7 +974,7 @@ export default function WorkoutTab({
             }}
             style={{ padding: '6px 16px', fontSize: '0.85rem', borderColor: 'rgba(255,255,255,0.08)' }}
           >
-            Cancelar
+            {t.cancel}
           </button>
         </div>
       </div>
@@ -1165,11 +1225,11 @@ export default function WorkoutTab({
               <div>
                 <h2 style={{ fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Flame size={24} color="hsl(var(--primary))" />
-                  Nueva Sesión de Fuerza
+                  {t.newWorkoutSession}
                   <span style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))', fontWeight: 'normal', opacity: 0.5, marginLeft: '6px' }}>v1.4.1</span>
                 </h2>
                 <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', marginTop: '2px' }}>
-                  Elige tu rutina o diseña una personalizada. El coach recalculará tu sobrecarga óptima.
+                  {t.newWorkoutSessionDesc}
                 </p>
               </div>
 
@@ -1178,7 +1238,7 @@ export default function WorkoutTab({
             <div>
               {/* Routine Cards Selection */}
               <div>
-                <label style={{ fontSize: '0.9rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Seleccionar Rutina</label>
+                <label style={{ fontSize: '0.9rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>{language === 'es' ? 'Seleccionar Rutina' : 'Select Routine'}</label>
                 <div 
                   ref={routineGridRef}
                   className="routine-grid"
@@ -1213,7 +1273,7 @@ export default function WorkoutTab({
                     }}
                   >
                     <Plus size={28} color="hsl(var(--primary))" style={{ opacity: 0.8 }} />
-                    <span style={{ fontSize: '0.85rem', color: 'hsl(var(--primary))', fontWeight: 700 }}>Crear Rutina</span>
+                    <span style={{ fontSize: '0.85rem', color: 'hsl(var(--primary))', fontWeight: 700 }}>{t.createRoutineBtn}</span>
                   </div>
 
                   {routines.map((r) => (
@@ -1229,7 +1289,11 @@ export default function WorkoutTab({
                         <span className={`badge ${
                           r.highlight === 'created' ? 'badge-success' : r.highlight === 'modified' ? 'badge-secondary' : 'badge-primary'
                         }`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
-                          {r.highlight === 'created' ? '★ Creada por ti' : r.highlight === 'modified' ? '✎ Modificada' : '✦ Prediseñada'}
+                          {r.highlight === 'created' 
+                            ? (language === 'es' ? '★ Creada por ti' : '★ Created by you') 
+                            : r.highlight === 'modified' 
+                              ? (language === 'es' ? '✎ Modificada' : '✎ Modified') 
+                              : (language === 'es' ? '✦ Prediseñada' : '✦ Preset')}
                         </span>
                         
                         <div style={{ display: 'flex', gap: '6px' }}>
@@ -1240,7 +1304,7 @@ export default function WorkoutTab({
                               setEditingRoutine({ title: r.title, exercises: r.exercises });
                               setIsBuildingRoutine(true);
                             }}
-                            title="Editar Rutina"
+                            title={language === 'es' ? 'Editar Rutina' : 'Edit Routine'}
                           >
                             <Edit2 size={13} />
                           </button>
@@ -1248,12 +1312,12 @@ export default function WorkoutTab({
                             className="btn-card-action btn-card-danger" 
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm(`¿Estás seguro de que quieres eliminar la rutina "${r.title}"?`)) {
+                              if (window.confirm(language === 'es' ? `¿Estás seguro de que quieres eliminar la rutina "${r.title}"?` : `Are you sure you want to delete the routine "${r.title}"?`)) {
                                 onDeleteRoutine(r.title);
                                 setSelectedRoutine(routines.find(rout => rout.title !== r.title)?.title || '');
                               }
                             }}
-                            title="Eliminar Rutina"
+                            title={language === 'es' ? 'Eliminar Rutina' : 'Delete Routine'}
                           >
                             <Trash2 size={13} />
                           </button>
@@ -1265,14 +1329,20 @@ export default function WorkoutTab({
                           {r.title}
                         </h4>
                         <p style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '32px', lineHeight: '1.4' }}>
-                          {r.exercises.length > 0 ? r.exercises.join(', ') : 'Sin ejercicios registrados'}
+                          {r.exercises.length > 0 
+                            ? r.exercises.map(resolveExerciseDisplayName).join(', ') 
+                            : (language === 'es' ? 'Sin ejercicios registrados' : 'No exercises registered')}
                         </p>
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', fontWeight: 600 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'hsl(var(--primary))' }}>
                           <Dumbbell size={14} />
-                          <span>{r.exercises.length} {r.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}</span>
+                          <span>{r.exercises.length} {
+                            r.exercises.length === 1 
+                              ? (language === 'es' ? 'ejercicio' : 'exercise') 
+                              : (language === 'es' ? 'ejercicios' : 'exercises')
+                          }</span>
                         </div>
                       </div>
                     </div>
@@ -1534,7 +1604,7 @@ export default function WorkoutTab({
                   </h3>
                   {ex.isSubstituted && (
                     <span className="badge badge-warning" style={{ marginTop: '6px' }}>
-                      ⚠️ Variante PLNEXC por dolor en {activeInjury ? (MILO_REHAB_PROTOCOLS[activeInjury.joint]?.displayName || activeInjury.joint) : ''}
+                      {language === 'es' ? '⚠️ Variante PLNEXC por dolor en' : '⚠️ PLNEXC variation due to pain in'} {activeInjury ? (translateEngineText(MILO_REHAB_PROTOCOLS[activeInjury.joint]?.displayName || '', language) || activeInjury.joint) : ''}
                     </span>
                   )}
                 </div>
@@ -1746,12 +1816,12 @@ export default function WorkoutTab({
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '450px' }}>
                   <thead>
                     <tr style={{ color: 'hsl(var(--muted))', fontSize: '0.8rem', textTransform: 'uppercase' }}>
-                      <th style={{ padding: '8px' }}>Set</th>
-                      <th style={{ padding: '8px' }}>Tipo</th>
-                      <th style={{ padding: '8px' }}>Peso (kg)</th>
-                      <th style={{ padding: '8px' }}>Reps</th>
-                      <th style={{ padding: '8px' }}>RPE / Dolor</th>
-                      <th style={{ padding: '8px', textAlign: 'center' }}>Check</th>
+                      <th style={{ padding: '8px' }}>{t.tableSet}</th>
+                      <th style={{ padding: '8px' }}>{t.tableType}</th>
+                      <th style={{ padding: '8px' }}>{t.tableWeight}</th>
+                      <th style={{ padding: '8px' }}>{language === 'es' ? 'Reps' : 'Reps'}</th>
+                      <th style={{ padding: '8px' }}>RPE / {t.tablePain}</th>
+                      <th style={{ padding: '8px', textAlign: 'center' }}>{t.tableCompleted}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1770,9 +1840,9 @@ export default function WorkoutTab({
                             onChange={(e) => handleSetChange(exIdx, setIdx, 'setType', e.target.value)}
                             style={{ padding: '4px', fontSize: '0.75rem', width: 'auto' }}
                           >
-                            <option value="normal">Normal</option>
-                            <option value="warmup">Warmup</option>
-                            <option value="failure">Al Fallo</option>
+                            <option value="normal">{t.tableNormal}</option>
+                            <option value="warmup">{t.tableWarmup}</option>
+                            <option value="failure">{language === 'es' ? 'Al Fallo' : 'To Failure'}</option>
                             <option value="dropset">Dropset</option>
                           </select>
                         </td>
@@ -1899,10 +1969,10 @@ export default function WorkoutTab({
               {/* Set Actions Buttons */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
                 <button className="btn btn-secondary" onClick={() => handleRemoveSet(exIdx)} style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
-                  Quitar Serie
+                  {t.activeWorkoutRemoveSet}
                 </button>
                 <button className="btn btn-secondary" onClick={() => handleAddSet(exIdx)} style={{ padding: '4px 10px', fontSize: '0.75rem', borderColor: 'hsl(var(--primary))', color: 'hsl(var(--primary))' }}>
-                  Añadir Serie
+                  {t.activeWorkoutAddSet}
                 </button>
               </div>
 
@@ -1955,14 +2025,14 @@ export default function WorkoutTab({
                 textShadow: '0 0 15px rgba(251, 191, 36, 0.4)',
                 margin: 0
               }}>
-                ¡Récords Personales Superados!
+                {t.pbCelebrationTitle}
               </h2>
               <p style={{
                 color: 'hsl(var(--muted))',
                 fontSize: '0.9rem',
                 marginTop: '6px'
               }}>
-                ¡Excelente trabajo! Has superado marcas previas en esta sesión.
+                {t.pbCelebrationSubtitle}
               </p>
             </div>
 
@@ -1985,7 +2055,7 @@ export default function WorkoutTab({
                   marginBottom: idx < brokenPBs.length - 1 ? '10px' : 0
                 }}>
                   <strong style={{ fontSize: '0.95rem', color: '#ffffff', display: 'block', marginBottom: '4px' }}>
-                    💪 {pb.exercise}
+                    💪 {resolveExerciseDisplayName(pb.exercise)}
                   </strong>
                   <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.825rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.4' }}>
                     {pb.details.map((detail: string, dIdx: number) => (
@@ -2022,7 +2092,7 @@ export default function WorkoutTab({
                 cursor: 'pointer'
               }}
             >
-              ¡Genial, Guardar Progreso!
+              {t.pbCelebrationSaveBtn}
             </button>
           </div>
         </div>,
@@ -2074,7 +2144,7 @@ export default function WorkoutTab({
                   {selectedRoutineObj.title}
                 </h3>
                 <p style={{ color: 'hsl(var(--muted))', fontSize: '0.75rem', margin: '2px 0 0 0' }}>
-                  Vista previa de ejercicios • {previewExercises.length} {previewExercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                  {t.routinePreviewTitle} • {t.routineExercisesCount.replace('{count}', previewExercises.length.toString())}
                 </p>
               </div>
               {/* Minimalist close button */}
@@ -2094,7 +2164,7 @@ export default function WorkoutTab({
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = 'hsl(var(--muted))'; e.currentTarget.style.background = 'transparent'; }}
-                title="Cerrar vista previa"
+                title={t.close}
               >
                 <X size={18} />
               </button>
@@ -2150,11 +2220,11 @@ export default function WorkoutTab({
                         
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>
-                            {ex.title}
+                            {resolveExerciseDisplayName(ex.title)}
                           </strong>
                           {willBeSubstituted && (
                             <span style={{ fontSize: '0.7rem', color: 'hsl(var(--warning))', fontWeight: 600, marginTop: '2px' }}>
-                              ⚠️ Sustituido por: {substitutionTitle}
+                              ⚠️ {language === 'es' ? 'Sustituido por:' : 'Substituted by:'} {resolveExerciseDisplayName(substitutionTitle)}
                             </span>
                           )}
                         </div>
@@ -2164,10 +2234,10 @@ export default function WorkoutTab({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', gap: '6px' }}>
                           <span className="badge badge-primary" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize' }}>
-                            {ex.muscleGroup}
+                            {translateMuscleGroup(ex.muscleGroup)}
                           </span>
                           <span className="badge badge-success" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize' }}>
-                            {ex.equipment}
+                            {translateEquipment(ex.equipment)}
                           </span>
                         </div>
 
@@ -2196,7 +2266,7 @@ export default function WorkoutTab({
                                 }}
                               >
                                 <Target size={12} />
-                                <span>Estándares</span>
+                                <span>{language === 'es' ? 'Estándares' : 'Standards'}</span>
                               </button>
                             );
                           })()}
@@ -2243,7 +2313,7 @@ export default function WorkoutTab({
                                 }}
                               >
                                 <BookOpen size={12} />
-                                <span>Guía</span>
+                                <span>{language === 'es' ? 'Guía' : 'Guide'}</span>
                               </button>
                             );
                           })()}
@@ -2254,8 +2324,8 @@ export default function WorkoutTab({
                     {/* Collapsible details (injury substitution reasons) */}
                     {willBeSubstituted && subRule && (
                       <div style={{ background: 'hsla(var(--warning) / 0.04)', border: '1px solid hsla(var(--warning) / 0.15)', padding: '10px 12px', borderRadius: '6px', fontSize: '0.75rem', color: 'hsl(var(--warning))' }}>
-                        <strong>Motivo del Cambio:</strong> {subRule.reason} <br />
-                        <strong>Rehab Tips:</strong> {subRule.rehabTips}
+                        <strong>{language === 'es' ? 'Motivo del Cambio:' : 'Reason for Change:'}</strong> {translateEngineText(subRule.reason, language)} <br />
+                        <strong>Rehab Tips:</strong> {translateEngineText(subRule.rehabTips, language)}
                       </div>
                     )}
 
@@ -2267,21 +2337,21 @@ export default function WorkoutTab({
                         <div className="standards-container" style={{ margin: 0, padding: '10px', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid hsla(var(--border) / 0.4)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                             <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
-                              Estándares de Fuerza para tu peso
+                              {language === 'es' ? 'Estándares de Fuerza para tu peso' : 'Strength Standards for your weight'}
                             </span>
                             <span style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))' }}>{standards.label}</span>
                           </div>
                           <div className="standards-grid" style={{ gap: '8px' }}>
                             <div className="standard-card beginner" style={{ padding: '6px' }}>
-                              <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>Principiante</span>
+                              <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>{language === 'es' ? 'Principiante' : 'Beginner'}</span>
                               <strong style={{ fontSize: '0.75rem', color: '#93c5fd' }}>{standards.beginner}</strong>
                             </div>
                             <div className="standard-card intermediate" style={{ padding: '6px' }}>
-                              <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>Intermedio</span>
+                              <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>{language === 'es' ? 'Intermedio' : 'Intermediate'}</span>
                               <strong style={{ fontSize: '0.75rem', color: 'hsl(var(--primary))' }}>{standards.intermediate}</strong>
                             </div>
                             <div className="standard-card advanced" style={{ padding: '6px' }}>
-                              <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>Avanzado</span>
+                              <span style={{ fontSize: '0.55rem', color: 'hsl(var(--muted))' }}>{language === 'es' ? 'Avanzado' : 'Advanced'}</span>
                               <strong style={{ fontSize: '0.75rem', color: 'hsl(var(--secondary))' }}>{standards.advanced}</strong>
                             </div>
                           </div>
@@ -2347,7 +2417,7 @@ export default function WorkoutTab({
               <button 
                 className="btn btn-primary" 
                 onClick={() => {
-                  const todayStr = new Date().toISOString().split('T')[0];
+                  const todayStr = getLocalDateString();
                   const lastRecoveryDate = localStorage.getItem('plnexc_last_recovery_date');
                   if (lastRecoveryDate === todayStr) {
                     const lastScoreStr = localStorage.getItem('plnexc_last_recovery_score');
@@ -2372,7 +2442,7 @@ export default function WorkoutTab({
                   boxShadow: '0 0 15px hsla(var(--primary) / 0.3)'
                 }}
               >
-                <Play size={16} /> Iniciar Entrenamiento
+                <Play size={16} /> {t.routineStartBtn}
               </button>
             </div>
           </div>

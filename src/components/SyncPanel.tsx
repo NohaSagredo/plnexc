@@ -28,6 +28,7 @@ import {
   uploadUserData, 
   mergeLocalAndCloudData 
 } from '../utils/firebaseSync';
+import { TRANSLATIONS } from '../utils/translations';
 
 interface SyncPanelProps {
   customRoutines: any[];
@@ -57,6 +58,8 @@ interface SyncPanelProps {
   setProfilePicture: (pic: string) => void;
   progressPhotos: any[];
   setProgressPhotos: (photos: any[]) => void;
+  language: 'es' | 'en';
+  setLanguage: (lang: 'es' | 'en') => void;
 }
 
 export default function SyncPanel({
@@ -86,8 +89,11 @@ export default function SyncPanel({
   profilePicture,
   setProfilePicture,
   progressPhotos,
-  setProgressPhotos
+  setProgressPhotos,
+  language,
+  setLanguage
 }: SyncPanelProps) {
+  const t = TRANSLATIONS[language];
   const [user, setUser] = useState<User | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -110,9 +116,9 @@ export default function SyncPanel({
       })
       .catch((err: any) => {
         console.error('Error in Google redirect result:', err);
-        let localizedError = `Error al iniciar sesión con Google: ${err.code || err.message}`;
+        let localizedError = `${t.syncErrorGoogleRedirect} ${err.code || err.message}`;
         if (err.code === 'auth/operation-not-allowed') {
-          localizedError = 'El inicio de sesión con Google está desactivado en la consola de Firebase. Habilítalo en Firebase Console > Authentication > Sign-in method.';
+          localizedError = t.syncErrorGoogleDisabled;
         }
         setError(localizedError);
       });
@@ -128,7 +134,7 @@ export default function SyncPanel({
       }
     });
     return unsubscribe;
-  }, []);
+  }, [language]);
 
   // Trigger sync process
   const triggerSync = async (userId: string) => {
@@ -156,7 +162,8 @@ export default function SyncPanel({
         cardioTargetMinutes,
         cardioHistory,
         profilePicture,
-        progressPhotos
+        progressPhotos,
+        language
       };
 
       // 2. Download from Cloud Firestore
@@ -174,7 +181,7 @@ export default function SyncPanel({
           err.code === 'permission-denied'
         ) {
           setDbNotEnabledError(true);
-          throw new Error('Base de datos Firestore no habilitada en la consola.');
+          throw new Error(t.syncErrorDbNotEnabled);
         }
         throw err;
       }
@@ -197,6 +204,10 @@ export default function SyncPanel({
         setCardioHistory(merged.cardioHistory);
         setProfilePicture(merged.profilePicture);
         setProgressPhotos(merged.progressPhotos);
+        if (merged.language) {
+          setLanguage(merged.language);
+          localStorage.setItem('plnexc_language', merged.language);
+        }
         
         // Update local user sessions in localStorage
         localStorage.setItem('milo_user_sessions', JSON.stringify(merged.userSessions));
@@ -239,7 +250,8 @@ export default function SyncPanel({
             cardioTargetMinutes: merged.cardioTargetMinutes,
             cardioHistory: merged.cardioHistory,
             profilePicture: merged.profilePicture,
-            progressPhotos: merged.progressPhotos
+            progressPhotos: merged.progressPhotos,
+            language: merged.language
           });
         }
       } else {
@@ -258,7 +270,8 @@ export default function SyncPanel({
           cardioTargetMinutes: localData.cardioTargetMinutes,
           cardioHistory: localData.cardioHistory,
           profilePicture: localData.profilePicture,
-          progressPhotos: localData.progressPhotos
+          progressPhotos: localData.progressPhotos,
+          language: localData.language
         });
       }
 
@@ -267,7 +280,7 @@ export default function SyncPanel({
     } catch (err: any) {
       console.error('Sync Error:', err);
       if (!dbNotEnabledError) {
-        setError(err.message || 'Error desconocido al sincronizar.');
+        setError(err.message || t.syncErrorUnknown);
       }
     } finally {
       setSyncing(false);
@@ -284,7 +297,7 @@ export default function SyncPanel({
     const trimmedPassword = password;
 
     if (!trimmedEmail || !trimmedPassword) {
-      setError('Por favor completa todos los campos.');
+      setError(t.syncErrorFillFields);
       setLoading(false);
       return;
     }
@@ -299,17 +312,17 @@ export default function SyncPanel({
       setPassword('');
     } catch (err: any) {
       console.error('Auth error:', err);
-      let localizedError = `Error de autenticación: ${err.code || err.message || 'Error desconocido'}`;
+      let localizedError = `${t.syncErrorAuth} ${err.code || err.message || t.syncErrorUnknown}`;
       if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        localizedError = 'Correo o contraseña incorrectos.';
+        localizedError = t.syncErrorIncorrectCreds;
       } else if (err.code === 'auth/email-already-in-use') {
-        localizedError = 'El correo ya está registrado.';
+        localizedError = t.syncErrorEmailInUse;
       } else if (err.code === 'auth/weak-password') {
-        localizedError = 'La contraseña debe tener al menos 6 caracteres.';
+        localizedError = t.syncErrorWeakPassword;
       } else if (err.code === 'auth/invalid-email') {
-        localizedError = 'Formato de correo no válido.';
+        localizedError = t.syncErrorInvalidEmail;
       } else if (err.code === 'auth/operation-not-allowed') {
-        localizedError = 'El registro con Correo y Contraseña está desactivado en la consola. Ve a Firebase Console > Authentication > Sign-in method y actívalo.';
+        localizedError = t.syncErrorEmailPasswordDisabled;
       }
       setError(localizedError);
     } finally {
@@ -336,9 +349,9 @@ export default function SyncPanel({
       }
     } catch (err: any) {
       console.error('Google Sign-In error:', err);
-      let localizedError = `Error al iniciar sesión con Google: ${err.code || err.message}`;
+      let localizedError = `${t.syncErrorGoogleRedirect} ${err.code || err.message}`;
       if (err.code === 'auth/operation-not-allowed') {
-        localizedError = 'El inicio de sesión con Google está desactivado en la consola de Firebase. Habilítalo en Firebase Console > Authentication > Sign-in method.';
+        localizedError = t.syncErrorGoogleDisabled;
       }
       setError(localizedError);
       setLoading(false);
@@ -351,7 +364,7 @@ export default function SyncPanel({
       await signOut(auth);
       setUser(null);
     } catch (err: any) {
-      setError(err.message || 'Error al cerrar sesión.');
+      setError(err.message || t.syncErrorLogout);
     } finally {
       setLoading(false);
     }
@@ -379,7 +392,7 @@ export default function SyncPanel({
           gap: '6px',
           cursor: 'pointer'
         }}
-        title="Sincronizar Cloud"
+        title={t.syncTooltip}
       >
         {syncing ? (
           <Loader2 size={16} className="spin" style={{ animation: 'spin 1.5s linear infinite' }} />
@@ -389,7 +402,7 @@ export default function SyncPanel({
           <CloudOff size={16} />
         )}
         <span style={{ fontSize: '0.85rem' }}>
-          {syncing ? 'Sincronizando...' : user ? 'Nube Activa' : 'Sincronizar'}
+          {syncing ? t.syncingText : user ? t.syncActive : t.syncBtn}
         </span>
       </button>
 
@@ -415,7 +428,7 @@ export default function SyncPanel({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Cloud size={18} color="hsl(var(--primary))" />
-              Sincronización en la Nube
+              {t.syncTitle}
             </h3>
             <button 
               onClick={() => setIsOpen(false)}
@@ -426,7 +439,7 @@ export default function SyncPanel({
           </div>
 
           <p style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', lineHeight: 1.4 }}>
-            Sincroniza tus rutinas personalizadas, historial de entrenamientos y estado de rehabilitación PLNEXC entre todos tus dispositivos.
+            {t.syncDescFull}
           </p>
 
           <hr style={{ border: 'none', borderBottom: '1px solid hsl(var(--border))' }} />
@@ -446,10 +459,10 @@ export default function SyncPanel({
               lineHeight: '1.3'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}>
-                <AlertTriangle size={14} /> Base de datos inactiva
+                <AlertTriangle size={14} /> {t.syncDbInactiveTitle}
               </div>
               <span>
-                La base de datos de Firestore en tu cuenta aún no está activa. Para habilitarla gratis en modo de prueba, visita:
+                {t.syncDbInactiveDesc}
               </span>
               <a 
                 href="https://console.firebase.google.com/project/plnexc-coach/firestore" 
@@ -459,7 +472,7 @@ export default function SyncPanel({
               >
                 console.firebase.google.com/project/plnexc-coach/firestore
               </a>
-              <span>Los datos seguirán guardados localmente hasta que la actives.</span>
+              <span>{t.syncDbInactiveLocalOnly}</span>
             </div>
           )}
 
@@ -476,7 +489,7 @@ export default function SyncPanel({
               alignItems: 'center',
               gap: '6px'
             }}>
-              <CheckCircle2 size={14} /> Sincronización exitosa
+              <CheckCircle2 size={14} /> {t.syncSuccess}
             </div>
           )}
 
@@ -499,7 +512,7 @@ export default function SyncPanel({
           {user ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ fontSize: '0.8rem', color: '#ffffff', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px solid hsl(var(--border))' }}>
-                <span style={{ color: 'hsl(var(--muted))', display: 'block', fontSize: '0.7rem' }}>Sesión iniciada como:</span>
+                <span style={{ color: 'hsl(var(--muted))', display: 'block', fontSize: '0.7rem' }}>{t.syncLoggedInAs}</span>
                 <strong style={{ wordBreak: 'break-all' }}>{user.email}</strong>
               </div>
 
@@ -510,7 +523,7 @@ export default function SyncPanel({
                   disabled={syncing}
                   style={{ flex: 1, padding: '8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                 >
-                  <RefreshCw size={14} className={syncing ? 'spin' : ''} /> Sync
+                  <RefreshCw size={14} className={syncing ? 'spin' : ''} /> {t.syncBtn}
                 </button>
                 <button 
                   className="btn btn-danger" 
@@ -518,7 +531,7 @@ export default function SyncPanel({
                   disabled={loading}
                   style={{ flex: 1, padding: '8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                 >
-                  <LogOut size={14} /> Salir
+                  <LogOut size={14} /> {t.syncLogoutBtn}
                 </button>
               </div>
             </div>
@@ -528,7 +541,7 @@ export default function SyncPanel({
               <div style={{ position: 'relative' }}>
                 <input 
                   type="email" 
-                  placeholder="Correo electrónico" 
+                  placeholder={t.syncEmailPlaceholder} 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
@@ -541,7 +554,7 @@ export default function SyncPanel({
               <div style={{ position: 'relative' }}>
                 <input 
                   type="password" 
-                  placeholder="Contraseña" 
+                  placeholder={t.syncPasswordPlaceholder} 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
@@ -561,18 +574,18 @@ export default function SyncPanel({
                   <Loader2 size={16} className="spin" />
                 ) : isRegistering ? (
                   <>
-                    <UserPlus size={16} /> Crear Cuenta
+                    <UserPlus size={16} /> {t.syncRegisterBtn}
                   </>
                 ) : (
                   <>
-                    <Lock size={16} /> Iniciar Sesión
+                    <Lock size={16} /> {t.syncLoginSubmitBtn}
                   </>
                 )}
               </button>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '4px 0' }}>
                 <hr style={{ flex: 1, border: 'none', borderBottom: '1px solid hsl(var(--border))', opacity: 0.3 }} />
-                <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>o bien</span>
+                <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>{t.syncOrDivider}</span>
                 <hr style={{ flex: 1, border: 'none', borderBottom: '1px solid hsl(var(--border))', opacity: 0.3 }} />
               </div>
 
@@ -600,7 +613,7 @@ export default function SyncPanel({
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
                 </svg>
-                Continuar con Google
+                {t.syncGoogleBtn}
               </button>
 
               <button 
@@ -617,7 +630,7 @@ export default function SyncPanel({
                   marginTop: '4px'
                 }}
               >
-                {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
+                {isRegistering ? t.syncHasAccountLink : t.syncNoAccountLink}
               </button>
             </form>
           )}

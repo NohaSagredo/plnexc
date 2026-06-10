@@ -21,6 +21,7 @@ export interface SyncedData {
   cardioHistory?: { date: string; minutes: number; type: string; calories: number }[];
   profilePicture?: string;
   progressPhotos?: { id: string; date: string; weight?: number; photoUrl: string; note?: string }[];
+  language?: 'es' | 'en';
   updatedAt: string;
 }
 
@@ -67,6 +68,7 @@ export async function uploadUserData(userId: string, data: Partial<SyncedData>):
       cardioHistory: data.cardioHistory ?? existing?.cardioHistory ?? [],
       profilePicture: data.profilePicture !== undefined ? data.profilePicture : (existing?.profilePicture ?? ''),
       progressPhotos: data.progressPhotos ?? existing?.progressPhotos ?? [],
+      language: data.language !== undefined ? data.language : (existing?.language ?? 'es'),
       updatedAt: new Date().toISOString(),
     };
 
@@ -98,6 +100,7 @@ export function mergeLocalAndCloudData(local: {
   cardioHistory: any[];
   profilePicture: string;
   progressPhotos: any[];
+  language: 'es' | 'en';
 }, cloud: SyncedData): {
   merged: {
     customRoutines: any[];
@@ -114,6 +117,7 @@ export function mergeLocalAndCloudData(local: {
     cardioHistory: any[];
     profilePicture: string;
     progressPhotos: any[];
+    language: 'es' | 'en';
   };
   hasChanges: boolean;
 } {
@@ -315,6 +319,15 @@ export function mergeLocalAndCloudData(local: {
   });
   mergedProgressPhotos.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // 15. Merge Language
+  let mergedLanguage = local.language;
+  if (cloud.language !== undefined && cloud.language !== local.language) {
+    mergedLanguage = cloud.language;
+    hasChanges = true;
+  } else if (cloud.language === undefined) {
+    hasChanges = true;
+  }
+
   return {
     merged: {
       customRoutines: mergedRoutines,
@@ -330,7 +343,8 @@ export function mergeLocalAndCloudData(local: {
       cardioTargetMinutes: mergedCardioTargetMinutes,
       cardioHistory: mergedCardioHistory,
       profilePicture: mergedProfilePic,
-      progressPhotos: mergedProgressPhotos
+      progressPhotos: mergedProgressPhotos,
+      language: mergedLanguage
     },
     hasChanges
   };
