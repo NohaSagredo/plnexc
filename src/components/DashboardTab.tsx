@@ -112,7 +112,13 @@ export default function DashboardTab({
       'Pecho': 'Chest',
       'Espalda': 'Back',
       'Cuello': 'Neck',
-      'Cardio': 'Cardio'
+      'Cardio': 'Cardio',
+      'Bíceps': 'Biceps',
+      'Tríceps': 'Triceps',
+      'Cuádriceps': 'Quadriceps',
+      'Femorales': 'Hamstrings',
+      'Glúteos': 'Glutes',
+      'Pantorrillas': 'Calves'
     };
     return mapping[m] || m;
   };
@@ -296,9 +302,13 @@ export default function DashboardTab({
     const muscles = {
       Pecho: 0,
       Espalda: 0,
-      Piernas: 0,
       Hombros: 0,
-      Brazos: 0,
+      Bíceps: 0,
+      Tríceps: 0,
+      Cuádriceps: 0,
+      Femorales: 0,
+      Glúteos: 0,
+      Pantorrillas: 0,
       Core: 0
     };
 
@@ -309,7 +319,7 @@ export default function DashboardTab({
         session.exercises.forEach(ex => {
           const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
           if (dbEx) {
-            const muscleGroup = dbEx.muscleGroup;
+            let muscleGroup = dbEx.muscleGroup;
             let completedSets = 0;
             ex.sets.forEach((s: any) => {
               const isCompleted = s.completed !== undefined ? s.completed : ((s.weight_kg !== null && s.weight_kg > 0) && (s.reps !== null && s.reps > 0));
@@ -318,10 +328,31 @@ export default function DashboardTab({
               }
             });
 
+            // Map old/legacy categories to specific ones for fallback
+            if ((muscleGroup as string) === 'Brazos') {
+              muscleGroup = 'Bíceps';
+            } else if ((muscleGroup as string) === 'Piernas') {
+              muscleGroup = 'Cuádriceps';
+            }
+
+            // Primary group accumulation (1.0 sets)
             if (muscles.hasOwnProperty(muscleGroup)) {
               muscles[muscleGroup as keyof typeof muscles] += completedSets;
             } else if (muscleGroup === 'Cuello') {
               muscles['Espalda'] += completedSets;
+            }
+
+            // Secondary groups accumulation (0.5 sets each)
+            if (dbEx.secondaryMuscleGroups && Array.isArray(dbEx.secondaryMuscleGroups)) {
+              dbEx.secondaryMuscleGroups.forEach((secGroup: any) => {
+                let mappedSecGroup = secGroup;
+                if (mappedSecGroup === 'Brazos') mappedSecGroup = 'Bíceps';
+                else if (mappedSecGroup === 'Piernas') mappedSecGroup = 'Cuádriceps';
+
+                if (muscles.hasOwnProperty(mappedSecGroup)) {
+                  muscles[mappedSecGroup as keyof typeof muscles] += completedSets * 0.5;
+                }
+              });
             }
           }
         });
@@ -1531,22 +1562,31 @@ export default function DashboardTab({
             const target = 10;
             const percentage = Math.min((completed / target) * 100, 100);
             const isGoalAchieved = completed >= target;
+            const formattedCompleted = Number(completed.toFixed(1));
             
             // Neon colors depending on muscle
             let color = '0, 242, 254'; // cyan default
             if (muscle === 'Pecho') color = '0, 242, 254'; // cyan
             if (muscle === 'Espalda') color = '147, 51, 234'; // purple
-            if (muscle === 'Piernas') color = '245, 158, 11'; // amber/orange
             if (muscle === 'Hombros') color = '236, 72, 153'; // pink
-            if (muscle === 'Brazos') color = '16, 185, 129'; // emerald green
+            if (muscle === 'Bíceps') color = '16, 185, 129'; // emerald green
+            if (muscle === 'Tríceps') color = '132, 204, 22'; // lime green
+            if (muscle === 'Cuádriceps') color = '245, 158, 11'; // orange
+            if (muscle === 'Femorales') color = '217, 119, 6'; // amber
+            if (muscle === 'Glúteos') color = '239, 68, 68'; // red
+            if (muscle === 'Pantorrillas') color = '20, 184, 166'; // teal
             if (muscle === 'Core') color = '59, 130, 246'; // blue
 
             const translatedMuscle = language === 'es' ? muscle : (
               muscle === 'Pecho' ? 'Chest' :
               muscle === 'Espalda' ? 'Back' :
-              muscle === 'Piernas' ? 'Legs' :
               muscle === 'Hombros' ? 'Shoulders' :
-              muscle === 'Brazos' ? 'Arms' :
+              muscle === 'Bíceps' ? 'Biceps' :
+              muscle === 'Tríceps' ? 'Triceps' :
+              muscle === 'Cuádriceps' ? 'Quadriceps' :
+              muscle === 'Femorales' ? 'Hamstrings' :
+              muscle === 'Glúteos' ? 'Glutes' :
+              muscle === 'Pantorrillas' ? 'Calves' :
               muscle === 'Core' ? 'Core' : muscle
             );
 
@@ -1560,10 +1600,12 @@ export default function DashboardTab({
                   <span style={{ color: isGoalAchieved ? 'hsl(var(--success))' : 'hsl(var(--muted))', fontWeight: 600 }}>
                     {isGoalAchieved ? (
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        🎉 {t.weeklySetsGoalAchieved || '¡Meta Semanal Lograda!'} ({completed})
+                        🎉 {t.weeklySetsGoalAchieved || '¡Meta Semanal Lograda!'} ({formattedCompleted})
                       </span>
                     ) : (
-                      t.weeklySetsCompletedOfTarget ? t.weeklySetsCompletedOfTarget.replace('{completed}', completed.toString()).replace('{target}', target.toString()) : `${completed} de ${target} series`
+                      t.weeklySetsCompletedOfTarget 
+                        ? t.weeklySetsCompletedOfTarget.replace('{completed}', formattedCompleted.toString()).replace('{target}', target.toString()) 
+                        : `${formattedCompleted} de ${target} series`
                     )}
                   </span>
                 </div>

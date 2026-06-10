@@ -64,7 +64,7 @@ export default function RoutineBuilder({
   }, [searchText, selectedMuscle, selectedEquipment, selectedDifficulty]);
 
   // Unique categories for selectors
-  const muscles = ['Todos', 'Pecho', 'Espalda', 'Piernas', 'Hombros', 'Brazos', 'Core', 'Cuello', 'Cardio'];
+  const muscles = ['Todos', 'Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Cuádriceps', 'Femorales', 'Glúteos', 'Pantorrillas', 'Core', 'Cuello', 'Cardio'];
   const equipments = ['Todos', 'Barra', 'Mancuerna', 'Peso Corporal', 'Polea/Cable', 'Banda', 'Otro'];
   const difficulties = ['Todos', 'Principiante', 'Intermedio', 'Avanzado'];
 

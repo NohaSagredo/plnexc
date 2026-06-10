@@ -92,7 +92,13 @@ export default function WorkoutTab({
       'Pecho': 'Chest',
       'Espalda': 'Back',
       'Cuello': 'Neck',
-      'Cardio': 'Cardio'
+      'Cardio': 'Cardio',
+      'Bíceps': 'Biceps',
+      'Tríceps': 'Triceps',
+      'Cuádriceps': 'Quadriceps',
+      'Femorales': 'Hamstrings',
+      'Glúteos': 'Glutes',
+      'Pantorrillas': 'Calves'
     };
     return mapping[m] || m;
   };

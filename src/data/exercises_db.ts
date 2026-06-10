@@ -1,7 +1,7 @@
 export interface Exercise {
   id: string;
   title: string;
-  muscleGroup: 'Pecho' | 'Espalda' | 'Piernas' | 'Hombros' | 'Brazos' | 'Core' | 'Cuello' | 'Cardio';
+  muscleGroup: 'Pecho' | 'Espalda' | 'Hombros' | 'Bíceps' | 'Tríceps' | 'Cuádriceps' | 'Femorales' | 'Glúteos' | 'Pantorrillas' | 'Core' | 'Cuello' | 'Cardio';
   equipment: 'Barra' | 'Mancuerna' | 'Peso Corporal' | 'Polea/Cable' | 'Banda' | 'Otro';
   difficulty: 'Principiante' | 'Intermedio' | 'Avanzado';
   description: string;
@@ -9,6 +9,7 @@ export interface Exercise {
   image?: string;
   nameEs?: string;
   nameEn?: string;
+  secondaryMuscleGroups?: ('Pecho' | 'Espalda' | 'Hombros' | 'Bíceps' | 'Tríceps' | 'Cuádriceps' | 'Femorales' | 'Glúteos' | 'Pantorrillas' | 'Core')[];
 }
 
 export const EXERCISES_DB: Exercise[] = [
@@ -32,7 +33,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'behind_back_bicep_wrist_curl',
     title: 'Behind the Back Bicep Wrist Curl (Barbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Barra',
     difficulty: 'Principiante',
     description: 'Flexión de muñeca con barra por detrás de la espalda de pie para activar antebrazos.'
@@ -44,6 +45,7 @@ export const EXERCISES_DB: Exercise[] = [
     equipment: 'Barra',
     difficulty: 'Intermedio',
     description: 'Press de banca clásico con barra. Ejercicio compuesto básico para fuerza de empuje.',
+    secondaryMuscleGroups: ['Hombros', 'Tríceps'],
     instructions: [
       'Acuéstate en el banco con los ojos directamente debajo de la barra.',
       'Retrae activamente las escápulas (junta los omóplatos) y apoya firmemente los pies en el suelo para habilitar el leg drive.',
@@ -59,7 +61,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Mancuerna',
     difficulty: 'Intermedio',
-    description: 'Press de banca con mancuernas. Permite mayor rango y rotación libre del hombro.'
+    description: 'Press de banca con mancuernas. Permite mayor rango y rotación libre del hombro.',
+    secondaryMuscleGroups: ['Hombros', 'Tríceps']
   },
   {
     id: 'bent_over_row_barbell',
@@ -68,6 +71,7 @@ export const EXERCISES_DB: Exercise[] = [
     equipment: 'Barra',
     difficulty: 'Intermedio',
     description: 'Remo inclinado con barra. Ejercicio compuesto de tracción para densidad de espalda.',
+    secondaryMuscleGroups: ['Bíceps'],
     instructions: [
       'Párate con los pies al ancho de hombros frente a una barra cargada.',
       'Realiza una bisagra de cadera (empuja la cadera hacia atrás) manteniendo la espalda neutra y el torso casi paralelo al suelo.',
@@ -80,7 +84,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'bicep_curl_barbell',
     title: 'Bicep Curl (Barbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Barra',
     difficulty: 'Principiante',
     description: 'Curl de bíceps clásico de pie utilizando una barra recta o barra Z.'
@@ -88,7 +92,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'bicep_curl_dumbbell',
     title: 'Bicep Curl (Dumbbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Mancuerna',
     difficulty: 'Principiante',
     description: 'Curl de bíceps de pie con mancuernas alternado o simultáneo.',
@@ -114,7 +118,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Mancuerna',
     difficulty: 'Intermedio',
-    description: 'Aperturas de pecho con mancuernas en banco plano para estiramiento pectoral.'
+    description: 'Aperturas de pecho con mancuernas en banco plano para estiramiento pectoral.',
+    secondaryMuscleGroups: ['Hombros']
   },
   {
     id: 'chin_up',
@@ -122,12 +127,13 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Espalda',
     equipment: 'Peso Corporal',
     difficulty: 'Intermedio',
-    description: 'Dominadas con agarre supino (palmas hacia ti). Enfatiza dorsales y bíceps.'
+    description: 'Dominadas con agarre supino (palmas hacia ti). Enfatiza dorsales y bíceps.',
+    secondaryMuscleGroups: ['Bíceps']
   },
   {
     id: 'concentration_curl',
     title: 'Concentration Curl',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Mancuerna',
     difficulty: 'Principiante',
     description: 'Curl concentrado sentado apoyando el codo en la parte interna del muslo.'
@@ -143,10 +149,11 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'deadlift_barbell',
     title: 'Deadlift (Barbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Femorales',
     equipment: 'Barra',
     difficulty: 'Avanzado',
     description: 'Peso muerto convencional con barra. Ejercicio de cadena posterior y fuerza absoluta.',
+    secondaryMuscleGroups: ['Espalda', 'Glúteos'],
     instructions: [
       'Colócate frente a la barra con los pies separados al ancho de las caderas, de modo que la barra quede a la mitad de tus pies (1 pulgada de tus espinillas).',
       'Inclínate y sujeta la barra con un agarre prono o mixto al ancho de los hombros sin mover la barra.',
@@ -163,12 +170,13 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Peso Corporal',
     difficulty: 'Intermedio',
-    description: 'Flexiones con pies elevados. Transfiere más carga a la porción superior del pectoral.'
+    description: 'Flexiones con pies elevados. Transfiere más carga a la porción superior del pectoral.',
+    secondaryMuscleGroups: ['Hombros', 'Tríceps']
   },
   {
     id: 'flexion_antebrazo',
     title: 'Flexión Antebrazo',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Mancuerna',
     difficulty: 'Principiante',
     description: 'Curl de muñeca concentrado con peso ligero para flexores del antebrazo.'
@@ -176,7 +184,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'hammer_curl_dumbbell',
     title: 'Hammer Curl (Dumbbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Mancuerna',
     difficulty: 'Principiante',
     description: 'Curl de martillo con mancuernas. Enfatiza el braquiorradial y es amigable con codos.'
@@ -260,6 +268,7 @@ export const EXERCISES_DB: Exercise[] = [
     equipment: 'Barra',
     difficulty: 'Intermedio',
     description: 'Press militar de pie con barra. Exige buena extensión torácica y estabilidad.',
+    secondaryMuscleGroups: ['Tríceps'],
     instructions: [
       'Coloca la barra en los soportes a la altura del pecho. Sujétala con un agarre ligeramente superior al ancho de hombros.',
       'Posiciónate debajo de la barra con los antebrazos completamente verticales y los codos ligeramente delante de la barra.',
@@ -285,11 +294,12 @@ export const EXERCISES_DB: Exercise[] = [
     equipment: 'Peso Corporal',
     difficulty: 'Intermedio',
     description: 'Dominada clásica con agarre prono abierto. Ejercicio rey de tracción vertical.',
+    secondaryMuscleGroups: ['Bíceps'],
     instructions: [
       'Sujétate de la barra de dominadas con las palmas orientadas hacia adelante (agarre prono) a una anchura ligeramente mayor que los hombros.',
       'Cuelga por completo con los brazos extendidos y realiza una retracción y depresión escapular (aleja los hombros de las orejas).',
       'Inicia la tracción tirando de los codos hacia abajo y hacia atrás, llevando el pecho activamente hacia la barra.',
-      'Supera la barra con la barbilla sin estirar el cuello.',
+      'Supera la barra con la barra de la barbilla sin estirar el cuello.',
       'Desciende de forma controlada hasta la posición inicial de extensión completa del brazo.'
     ],
     image: 'https://images.unsplash.com/photo-1598971639058-fab3c3109a00?w=600&auto=format&fit=crop&q=80'
@@ -300,7 +310,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Espalda',
     equipment: 'Barra',
     difficulty: 'Intermedio',
-    description: 'Peso muerto parcial desde soportes altos (a nivel de rodilla) para enfatizar trapecios y lumbares.'
+    description: 'Peso muerto parcial desde soportes altos (a nivel de rodilla) para enfatizar trapecios y lumbares.',
+    secondaryMuscleGroups: ['Femorales', 'Glúteos']
   },
   {
     id: 'rear_delt_reverse_fly',
@@ -313,7 +324,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'reverse_curl_dumbbell',
     title: 'Reverse Curl (Dumbbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Mancuerna',
     difficulty: 'Principiante',
     description: 'Curl inverso con mancuernas para fortalecer el antebrazo y los flexores del brazo.'
@@ -321,10 +332,11 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'romanian_deadlift_barbell',
     title: 'Romanian Deadlift (Barbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Femorales',
     equipment: 'Barra',
     difficulty: 'Intermedio',
-    description: 'Peso muerto rumano con barra. Enfoque excéntrico en femorales e isquiotibiales.'
+    description: 'Peso muerto rumano con barra. Enfoque excéntrico en femorales e isquiotibiales.',
+    secondaryMuscleGroups: ['Espalda', 'Glúteos']
   },
   {
     id: 'rotacion_externa_hombro',
@@ -353,7 +365,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'seated_palms_up_wrist_curl',
     title: 'Seated Palms Up Wrist Curl',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Barra',
     difficulty: 'Principiante',
     description: 'Curl de muñeca sentado apoyando antebrazos en banco con agarre supino.'
@@ -361,7 +373,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'seated_wrist_extension_barbell',
     title: 'Seated Wrist Extension (Barbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Barra',
     difficulty: 'Principiante',
     description: 'Extensión de muñeca sentado con barra apoyando antebrazos en banco (agarre prono).'
@@ -372,7 +384,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Hombros',
     equipment: 'Mancuerna',
     difficulty: 'Intermedio',
-    description: 'Press militar sentado con mancuernas para deltoides anterior.'
+    description: 'Press militar sentado con mancuernas para deltoides anterior.',
+    secondaryMuscleGroups: ['Tríceps']
   },
   {
     id: 'shrug_barbell',
@@ -396,12 +409,13 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Espalda',
     equipment: 'Polea/Cable',
     difficulty: 'Intermedio',
-    description: 'Remo unilateral en polea baja, excelente para controlar desbalances musculares.'
+    description: 'Remo unilateral en polea baja, excelente para controlar desbalances musculares.',
+    secondaryMuscleGroups: ['Bíceps']
   },
   {
     id: 'single_arm_tricep_extension_dumbbell',
     title: 'Single Arm Tricep Extension (Dumbbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Tríceps',
     equipment: 'Mancuerna',
     difficulty: 'Principiante',
     description: 'Copa de tríceps unilateral por detrás de la cabeza con mancuerna.'
@@ -409,7 +423,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'single_leg_calf_raise_barbell',
     title: 'Single Leg Standing Calf Raise (Barbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Pantorrillas',
     equipment: 'Barra',
     difficulty: 'Intermedio',
     description: 'Elevación de talones unilateral de pie sujetando barra o mancuernas para equilibrio.'
@@ -425,7 +439,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'skullcrusher_barbell',
     title: 'Skullcrusher (Barbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Tríceps',
     equipment: 'Barra',
     difficulty: 'Intermedio',
     description: 'Rompecráneos con barra Z acostado en banco plano para tríceps.'
@@ -433,10 +447,11 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'squat_barbell',
     title: 'Squat (Barbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Barra',
     difficulty: 'Avanzado',
     description: 'Sentadilla clásica trasera con barra. El ejercicio rey de fuerza inferior.',
+    secondaryMuscleGroups: ['Glúteos', 'Core'],
     instructions: [
       'Coloca la barra en los trapecios (barra alta) o deltoides posterior (barra baja). Junta las escápulas para crear una "plataforma" muscular.',
       'Coloca los pies aproximadamente al ancho de los hombros, con las puntas apuntando ligeramente hacia afuera.',
@@ -450,7 +465,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'standing_calf_raise_barbell',
     title: 'Standing Calf Raise (Barbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Pantorrillas',
     equipment: 'Barra',
     difficulty: 'Principiante',
     description: 'Elevaciones de gemelos de pie con barra en los hombros.'
@@ -458,7 +473,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'triceps_extension_barbell',
     title: 'Triceps Extension (Barbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Tríceps',
     equipment: 'Barra',
     difficulty: 'Intermedio',
     description: 'Extensión de tríceps tumbado con barra recta o barra Z.'
@@ -471,15 +486,17 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Peso Corporal',
     difficulty: 'Intermedio',
-    description: 'Fondos en paralelas inclinando el torso hacia adelante para cargar el pectoral inferior.'
+    description: 'Fondos en paralelas inclinando el torso hacia adelante para cargar el pectoral inferior.',
+    secondaryMuscleGroups: ['Tríceps', 'Hombros']
   },
   {
     id: 'dips_triceps',
     title: 'Dips (Tricep Focus)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Tríceps',
     equipment: 'Peso Corporal',
     difficulty: 'Intermedio',
-    description: 'Fondos en paralelas manteniendo el torso lo más erguido posible para enfatizar los tríceps.'
+    description: 'Fondos en paralelas manteniendo el torso lo más erguido posible para enfatizar los tríceps.',
+    secondaryMuscleGroups: ['Pecho', 'Hombros']
   },
   {
     id: 'pushup_normal',
@@ -487,31 +504,35 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Peso Corporal',
     difficulty: 'Principiante',
-    description: 'Flexión clásica en el suelo con manos al ancho de hombros.'
+    description: 'Flexión clásica en el suelo con manos al ancho de hombros.',
+    secondaryMuscleGroups: ['Hombros', 'Tríceps']
   },
   {
     id: 'pushup_diamond',
     title: 'Push Up (Diamond)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Tríceps',
     equipment: 'Peso Corporal',
     difficulty: 'Intermedio',
-    description: 'Flexión formando un diamante con las manos para enfocar el esfuerzo en los tríceps.'
+    description: 'Flexión formando un diamante con las manos para enfocar el esfuerzo en los tríceps.',
+    secondaryMuscleGroups: ['Pecho', 'Hombros']
   },
   {
     id: 'bulgarian_split_squat',
     title: 'Bulgarian Split Squat (Dumbbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Mancuerna',
     difficulty: 'Intermedio',
-    description: 'Sentadilla búlgara con un pie apoyado atrás en un banco. Alta demanda de estabilidad de cadera.'
+    description: 'Sentadilla búlgara con un pie apoyado atrás en un banco. Alta demanda de estabilidad de cadera.',
+    secondaryMuscleGroups: ['Glúteos']
   },
   {
     id: 'walking_lunge_dumbbell',
     title: 'Walking Lunge (Dumbbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Mancuerna',
     difficulty: 'Intermedio',
-    description: 'Zancadas caminando sujetando mancuernas al costado.'
+    description: 'Zancadas caminando sujetando mancuernas al costado.',
+    secondaryMuscleGroups: ['Glúteos']
   },
   {
     id: 'incline_bench_press_dumbbell',
@@ -519,7 +540,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Mancuerna',
     difficulty: 'Intermedio',
-    description: 'Press inclinado con mancuernas a 30° para la porción clavicular del pectoral.'
+    description: 'Press inclinado con mancuernas a 30° para la porción clavicular del pectoral.',
+    secondaryMuscleGroups: ['Hombros', 'Tríceps']
   },
   {
     id: 'incline_bench_press_barbell',
@@ -527,7 +549,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Barra',
     difficulty: 'Intermedio',
-    description: 'Press inclinado con barra para fuerza pectoral alta.'
+    description: 'Press inclinado con barra para fuerza pectoral alta.',
+    secondaryMuscleGroups: ['Hombros', 'Tríceps']
   },
   {
     id: 'lat_pulldown_cable',
@@ -535,7 +558,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Espalda',
     equipment: 'Polea/Cable',
     difficulty: 'Principiante',
-    description: 'Jalón en polea alta con barra ancha para desarrollo de dorsales.'
+    description: 'Jalón en polea alta con barra ancha para desarrollo de dorsales.',
+    secondaryMuscleGroups: ['Bíceps']
   },
   {
     id: 'cable_face_pull',
@@ -548,7 +572,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'cable_pushdown_triceps',
     title: 'Tricep Pushdown (Cable)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Tríceps',
     equipment: 'Polea/Cable',
     difficulty: 'Principiante',
     description: 'Extensión de tríceps en polea alta con barra recta o cuerda.'
@@ -556,15 +580,16 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'leg_press_machine',
     title: 'Leg Press',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Otro',
     difficulty: 'Principiante',
-    description: 'Prensa de piernas inclinada. Permite cargar las piernas con mínimo estrés lumbar.'
+    description: 'Prensa de piernas inclinada. Permite cargar las piernas con mínimo estrés lumbar.',
+    secondaryMuscleGroups: ['Glúteos']
   },
   {
     id: 'leg_extension_machine',
     title: 'Leg Extension (Machine)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Otro',
     difficulty: 'Principiante',
     description: 'Extensión de rodilla en máquina para aislamiento de cuádriceps.'
@@ -572,7 +597,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'lying_leg_curl_machine',
     title: 'Lying Leg Curl (Machine)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Femorales',
     equipment: 'Otro',
     difficulty: 'Principiante',
     description: 'Flexión de rodilla tumbado para aislar femorales.'
@@ -604,7 +629,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'spanish_squat_rehab',
     title: 'Spanish Squat (Banded)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Banda',
     difficulty: 'Principiante',
     description: 'Fase 1 PLNEXC para rodilla. Sentadilla isométrica asistida por banda detrás de rodillas para tendones.'
@@ -612,7 +637,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'slant_board_squat_rehab',
     title: 'Slant Board Squat',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Otro',
     difficulty: 'Intermedio',
     description: 'Fase 3 PLNEXC. Sentadilla con talones elevados en plano inclinado para aislar el cuádriceps de forma vertical.'
@@ -620,7 +645,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'banded_ankle_distraction_rehab',
     title: 'Banded Ankle Distraction',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Pantorrillas',
     equipment: 'Banda',
     difficulty: 'Principiante',
     description: 'Fase 2 PLNEXC. Movilización de tobillo bajo distracción de banda para mejorar dorsiflexión.'
@@ -628,7 +653,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'clamshells_banded_rehab',
     title: 'Clamshells (Banded)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Glúteos',
     equipment: 'Banda',
     difficulty: 'Principiante',
     description: 'Fase 2 PLNEXC. Rotación externa de cadera con banda en rodillas para activar glúteo medio.'
@@ -636,7 +661,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'hip_airplane_rehab',
     title: 'Hip Airplane',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Glúteos',
     equipment: 'Peso Corporal',
     difficulty: 'Intermedio',
     description: 'Fase 2 PLNEXC. Rotaciones internas y externas de cadera en apoyo unipodal.'
@@ -655,7 +680,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Otro',
     difficulty: 'Principiante',
-    description: 'Aislamiento de pectoral en máquina. Ideal para aprender el patrón de aducción horizontal de hombro.'
+    description: 'Aislamiento de pectoral en máquina. Ideal para aprender el patrón de aducción horizontal de hombro.',
+    secondaryMuscleGroups: ['Hombros']
   },
   {
     id: 'incline_chest_press_machine',
@@ -663,7 +689,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Otro',
     difficulty: 'Principiante',
-    description: 'Press de pecho inclinado guiado en máquina para enfocar la porción clavicular del pectoral.'
+    description: 'Press de pecho inclinado guiado en máquina para enfocar la porción clavicular del pectoral.',
+    secondaryMuscleGroups: ['Hombros', 'Tríceps']
   },
   {
     id: 'cable_crossover_chest',
@@ -671,7 +698,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Polea/Cable',
     difficulty: 'Intermedio',
-    description: 'Cruces de poleas de pie para aislamiento pectoral con tensión constante en todo el rango.'
+    description: 'Cruces de poleas de pie para aislamiento pectoral con tensión constante en todo el rango.',
+    secondaryMuscleGroups: ['Hombros']
   },
   {
     id: 'pushup_archer',
@@ -679,7 +707,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Peso Corporal',
     difficulty: 'Avanzado',
-    description: 'Flexiones laterales de alta dificultad donde un brazo realiza la mayor parte del empuje.'
+    description: 'Flexiones laterales de alta dificultad donde un brazo realiza la mayor parte del empuje.',
+    secondaryMuscleGroups: ['Hombros', 'Tríceps']
   },
   {
     id: 'decline_bench_press_barbell',
@@ -687,7 +716,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Pecho',
     equipment: 'Barra',
     difficulty: 'Intermedio',
-    description: 'Press de banca declinado con barra para enfocar las fibras inferiores del pectoral.'
+    description: 'Press de banca declinado con barra para enfocar las fibras inferiores del pectoral.',
+    secondaryMuscleGroups: ['Hombros', 'Tríceps']
   },
   {
     id: 'chest_supported_row_dumbbell',
@@ -695,7 +725,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Espalda',
     equipment: 'Mancuerna',
     difficulty: 'Principiante',
-    description: 'Remo apoyando el pecho en un banco inclinado para eliminar el impulso y proteger la espalda baja.'
+    description: 'Remo apoyando el pecho en un banco inclinado para eliminar el impulso y proteger la espalda baja.',
+    secondaryMuscleGroups: ['Bíceps']
   },
   {
     id: 't_bar_row_barbell',
@@ -703,12 +734,13 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Espalda',
     equipment: 'Barra',
     difficulty: 'Intermedio',
-    description: 'Remo en barra T apoyado o libre. Excelente para desarrollar grosor en la espalda alta y dorsal.'
+    description: 'Remo en barra T apoyado o libre. Excelente para desarrollar grosor en la espalda alta y dorsal.',
+    secondaryMuscleGroups: ['Bíceps']
   },
   {
     id: 'preacher_curl_barbell',
     title: 'Preacher Curl (Barbell)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Barra',
     difficulty: 'Principiante',
     description: 'Curl de bíceps en banco Scott apoyando los tríceps para aislar por completo la flexión de codo.'
@@ -716,7 +748,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'cable_bicep_curl',
     title: 'Cable Bicep Curl',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Bíceps',
     equipment: 'Polea/Cable',
     difficulty: 'Principiante',
     description: 'Curl de bíceps en polea baja con barra recta, barra Z o cuerda para tensión continua.'
@@ -724,7 +756,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'overhead_cable_tricep_extension',
     title: 'Overhead Tricep Extension (Cable)',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Tríceps',
     equipment: 'Polea/Cable',
     difficulty: 'Principiante',
     description: 'Extensión de tríceps por encima de la cabeza en polea para trabajar la cabeza larga del tríceps en estiramiento.'
@@ -732,47 +764,52 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'bench_dips_arms',
     title: 'Bench Dips / Fondos en Banco',
-    muscleGroup: 'Brazos',
+    muscleGroup: 'Tríceps',
     equipment: 'Peso Corporal',
     difficulty: 'Principiante',
-    description: 'Fondos apoyando las manos en un banco detrás del cuerpo. Ejercicio básico de empuje para tríceps.'
+    description: 'Fondos apoyando las manos en un banco detrás del cuerpo. Ejercicio básico de empuje para tríceps.',
+    secondaryMuscleGroups: ['Pecho', 'Hombros']
   },
   {
     id: 'hip_thrust_barbell',
     title: 'Hip Thrust (Barbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Glúteos',
     equipment: 'Barra',
     difficulty: 'Intermedio',
-    description: 'Extensión de cadera con barra apoyando la espalda alta en banco. Ejercicio rey para activar glúteos.'
+    description: 'Extensión de cadera con barra apoyando la espalda alta en banco. Ejercicio rey para activar glúteos.',
+    secondaryMuscleGroups: ['Femorales']
   },
   {
     id: 'hack_squat_machine',
     title: 'Hack Squat (Machine)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Otro',
     difficulty: 'Intermedio',
-    description: 'Sentadilla Hack en máquina. Permite gran profundidad y enfoque en cuádriceps reduciendo carga axial.'
+    description: 'Sentadilla Hack en máquina. Permite gran profundidad y enfoque en cuádriceps reduciendo carga axial.',
+    secondaryMuscleGroups: ['Glúteos']
   },
   {
     id: 'goblet_squat_dumbbell',
     title: 'Goblet Squat (Dumbbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Mancuerna',
     difficulty: 'Principiante',
-    description: 'Sentadilla sosteniendo una mancuerna o kettlebell frente al pecho. Excelente para aprender profundidad.'
+    description: 'Sentadilla sosteniendo una mancuerna o kettlebell frente al pecho. Excelente para aprender profundidad.',
+    secondaryMuscleGroups: ['Glúteos', 'Core']
   },
   {
     id: 'romanian_deadlift_dumbbell',
     title: 'Romanian Deadlift (Dumbbell)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Femorales',
     equipment: 'Mancuerna',
     difficulty: 'Intermedio',
-    description: 'Peso muerto rumano con mancuernas. Permite estirar isquiotibiales de forma simétrica.'
+    description: 'Peso muerto rumano con mancuernas. Permite estirar isquiotibiales de forma simétrica.',
+    secondaryMuscleGroups: ['Espalda', 'Glúteos']
   },
   {
     id: 'seated_calf_raise_machine',
     title: 'Seated Calf Raise (Machine)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Pantorrillas',
     equipment: 'Otro',
     difficulty: 'Principiante',
     description: 'Elevación de talones sentado en máquina. Enfoca el músculo sóleo del gemelo.'
@@ -783,7 +820,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Hombros',
     equipment: 'Mancuerna',
     difficulty: 'Intermedio',
-    description: 'Press militar de hombros con rotación de muñecas iniciado desde posición frontal. Trabajo deltoide completo.'
+    description: 'Press militar de hombros con rotación de muñecas iniciado desde posición frontal. Trabajo deltoide completo.',
+    secondaryMuscleGroups: ['Tríceps']
   },
   {
     id: 'upright_row_barbell',
@@ -791,7 +829,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Hombros',
     equipment: 'Barra',
     difficulty: 'Intermedio',
-    description: 'Remo al mentón con barra para deltoides lateral y trapecio superior.'
+    description: 'Remo al mentón con barra para deltoides lateral y trapecio superior.',
+    secondaryMuscleGroups: ['Espalda']
   },
   {
     id: 'pike_push_up_shoulders',
@@ -799,7 +838,8 @@ export const EXERCISES_DB: Exercise[] = [
     muscleGroup: 'Hombros',
     equipment: 'Peso Corporal',
     difficulty: 'Intermedio',
-    description: 'Flexiones inclinando el cuerpo en forma de V invertida para enfocar el esfuerzo en los hombros.'
+    description: 'Flexiones inclinando el cuerpo en forma de V invertida para enfocar el esfuerzo en los hombros.',
+    secondaryMuscleGroups: ['Tríceps']
   },
   {
     id: 'face_pull_banded',
@@ -836,7 +876,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'glute_bridge_rehab',
     title: 'Glute Bridge / Puente de Glúteo',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Glúteos',
     equipment: 'Peso Corporal',
     difficulty: 'Principiante',
     description: 'Elevación de pelvis tumbado boca arriba con rodillas flexionadas. Ejercicio de activación básica.'
@@ -844,7 +884,7 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'tke_banded_rehab',
     title: 'Banded TKE (Terminal Knee Extension)',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Banda',
     difficulty: 'Principiante',
     description: 'Extensión terminal de rodilla de pie resistida por banda elástica. Excelente para tendón rotuliano y vasto medial.'
@@ -852,31 +892,34 @@ export const EXERCISES_DB: Exercise[] = [
   {
     id: 'single_leg_squat',
     title: 'Single-Leg Squat',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Peso Corporal',
     difficulty: 'Avanzado',
     description: 'Sentadilla a una sola pierna manteniendo la otra pierna extendida o flexionada. Alta demanda de estabilidad y fuerza unilateral.',
     nameEs: 'Sentadilla a una Pierna',
-    nameEn: 'Single-Leg Squat'
+    nameEn: 'Single-Leg Squat',
+    secondaryMuscleGroups: ['Glúteos', 'Core']
   },
   {
     id: 'pistol_squat',
     title: 'Pistol Squat',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Peso Corporal',
     difficulty: 'Avanzado',
     description: 'Sentadilla de pistola a rango completo con una pierna estirada al frente. Exige fuerza, equilibrio y movilidad de tobillo excelentes.',
     nameEs: 'Sentadilla Pistola',
-    nameEn: 'Pistol Squat'
+    nameEn: 'Pistol Squat',
+    secondaryMuscleGroups: ['Glúteos', 'Core']
   },
   {
     id: 'bodyweight_squat',
     title: 'Bodyweight Squat',
-    muscleGroup: 'Piernas',
+    muscleGroup: 'Cuádriceps',
     equipment: 'Peso Corporal',
     difficulty: 'Principiante',
     description: 'Sentadilla básica libre con el propio peso corporal. Ejercicio elemental de movimiento inferior.',
     nameEs: 'Sentadilla con Peso Corporal',
-    nameEn: 'Bodyweight Squat'
+    nameEn: 'Bodyweight Squat',
+    secondaryMuscleGroups: ['Glúteos', 'Core']
   }
 ];
