@@ -50,29 +50,12 @@ export async function uploadUserData(userId: string, data: Partial<SyncedData>):
   try {
     const userDocRef = doc(db, 'users', userId);
     
-    // Fetch existing first to merge fields we are not updating
-    const existing = await downloadUserData(userId).catch(() => null);
-    
-    const mergedData: SyncedData = {
-      customRoutines: data.customRoutines ?? existing?.customRoutines ?? [],
-      userSessions: data.userSessions ?? existing?.userSessions ?? [],
-      activeInjury: data.activeInjury !== undefined ? data.activeInjury : (existing?.activeInjury ?? null),
-      bodyWeight: data.bodyWeight !== undefined ? data.bodyWeight : (existing?.bodyWeight ?? 75),
-      height: data.height !== undefined ? data.height : (existing?.height ?? 175),
-      gender: data.gender !== undefined ? data.gender : (existing?.gender ?? 'Masculino'),
-      bodyFat: data.bodyFat !== undefined ? data.bodyFat : (existing?.bodyFat ?? 15),
-      weightHistory: data.weightHistory ?? existing?.weightHistory ?? [],
-      deletedRoutines: data.deletedRoutines ?? existing?.deletedRoutines ?? [],
-      cardioGoalType: data.cardioGoalType ?? existing?.cardioGoalType ?? 'daily',
-      cardioTargetMinutes: data.cardioTargetMinutes !== undefined ? data.cardioTargetMinutes : (existing?.cardioTargetMinutes ?? 150),
-      cardioHistory: data.cardioHistory ?? existing?.cardioHistory ?? [],
-      profilePicture: data.profilePicture !== undefined ? data.profilePicture : (existing?.profilePicture ?? ''),
-      progressPhotos: data.progressPhotos ?? existing?.progressPhotos ?? [],
-      language: data.language !== undefined ? data.language : (existing?.language ?? 'es'),
+    const updatePayload: any = {
+      ...data,
       updatedAt: new Date().toISOString(),
     };
 
-    await setDoc(userDocRef, mergedData);
+    await setDoc(userDocRef, updatePayload, { merge: true });
   } catch (error: any) {
     console.error('Error saving data to Firestore:', error);
     throw error;

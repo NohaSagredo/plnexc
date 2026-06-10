@@ -15,7 +15,7 @@ import SyncPanel from './components/SyncPanel';
 import { uploadUserData } from './utils/firebaseSync';
 import { auth } from './utils/firebase';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { TRANSLATIONS } from './utils/translations';
 
 export default function App() {
@@ -40,7 +40,19 @@ export default function App() {
   };
   
   // 1. Manage state of historical workouts
-  const [localHistory, setLocalHistory] = useState<any[]>([]);
+  const [localHistory, setLocalHistory] = useState<any[]>(() => {
+    const saved = localStorage.getItem('milo_user_sessions');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        parsed.sort((a: any, b: any) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
+        return parsed;
+      } catch (e) {
+        console.error('Failed to parse local user sessions:', e);
+      }
+    }
+    return [];
+  });
 
   // 2. Manage active rehabilitation protocols (Milo)
   const [activeInjury, setActiveInjury] = useState<{
@@ -48,29 +60,118 @@ export default function App() {
     phase: number;
     weakness: string;
     painScale: number;
-  } | null>(null);
+  } | null>(() => {
+    const saved = localStorage.getItem('milo_active_injury');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse active injury:', e);
+      }
+    }
+    return null;
+  });
 
   // 3. Manage custom routines created by the user
-  const [customRoutines, setCustomRoutines] = useState<any[]>([]);
+  const [customRoutines, setCustomRoutines] = useState<any[]>(() => {
+    const saved = localStorage.getItem('plnexc_custom_routines');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse custom routines:', e);
+      }
+    }
+    return [];
+  });
 
   // 4. Anthropometric Profile parameters
-  const [bodyWeight, setBodyWeight] = useState<number>(75);
-  const [height, setHeight] = useState<number>(175);
-  const [gender, setGender] = useState<'Masculino' | 'Femenino'>('Masculino');
-  const [bodyFat, setBodyFat] = useState<number>(15);
-  const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number }[]>([]);
+  const [bodyWeight, setBodyWeight] = useState<number>(() => {
+    const saved = localStorage.getItem('plnexc_body_weight');
+    return saved ? parseFloat(saved) : 75;
+  });
+  const [height, setHeight] = useState<number>(() => {
+    const saved = localStorage.getItem('plnexc_height');
+    return saved ? parseFloat(saved) : 175;
+  });
+  const [gender, setGender] = useState<'Masculino' | 'Femenino'>(() => {
+    const saved = localStorage.getItem('plnexc_gender');
+    return (saved === 'Masculino' || saved === 'Femenino') ? saved : 'Masculino';
+  });
+  const [bodyFat, setBodyFat] = useState<number>(() => {
+    const saved = localStorage.getItem('plnexc_body_fat');
+    return saved ? parseFloat(saved) : 15;
+  });
+  const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number }[]>(() => {
+    const saved = localStorage.getItem('plnexc_weight_history');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse weight history:', e);
+      }
+    }
+    const currentW = localStorage.getItem('plnexc_body_weight') ? parseFloat(localStorage.getItem('plnexc_body_weight')!) : 75;
+    const sampleHistory = [
+      { date: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 1.5 },
+      { date: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 1.0 },
+      { date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 0.5 },
+      { date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 0.2 },
+      { date: new Date().toISOString().split('T')[0], weight: currentW }
+    ];
+    localStorage.setItem('plnexc_weight_history', JSON.stringify(sampleHistory));
+    return sampleHistory;
+  });
 
   // 5. Manage deleted/hidden routines
-  const [deletedRoutines, setDeletedRoutines] = useState<string[]>([]);
+  const [deletedRoutines, setDeletedRoutines] = useState<string[]>(() => {
+    const saved = localStorage.getItem('plnexc_deleted_routines');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse deleted routines:', e);
+      }
+    }
+    return [];
+  });
 
   // 6. Manage cardio goals and history
-  const [cardioGoalType, setCardioGoalType] = useState<'daily' | 'weekly'>('daily');
-  const [cardioTargetMinutes, setCardioTargetMinutes] = useState<number>(150);
-  const [cardioHistory, setCardioHistory] = useState<any[]>([]);
+  const [cardioGoalType, setCardioGoalType] = useState<'daily' | 'weekly'>(() => {
+    const saved = localStorage.getItem('plnexc_cardio_goal_type');
+    return (saved === 'daily' || saved === 'weekly') ? saved : 'daily';
+  });
+  const [cardioTargetMinutes, setCardioTargetMinutes] = useState<number>(() => {
+    const saved = localStorage.getItem('plnexc_cardio_target_minutes');
+    return saved ? parseInt(saved, 10) : 150;
+  });
+  const [cardioHistory, setCardioHistory] = useState<any[]>(() => {
+    const saved = localStorage.getItem('plnexc_cardio_history');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse cardio history:', e);
+      }
+    }
+    return [];
+  });
 
   // 7. Manage profile picture and progress photos
-  const [profilePicture, setProfilePicture] = useState<string>('');
-  const [progressPhotos, setProgressPhotos] = useState<any[]>([]);
+  const [profilePicture, setProfilePicture] = useState<string>(() => {
+    return localStorage.getItem('plnexc_profile_picture') || '';
+  });
+  const [progressPhotos, setProgressPhotos] = useState<any[]>(() => {
+    const saved = localStorage.getItem('plnexc_progress_photos');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse progress photos:', e);
+      }
+    }
+    return [];
+  });
 
   const handleSetCardioGoalType = (type: 'daily' | 'weekly', skipCloudUpload = false) => {
     setCardioGoalType(type);
@@ -220,106 +321,7 @@ export default function App() {
     });
   };
 
-  // Load and merge history and custom routines on mount
-  useEffect(() => {
-    // Check if custom user sessions exist in localStorage
-    const savedUserSessions = localStorage.getItem('milo_user_sessions');
-    const parsedUserSessions = savedUserSessions ? JSON.parse(savedUserSessions) : [];
 
-    // Sort chronologically descending
-    parsedUserSessions.sort((a: any, b: any) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
-    
-    setLocalHistory(parsedUserSessions);
-
-    // Load active injury state
-    const savedInjury = localStorage.getItem('milo_active_injury');
-    if (savedInjury) {
-      setActiveInjury(JSON.parse(savedInjury));
-    }
-
-    // Load custom routines state
-    const savedCustomRoutines = localStorage.getItem('plnexc_custom_routines');
-    if (savedCustomRoutines) {
-      setCustomRoutines(JSON.parse(savedCustomRoutines));
-    }
-
-    // Load deleted routines state
-    const savedDeletedRoutines = localStorage.getItem('plnexc_deleted_routines');
-    if (savedDeletedRoutines) {
-      setDeletedRoutines(JSON.parse(savedDeletedRoutines));
-    }
-
-    // Load cardio goal type
-    const savedCardioGoalType = localStorage.getItem('plnexc_cardio_goal_type');
-    if (savedCardioGoalType === 'daily' || savedCardioGoalType === 'weekly') {
-      setCardioGoalType(savedCardioGoalType);
-    }
-
-    // Load cardio target minutes
-    const savedCardioTargetMinutes = localStorage.getItem('plnexc_cardio_target_minutes');
-    if (savedCardioTargetMinutes) {
-      setCardioTargetMinutes(parseInt(savedCardioTargetMinutes, 10));
-    }
-
-    // Load cardio history
-    const savedCardioHistory = localStorage.getItem('plnexc_cardio_history');
-    if (savedCardioHistory) {
-      setCardioHistory(JSON.parse(savedCardioHistory));
-    }
-
-    // Load bodyWeight state
-    const savedWeight = localStorage.getItem('plnexc_body_weight');
-    const currentW = savedWeight ? parseFloat(savedWeight) : 75;
-    if (savedWeight) {
-      setBodyWeight(currentW);
-    }
-    
-    // Load height state
-    const savedHeight = localStorage.getItem('plnexc_height');
-    if (savedHeight) {
-      setHeight(parseFloat(savedHeight));
-    }
-
-    // Load gender state
-    const savedGender = localStorage.getItem('plnexc_gender');
-    if (savedGender === 'Masculino' || savedGender === 'Femenino') {
-      setGender(savedGender);
-    }
-
-    // Load bodyFat state
-    const savedFat = localStorage.getItem('plnexc_body_fat');
-    if (savedFat) {
-      setBodyFat(parseFloat(savedFat));
-    }
-
-    // Load weightHistory state
-    const savedWeightHistory = localStorage.getItem('plnexc_weight_history');
-    if (savedWeightHistory) {
-      setWeightHistory(JSON.parse(savedWeightHistory));
-    } else {
-      const sampleHistory = [
-        { date: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 1.5 },
-        { date: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 1.0 },
-        { date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 0.5 },
-        { date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 0.2 },
-        { date: new Date().toISOString().split('T')[0], weight: currentW }
-      ];
-      setWeightHistory(sampleHistory);
-      localStorage.setItem('plnexc_weight_history', JSON.stringify(sampleHistory));
-    }
-
-    // Load profile picture
-    const savedProfilePic = localStorage.getItem('plnexc_profile_picture');
-    if (savedProfilePic) {
-      setProfilePicture(savedProfilePic);
-    }
-
-    // Load progress photos
-    const savedProgressPhotos = localStorage.getItem('plnexc_progress_photos');
-    if (savedProgressPhotos) {
-      setProgressPhotos(JSON.parse(savedProgressPhotos));
-    }
-  }, []);
 
   // Save active injury to localStorage and sync
   const handleSetInjury = (injury: any) => {
