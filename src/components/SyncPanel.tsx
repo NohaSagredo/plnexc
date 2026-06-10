@@ -134,7 +134,7 @@ export default function SyncPanel({
       }
     });
     return unsubscribe;
-  }, [language]);
+  }, []);
 
   // Trigger sync process
   const triggerSync = async (userId: string) => {
