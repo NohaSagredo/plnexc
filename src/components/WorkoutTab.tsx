@@ -267,6 +267,69 @@ export default function WorkoutTab({
 
   const routineGridRef = useRef<HTMLDivElement>(null);
   const hasInitialScrolled = useRef(false);
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const startSilentAudio = () => {
+    try {
+      if (!silentAudioRef.current) {
+        // Generate a 1-second silent WAV dynamically
+        const sampleRate = 8000;
+        const numChannels = 1;
+        const bitsPerSample = 8;
+        const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+        const blockAlign = numChannels * (bitsPerSample / 8);
+        const durationSecs = 1;
+        const dataSize = sampleRate * durationSecs;
+        const fileSize = 36 + dataSize;
+
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+
+        // Write WAV header
+        view.setUint32(0, 0x52494646, false); // "RIFF"
+        view.setUint32(4, fileSize, true);
+        view.setUint32(8, 0x57415645, false); // "WAVE"
+        view.setUint32(12, 0x666d7420, false); // "fmt "
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); // PCM
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bitsPerSample, true);
+        view.setUint32(36, 0x64617461, false); // "data"
+        view.setUint32(40, dataSize, true);
+
+        // Fill silent data (128 is midpoint for 8-bit unsigned PCM)
+        for (let i = 0; i < dataSize; i++) {
+          view.setUint8(44 + i, 128);
+        }
+
+        const blob = new Blob([buffer], { type: 'audio/wav' });
+        const silentAudioUrl = URL.createObjectURL(blob);
+        const audio = new Audio(silentAudioUrl);
+        audio.loop = true;
+        audio.volume = 0.01; // Tiny non-zero volume to keep audio active in background
+        silentAudioRef.current = audio;
+      }
+      silentAudioRef.current.play().catch(err => {
+        console.warn('Silent audio play blocked:', err);
+      });
+    } catch (e) {
+      console.error('Error generating silent audio:', e);
+    }
+  };
+
+  const stopSilentAudio = () => {
+    if (silentAudioRef.current) {
+      try {
+        silentAudioRef.current.pause();
+        silentAudioRef.current.currentTime = 0;
+      } catch (err) {
+        console.warn('Error stopping silent audio:', err);
+      }
+    }
+  };
 
   useEffect(() => {
     const container = routineGridRef.current;
@@ -380,6 +443,18 @@ export default function WorkoutTab({
     }
     return () => clearInterval(interval);
   }, [restTimerActive, restTimeRemaining, restTimerMuted]);
+
+  // Effect to manage silent background audio loop (prevents mobile background sleep)
+  useEffect(() => {
+    if (restTimerActive) {
+      startSilentAudio();
+    } else {
+      stopSilentAudio();
+    }
+    return () => {
+      stopSilentAudio();
+    };
+  }, [restTimerActive]);
 
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -772,6 +847,7 @@ export default function WorkoutTab({
         setRestTimeTotal(seconds);
         setRestTimeRemaining(seconds);
         setRestTimerActive(true);
+        startSilentAudio();
 
         if ('vibrate' in navigator) {
           navigator.vibrate(100);
