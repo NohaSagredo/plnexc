@@ -748,6 +748,7 @@ export default function WorkoutTab({
         editRoutineName={editingRoutine?.title}
         editExercises={editingRoutine?.exercises}
         isEditing={!!editingRoutine}
+        language={language}
         onSave={(name, exercises, originalName) => {
           onSaveCustomRoutine(name, exercises, originalName);
           setIsBuildingRoutine(false);

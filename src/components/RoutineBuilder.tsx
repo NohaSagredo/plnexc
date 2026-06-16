@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { EXERCISES_DB } from '../data/exercises_db';
 import type { Exercise } from '../data/exercises_db';
+import { getExerciseName } from '../utils/translations';
 
 interface RoutineBuilderProps {
   onSave: (name: string, exercises: string[], originalName?: string) => void;
@@ -17,6 +18,7 @@ interface RoutineBuilderProps {
   editRoutineName?: string;
   editExercises?: string[];
   isEditing?: boolean;
+  language?: 'es' | 'en';
 }
 
 export default function RoutineBuilder({ 
@@ -24,7 +26,8 @@ export default function RoutineBuilder({
   onCancel,
   editRoutineName = '',
   editExercises = [],
-  isEditing = false
+  isEditing = false,
+  language = 'es'
 }: RoutineBuilderProps) {
   const [routineName, setRoutineName] = useState(editRoutineName);
   const [selectedExercises, setSelectedExercises] = useState<Exercise[]>(() => {
@@ -51,17 +54,78 @@ export default function RoutineBuilder({
   const [selectedEquipment, setSelectedEquipment] = useState<string>('Todos');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('Todos');
 
-  // Filter exercises based on selections
+  // Feedback notification
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+
+  // Translation helpers
+  const translateMuscleGroup = (m: string) => {
+    if (language === 'es') return m;
+    const mapping: any = {
+      'Piernas': 'Legs',
+      'Brazos': 'Arms',
+      'Core': 'Core',
+      'Hombros': 'Shoulders',
+      'Pecho': 'Chest',
+      'Espalda': 'Back',
+      'Cuello': 'Neck',
+      'Cardio': 'Cardio',
+      'Bíceps': 'Biceps',
+      'Tríceps': 'Triceps',
+      'Cuádriceps': 'Quadriceps',
+      'Femorales': 'Hamstrings',
+      'Glúteos': 'Glutes',
+      'Pantorrillas': 'Calves'
+    };
+    return mapping[m] || m;
+  };
+
+  const translateEquipment = (e: string) => {
+    if (language === 'es') return e;
+    const mapping: any = {
+      'Barra': 'Barbell',
+      'Mancuerna': 'Dumbbell',
+      'Peso Corporal': 'Bodyweight',
+      'Polea/Cable': 'Cable',
+      'Banda': 'Band',
+      'Otro': 'Other'
+    };
+    return mapping[e] || e;
+  };
+
+  const loc = {
+    editRoutine: language === 'es' ? 'Editar Rutina' : 'Edit Routine',
+    routineDesigner: language === 'es' ? 'Diseñador de Rutina' : 'Routine Designer',
+    cancel: language === 'es' ? 'Cancelar' : 'Cancel',
+    routineNameLabel: language === 'es' ? 'Nombre de tu Nueva Rutina:' : 'Name of your New Routine:',
+    routineNamePlaceholder: language === 'es' ? 'Ej. Torso Pesado, Rutina de Pierna A, Cardio & Core' : 'e.g. Heavy Upper Body, Leg Routine A, Cardio & Core',
+    selectedExercisesTitle: language === 'es' ? 'Ejercicios Seleccionados' : 'Selected Exercises',
+    emptySelectedList: language === 'es' ? 'Selecciona ejercicios de la biblioteca de la derecha para agregarlos a tu rutina' : 'Select exercises from the library on the right to add them to your routine',
+    up: language === 'es' ? 'Subir' : 'Move Up',
+    down: language === 'es' ? 'Bajar' : 'Move Down',
+    remove: language === 'es' ? 'Remover' : 'Remove',
+    updateRoutine: language === 'es' ? 'Actualizar Rutina' : 'Update Routine',
+    saveRoutine: language === 'es' ? 'Guardar Rutina en PLNEXC' : 'Save Routine to PLNEXC',
+    libraryTitle: language === 'es' ? 'Biblioteca de Ejercicios' : 'Exercise Library',
+    searchPlaceholder: language === 'es' ? 'Buscar ejercicio por nombre...' : 'Search exercise by name...',
+    noExercisesFound: language === 'es' ? 'No se encontraron ejercicios con los filtros seleccionados' : 'No exercises found with the selected filters',
+    filterMuscle: language === 'es' ? 'Filtrar por Músculo:' : 'Filter by Muscle:',
+    filterEquipment: language === 'es' ? 'Filtrar por Equipamiento:' : 'Filter by Equipment:',
+    filterDifficulty: language === 'es' ? 'Filtrar por Dificultad (Ruta de Progreso):' : 'Filter by Difficulty (Progress Route):'
+  };
+
+  // Filter exercises based on selections (with bilingual search match)
   const filteredExercises = useMemo(() => {
     return EXERCISES_DB.filter(ex => {
-      const matchText = ex.title.toLowerCase().includes(searchText.toLowerCase());
+      const nameLocal = getExerciseName(ex.id, ex.title, language);
+      const matchText = ex.title.toLowerCase().includes(searchText.toLowerCase()) ||
+                        nameLocal.toLowerCase().includes(searchText.toLowerCase());
       const matchMuscle = selectedMuscle === 'Todos' || ex.muscleGroup === selectedMuscle;
       const matchEquipment = selectedEquipment === 'Todos' || ex.equipment === selectedEquipment;
       const matchDifficulty = selectedDifficulty === 'Todos' || ex.difficulty === selectedDifficulty;
       
       return matchText && matchMuscle && matchEquipment && matchDifficulty;
     });
-  }, [searchText, selectedMuscle, selectedEquipment, selectedDifficulty]);
+  }, [searchText, selectedMuscle, selectedEquipment, selectedDifficulty, language]);
 
   // Unique categories for selectors
   const muscles = ['Todos', 'Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Cuádriceps', 'Femorales', 'Glúteos', 'Pantorrillas', 'Core', 'Cuello', 'Cardio'];
@@ -72,11 +136,30 @@ export default function RoutineBuilder({
   const handleAddExercise = (exercise: Exercise) => {
     if (selectedExercises.some(e => e.id === exercise.id)) return;
     setSelectedExercises(prev => [...prev, exercise]);
+
+    const name = getExerciseName(exercise.id, exercise.title, language);
+    const msg = language === 'es' 
+      ? `Se agregó "${name}" satisfactoriamente` 
+      : `Successfully added "${name}"`;
+    setNotification({ message: msg, type: 'success' });
+    setTimeout(() => {
+      setNotification(prev => prev?.message === msg ? null : prev);
+    }, 2000);
   };
 
   // Remove exercise from custom routine
   const handleRemoveExercise = (exerciseId: string) => {
+    const ex = EXERCISES_DB.find(e => e.id === exerciseId);
     setSelectedExercises(prev => prev.filter(e => e.id !== exerciseId));
+
+    const name = ex ? getExerciseName(ex.id, ex.title, language) : '';
+    const msg = language === 'es' 
+      ? `Se quitó "${name}" de la rutina` 
+      : `Removed "${name}" from routine`;
+    setNotification({ message: msg, type: 'info' });
+    setTimeout(() => {
+      setNotification(prev => prev?.message === msg ? null : prev);
+    }, 2000);
   };
 
   // Reorder exercises: Up
@@ -107,11 +190,11 @@ export default function RoutineBuilder({
   const handleSaveRoutine = () => {
     const trimmedName = routineName.trim();
     if (!trimmedName) {
-      alert('Por favor, introduce un nombre para la rutina.');
+      alert(language === 'es' ? 'Por favor, introduce un nombre para la rutina.' : 'Please enter a name for the routine.');
       return;
     }
     if (selectedExercises.length === 0) {
-      alert('Por favor, añade al menos un ejercicio a tu rutina.');
+      alert(language === 'es' ? 'Por favor, añade al menos un ejercicio a tu rutina.' : 'Please add at least one exercise to your routine.');
       return;
     }
     
@@ -127,10 +210,10 @@ export default function RoutineBuilder({
       <div className="glass-panel" style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Bookmark size={24} color="hsl(var(--primary))" />
-          <h2 style={{ fontSize: '1.3rem', fontWeight: 800 }}>{isEditing ? 'Editar Rutina' : 'Diseñador de Rutina'}</h2>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: 800 }}>{isEditing ? loc.editRoutine : loc.routineDesigner}</h2>
         </div>
         <button className="btn btn-secondary" onClick={onCancel} style={{ padding: '6px 12px', fontSize: '0.85rem' }}>
-          <X size={16} /> Cancelar
+          <X size={16} /> {loc.cancel}
         </button>
       </div>
 
@@ -142,13 +225,13 @@ export default function RoutineBuilder({
           {/* Routine Name Input */}
           <div className="glass-panel" style={{ padding: '20px' }}>
             <label style={{ fontSize: '0.9rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
-              Nombre de tu Nueva Rutina:
+              {loc.routineNameLabel}
             </label>
             <input 
               type="text" 
               value={routineName} 
               onChange={(e) => setRoutineName(e.target.value)}
-              placeholder="Ej. Torso Pesado, Rutina de Pierna A, Cardio & Core"
+              placeholder={loc.routineNamePlaceholder}
               style={{ marginTop: '8px' }}
             />
           </div>
@@ -156,12 +239,12 @@ export default function RoutineBuilder({
           {/* Selected Exercises Editor */}
           <div className="glass-panel" style={{ padding: '20px', minHeight: '300px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h3 style={{ fontSize: '1.1rem', fontWeight: 700, borderBottom: '1px solid hsl(var(--border))', paddingBottom: '8px' }}>
-              Ejercicios Seleccionados ({selectedExercises.length})
+              {loc.selectedExercisesTitle} ({selectedExercises.length})
             </h3>
 
             {selectedExercises.length === 0 ? (
               <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'hsl(var(--muted))', fontSize: '0.9rem', textAlign: 'center', padding: '40px 0' }}>
-                Selecciona ejercicios de la biblioteca de la derecha para agregarlos a tu rutina
+                {loc.emptySelectedList}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -179,9 +262,9 @@ export default function RoutineBuilder({
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '65%' }}>
-                      <strong style={{ fontSize: '0.9rem' }}>{ex.title}</strong>
+                      <strong style={{ fontSize: '0.9rem' }}>{getExerciseName(ex.id, ex.title, language)}</strong>
                       <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
-                        {ex.muscleGroup} {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 ? `(+ ${ex.secondaryMuscleGroups.join(', ')})` : ''} • {ex.equipment}
+                        {translateMuscleGroup(ex.muscleGroup)} {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 ? `(+ ${ex.secondaryMuscleGroups.map(m => translateMuscleGroup(m)).join(', ')})` : ''} • {translateEquipment(ex.equipment)}
                       </span>
                     </div>
 
@@ -190,7 +273,7 @@ export default function RoutineBuilder({
                         onClick={() => handleMoveUp(idx)}
                         disabled={idx === 0}
                         style={{ background: 'transparent', border: 'none', color: idx === 0 ? 'rgba(255,255,255,0.05)' : 'hsl(var(--muted))', cursor: idx === 0 ? 'default' : 'pointer' }}
-                        title="Subir"
+                        title={loc.up}
                       >
                         <ArrowUp size={16} />
                       </button>
@@ -198,14 +281,14 @@ export default function RoutineBuilder({
                         onClick={() => handleMoveDown(idx)}
                         disabled={idx === selectedExercises.length - 1}
                         style={{ background: 'transparent', border: 'none', color: idx === selectedExercises.length - 1 ? 'rgba(255,255,255,0.05)' : 'hsl(var(--muted))', cursor: idx === selectedExercises.length - 1 ? 'default' : 'pointer' }}
-                        title="Bajar"
+                        title={loc.down}
                       >
                         <ArrowDown size={16} />
                       </button>
                       <button 
                         onClick={() => handleRemoveExercise(ex.id)}
                         style={{ background: 'transparent', border: 'none', color: 'hsl(var(--danger))', cursor: 'pointer', marginLeft: '6px' }}
-                        title="Remover"
+                        title={loc.remove}
                       >
                         <X size={18} />
                       </button>
@@ -220,7 +303,7 @@ export default function RoutineBuilder({
               onClick={handleSaveRoutine}
               style={{ width: '100%', marginTop: 'auto', padding: '12px' }}
             >
-              <Check size={18} /> {isEditing ? 'Actualizar Rutina' : 'Guardar Rutina en PLNEXC'}
+              <Check size={18} /> {isEditing ? loc.updateRoutine : loc.saveRoutine}
             </button>
           </div>
 
@@ -230,7 +313,7 @@ export default function RoutineBuilder({
         <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, borderBottom: '1px solid hsl(var(--border))', paddingBottom: '8px' }}>
-            Biblioteca de Ejercicios
+            {loc.libraryTitle}
           </h3>
 
           {/* Text Search */}
@@ -239,7 +322,7 @@ export default function RoutineBuilder({
               type="text" 
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              placeholder="Buscar ejercicio por nombre..."
+              placeholder={loc.searchPlaceholder}
               style={{ paddingLeft: '36px' }}
             />
             <Search 
@@ -252,23 +335,33 @@ export default function RoutineBuilder({
           {/* Category Dropdowns */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Filtrar por Músculo:</label>
+              <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>{loc.filterMuscle}</label>
               <select value={selectedMuscle} onChange={(e) => setSelectedMuscle(e.target.value)} style={{ padding: '6px 10px', marginTop: '4px' }}>
-                {muscles.map(m => <option key={m} value={m}>{m}</option>)}
+                {muscles.map(m => <option key={m} value={m}>{m === 'Todos' ? (language === 'es' ? 'Todos' : 'All') : translateMuscleGroup(m)}</option>)}
               </select>
             </div>
             
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Filtrar por Equipamiento:</label>
+              <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>{loc.filterEquipment}</label>
               <select value={selectedEquipment} onChange={(e) => setSelectedEquipment(e.target.value)} style={{ padding: '6px 10px', marginTop: '4px' }}>
-                {equipments.map(eq => <option key={eq} value={eq}>{eq}</option>)}
+                {equipments.map(eq => <option key={eq} value={eq}>{eq === 'Todos' ? (language === 'es' ? 'Todos' : 'All') : translateEquipment(eq)}</option>)}
               </select>
             </div>
 
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>Filtrar por Dificultad (Ruta de Progreso):</label>
+              <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>{loc.filterDifficulty}</label>
               <select value={selectedDifficulty} onChange={(e) => setSelectedDifficulty(e.target.value)} style={{ padding: '6px 10px', marginTop: '4px' }}>
-                {difficulties.map(d => <option key={d} value={d}>{d}</option>)}
+                {difficulties.map(d => (
+                  <option key={d} value={d}>
+                    {d === 'Todos' ? (language === 'es' ? 'Todos' : 'All') : (
+                      language === 'es' ? d : (
+                        d === 'Principiante' ? 'Beginner' :
+                        d === 'Intermedio' ? 'Intermediate' :
+                        d === 'Avanzado' ? 'Advanced' : d
+                      )
+                    )}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -277,7 +370,7 @@ export default function RoutineBuilder({
           <div style={{ maxHeight: '350px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px', marginTop: '6px' }}>
             {filteredExercises.length === 0 ? (
               <div style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', textAlign: 'center', padding: '20px 0' }}>
-                No se encontraron ejercicios con los filtros seleccionados
+                {loc.noExercisesFound}
               </div>
             ) : (
               filteredExercises.map(ex => {
@@ -297,27 +390,51 @@ export default function RoutineBuilder({
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '75%', gap: '4px' }}>
-                      <strong style={{ fontSize: '0.85rem' }}>{ex.title}</strong>
+                      <strong style={{ fontSize: '0.85rem' }}>{getExerciseName(ex.id, ex.title, language)}</strong>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{ex.muscleGroup}</span>
+                        <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{translateMuscleGroup(ex.muscleGroup)}</span>
                         {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 && (
                           <span className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '1px 4px', background: 'rgba(255, 255, 255, 0.05)', color: 'hsl(var(--muted))', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                            + {ex.secondaryMuscleGroups.join(', ')}
+                            + {ex.secondaryMuscleGroups.map(m => translateMuscleGroup(m)).join(', ')}
                           </span>
                         )}
-                        <span className="badge badge-success" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{ex.equipment}</span>
-                        <span className="badge badge-warning" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{ex.difficulty}</span>
+                        <span className="badge badge-success" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{translateEquipment(ex.equipment)}</span>
+                        <span className="badge badge-warning" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>
+                          {language === 'es' ? ex.difficulty : (
+                            ex.difficulty === 'Principiante' ? 'Beginner' :
+                            ex.difficulty === 'Intermedio' ? 'Intermediate' :
+                            ex.difficulty === 'Avanzado' ? 'Advanced' : ex.difficulty
+                          )}
+                        </span>
                       </div>
                     </div>
 
                     <button 
-                      className={`btn ${isAdded ? 'btn-secondary' : 'btn-primary'}`}
-                      style={{ padding: '6px', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      disabled={isAdded}
-                      onClick={() => handleAddExercise(ex)}
-                      title={isAdded ? 'Añadido' : 'Añadir a la rutina'}
+                      style={{ 
+                        padding: '6px', 
+                        borderRadius: '50%', 
+                        width: '28px', 
+                        height: '28px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'all var(--transition-fast)',
+                        border: isAdded ? '1px solid hsl(var(--primary))' : '1px solid rgba(255, 255, 255, 0.15)',
+                        background: isAdded ? 'hsl(var(--primary))' : 'rgba(255, 255, 255, 0.03)',
+                        color: isAdded ? '#000000' : 'rgba(255, 255, 255, 0.6)',
+                        boxShadow: isAdded ? '0 0 10px hsla(var(--primary) / 0.4)' : 'none'
+                      }}
+                      onClick={() => {
+                        if (isAdded) {
+                          handleRemoveExercise(ex.id);
+                        } else {
+                          handleAddExercise(ex);
+                        }
+                      }}
+                      title={isAdded ? (language === 'es' ? 'Quitar de la rutina' : 'Remove from routine') : (language === 'es' ? 'Añadir a la rutina' : 'Add to routine')}
                     >
-                      {isAdded ? <Check size={14} /> : <Plus size={14} />}
+                      {isAdded ? <Check size={14} strokeWidth={3} /> : <Plus size={14} />}
                     </button>
                   </div>
                 );
@@ -328,6 +445,49 @@ export default function RoutineBuilder({
         </div>
 
       </div>
+
+      {/* Local Toast Notification System */}
+      {notification && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          background: 'rgba(10, 10, 10, 0.85)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          padding: '12px 20px',
+          borderRadius: '12px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          animation: 'slideUp 0.3s ease-out',
+          color: '#ffffff',
+          fontSize: '0.9rem',
+          fontWeight: 500
+        }}>
+          <style>{`
+            @keyframes slideUp {
+              from { transform: translateY(20px); opacity: 0; }
+              to { transform: translateY(0); opacity: 1; }
+            }
+          `}</style>
+          <span style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            width: '20px', 
+            height: '20px', 
+            borderRadius: '50%', 
+            background: notification.type === 'success' ? 'hsl(var(--success))' : 'hsl(var(--primary))',
+            color: '#000000'
+          }}>
+            {notification.type === 'success' ? <Check size={12} strokeWidth={3} /> : <Plus size={12} />}
+          </span>
+          {notification.message}
+        </div>
+      )}
 
     </div>
   );
