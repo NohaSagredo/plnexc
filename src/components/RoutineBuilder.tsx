@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   Search, 
   Plus, 
@@ -47,6 +47,21 @@ export default function RoutineBuilder({
     }
     return [];
   });
+
+  const selectedListRef = useRef<HTMLDivElement | null>(null);
+  const prevLengthRef = useRef(selectedExercises.length);
+
+  useEffect(() => {
+    if (selectedExercises.length > prevLengthRef.current) {
+      if (selectedListRef.current) {
+        selectedListRef.current.scrollTo({
+          top: selectedListRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    }
+    prevLengthRef.current = selectedExercises.length;
+  }, [selectedExercises.length]);
   
   // Filters State
   const [searchText, setSearchText] = useState('');
@@ -247,7 +262,17 @@ export default function RoutineBuilder({
                 {loc.emptySelectedList}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div 
+                ref={selectedListRef}
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '10px',
+                  maxHeight: '320px',
+                  overflowY: 'auto',
+                  paddingRight: '6px'
+                }}
+              >
                 {selectedExercises.map((ex, idx) => (
                   <div 
                     key={ex.id}
@@ -479,6 +504,9 @@ export default function RoutineBuilder({
             justifyContent: 'center', 
             width: '20px', 
             height: '20px', 
+            minWidth: '20px',
+            minHeight: '20px',
+            flexShrink: 0,
             borderRadius: '50%', 
             background: notification.type === 'success' ? 'hsl(var(--success))' : 'hsl(var(--primary))',
             color: '#000000'

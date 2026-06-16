@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Scale, User, Trash2, Calendar, Plus, HelpCircle, Calculator, ChevronDown, ChevronUp, Check, Info, Lock, Camera, Award, X, Image as ImageIcon, Settings } from 'lucide-react';
+import { Scale, User, Trash2, Calendar, Plus, Minus, HelpCircle, Calculator, ChevronDown, ChevronUp, Check, Info, Lock, Camera, Award, X, Image as ImageIcon, Settings, Volume2 } from 'lucide-react';
 import type { WeightRecord } from '../utils/firebaseSync';
 import { calculatePBProfiles, calculateAchievements, compressAndResizeImage } from '../utils/ProgressionEngine';
 import { TRANSLATIONS } from '../utils/translations';
@@ -54,6 +54,46 @@ export default function ProfileTab({
   const [newWeightInput, setNewWeightInput] = useState<string>('');
   const [customDateInput, setCustomDateInput] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showAlgorithms, setShowAlgorithms] = useState<boolean>(false);
+
+  // Rest Timer Settings State
+  const [restTimerEnabled, setRestTimerEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('plnexc_rest_timer_enabled') !== 'false';
+  });
+  const [restTimeCompound, setRestTimeCompound] = useState<number>(() => {
+    const saved = localStorage.getItem('plnexc_rest_time_compound');
+    return saved ? parseInt(saved, 10) : 120;
+  });
+  const [restTimeAccessory, setRestTimeAccessory] = useState<number>(() => {
+    const saved = localStorage.getItem('plnexc_rest_time_accessory');
+    return saved ? parseInt(saved, 10) : 90;
+  });
+  const [restTimerSoundEnabled, setRestTimerSoundEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('plnexc_rest_timer_sound_enabled') !== 'false';
+  });
+
+  const handleToggleRestTimer = () => {
+    const newVal = !restTimerEnabled;
+    setRestTimerEnabled(newVal);
+    localStorage.setItem('plnexc_rest_timer_enabled', String(newVal));
+  };
+
+  const handleToggleRestSound = () => {
+    const newVal = !restTimerSoundEnabled;
+    setRestTimerSoundEnabled(newVal);
+    localStorage.setItem('plnexc_rest_timer_sound_enabled', String(newVal));
+  };
+
+  const adjustCompoundTime = (amount: number) => {
+    const newVal = Math.max(30, Math.min(600, restTimeCompound + amount));
+    setRestTimeCompound(newVal);
+    localStorage.setItem('plnexc_rest_time_compound', String(newVal));
+  };
+
+  const adjustAccessoryTime = (amount: number) => {
+    const newVal = Math.max(15, Math.min(300, restTimeAccessory + amount));
+    setRestTimeAccessory(newVal);
+    localStorage.setItem('plnexc_rest_time_accessory', String(newVal));
+  };
 
   // States for body fat calculator
   const [showFatCalc, setShowFatCalc] = useState<boolean>(false);
@@ -1049,6 +1089,185 @@ export default function ProfileTab({
           >
             🌐 {language === 'es' ? 'Español (ES)' : 'English (EN)'}
           </button>
+        </div>
+
+        {/* Divider */}
+        <hr style={{ border: '0', borderTop: '1px solid rgba(255,255,255,0.06)', margin: '4px 0' }} />
+
+        {/* Subsección: Entrenamiento */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'hsl(var(--primary))', display: 'flex', alignItems: 'center', gap: '8px', margin: '0' }}>
+            🏋️ {t.profileSectionWorkoutSettings || 'Configuración de Entrenamiento'}
+          </h3>
+
+          {/* Habilitar temporizador */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '16px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            borderRadius: '12px',
+            border: '1px solid hsl(var(--border))',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: '200px' }}>
+              <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#fff' }}>
+                {t.profileRestTimerAuto || 'Temporizador de Descanso Automático'}
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>
+                {t.profileRestTimerAutoDesc || 'Arranca automáticamente al completar una serie.'}
+              </span>
+            </div>
+            
+            <button 
+              type="button"
+              onClick={handleToggleRestTimer}
+              style={{
+                background: restTimerEnabled ? 'hsla(var(--primary) / 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid ' + (restTimerEnabled ? 'hsl(var(--primary))' : 'hsl(var(--border))'),
+                borderRadius: '8px',
+                padding: '8px 16px',
+                color: restTimerEnabled ? 'hsl(var(--primary))' : '#ffffff',
+                fontSize: '0.875rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'all var(--transition-fast)'
+              }}
+              className="hover-card-highlight"
+            >
+              {restTimerEnabled ? (language === 'es' ? 'Activado' : 'Enabled') : (language === 'es' ? 'Desactivado' : 'Disabled')}
+            </button>
+          </div>
+
+          {restTimerEnabled && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+              {/* Descanso Compuesto */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px',
+                background: 'rgba(255, 255, 255, 0.01)',
+                borderRadius: '12px',
+                border: '1px solid hsl(var(--border))',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#fff' }}>
+                    {t.profileRestTimeCompound || 'Descanso en Compuestos'}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
+                    {language === 'es' ? 'Sentadillas, Press Banca, etc.' : 'Squat, Bench Press, etc.'}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button 
+                    type="button"
+                    onClick={() => adjustCompoundTime(-15)}
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <span style={{ minWidth: '45px', textAlign: 'center', fontFamily: 'monospace', fontSize: '0.95rem', fontWeight: 'bold', color: '#fff' }}>
+                    {restTimeCompound}s
+                  </span>
+                  <button 
+                    type="button"
+                    onClick={() => adjustCompoundTime(15)}
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Descanso Accesorio */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px',
+                background: 'rgba(255, 255, 255, 0.01)',
+                borderRadius: '12px',
+                border: '1px solid hsl(var(--border))',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#fff' }}>
+                    {t.profileRestTimeAccessory || 'Descanso en Accesorios'}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
+                    {language === 'es' ? 'Aislamiento, Brazos, etc.' : 'Isolation, Arms, etc.'}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button 
+                    type="button"
+                    onClick={() => adjustAccessoryTime(-15)}
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <span style={{ minWidth: '45px', textAlign: 'center', fontFamily: 'monospace', fontSize: '0.95rem', fontWeight: 'bold', color: '#fff' }}>
+                    {restTimeAccessory}s
+                  </span>
+                  <button 
+                    type="button"
+                    onClick={() => adjustAccessoryTime(15)}
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid hsl(var(--border))', color: '#fff', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sonidos de Alerta */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '16px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            borderRadius: '12px',
+            border: '1px solid hsl(var(--border))',
+            flexWrap: 'wrap',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: '200px' }}>
+              <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Volume2 size={18} color="hsl(var(--primary))" />
+                {t.profileRestTimerSound || 'Sonidos de Alerta'}
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>
+                {t.profileRestTimerSoundDesc || 'Activa pitidos de pre-alerta (últimos 3s) y de finalización.'}
+              </span>
+            </div>
+            
+            <button 
+              type="button"
+              onClick={handleToggleRestSound}
+              style={{
+                background: restTimerSoundEnabled ? 'hsla(var(--primary) / 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid ' + (restTimerSoundEnabled ? 'hsl(var(--primary))' : 'hsl(var(--border))'),
+                borderRadius: '8px',
+                padding: '8px 16px',
+                color: restTimerSoundEnabled ? 'hsl(var(--primary))' : '#ffffff',
+                fontSize: '0.875rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'all var(--transition-fast)'
+              }}
+              className="hover-card-highlight"
+            >
+              {restTimerSoundEnabled ? (language === 'es' ? 'Activado' : 'Enabled') : (language === 'es' ? 'Desactivado' : 'Disabled')}
+            </button>
+          </div>
         </div>
       </div>
 

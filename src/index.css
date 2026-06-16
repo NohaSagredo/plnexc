@@ -1045,5 +1045,194 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
+/* 11. Floating Rest Timer & Responsive Workout Logger */
+.floating-rest-timer {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  max-width: 480px;
+  margin: 0 auto;
+  z-index: 99;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, hsla(222, 18%, 10%, 0.97) 0%, hsla(265, 35%, 12%, 0.97) 100%);
+  border: 1px solid hsla(var(--secondary) / 0.4);
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.6), 0 0 10px hsla(var(--secondary) / 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: var(--border-radius-md);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  
+  /* Mobile position: closely glued above bottom navbar */
+  bottom: calc(58px + env(safe-area-inset-bottom));
+}
+
+.floating-rest-timer .timer-desc {
+  display: none; /* Hide long description on mobile */
+}
+
+.floating-rest-timer .timer-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.floating-rest-timer .timer-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.floating-rest-timer .timer-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.floating-rest-timer .timer-countdown {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-family: monospace;
+  color: hsl(var(--secondary));
+  margin-left: 4px;
+}
+
+.floating-rest-timer .timer-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.floating-rest-timer .timer-btn {
+  padding: 0 !important;
+  font-size: 0.8rem !important;
+  height: 38px;
+  width: 38px;
+  min-width: 38px;
+  border-radius: 50% !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.floating-rest-timer .timer-btn.time-adj-btn {
+  width: auto;
+  min-width: 54px;
+  padding: 0 10px !important;
+  border-radius: 19px !important;
+  font-weight: 700;
+}
+
+.floating-rest-timer .timer-btn.timer-skip-btn {
+  width: auto;
+  min-width: 76px;
+  padding: 0 12px !important;
+  border-radius: 19px !important;
+}
+
+.floating-rest-timer .timer-btn-text {
+  display: inline;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.active-workout-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 40px;
+}
+
+/* Add bottom padding to allow scrolling past when floating rest banner is visible */
+.active-workout-container.has-active-rest {
+  padding-bottom: 160px; /* Increased bottom padding on mobile to accommodate taller two-row timer */
+}
+
+@media (min-width: 768px) {
+  .floating-rest-timer {
+    bottom: 24px;
+    left: 16px;
+    right: 16px;
+    max-width: 500px;
+    padding: 12px 16px;
+    gap: 10px;
+    border-radius: var(--border-radius-md);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 15px hsla(var(--secondary) / 0.25);
+  }
+  
+  .floating-rest-timer .timer-desc {
+    display: block;
+  }
+  
+  .floating-rest-timer .timer-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .floating-rest-timer .timer-info {
+    width: auto;
+    justify-content: flex-start;
+  }
+  
+  .floating-rest-timer .timer-title {
+    font-size: 0.95rem;
+  }
+  
+  .floating-rest-timer .timer-countdown {
+    font-size: 1.6rem;
+    margin-left: 0;
+  }
+  
+  .floating-rest-timer .timer-controls {
+    width: auto;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  
+  .floating-rest-timer .timer-btn {
+    width: auto;
+    min-width: 38px;
+    height: 38px;
+    border-radius: var(--border-radius-sm) !important;
+    padding: 0 10px !important;
+  }
+  
+  .floating-rest-timer .timer-btn.time-adj-btn {
+    width: auto;
+    min-width: auto;
+    border-radius: var(--border-radius-sm) !important;
+    padding: 0 12px !important;
+  }
+
+  .floating-rest-timer .timer-btn.timer-skip-btn {
+    width: auto;
+    min-width: auto;
+    border-radius: var(--border-radius-sm) !important;
+    padding: 0 14px !important;
+  }
+  
+  .floating-rest-timer .timer-btn-text {
+    display: inline;
+    margin-left: 4px;
+  }
+  
+  .active-workout-container.has-active-rest {
+    padding-bottom: 90px;
+  }
+}
+
 
 

@@ -10,13 +10,14 @@ import {
   Clock,
   Dumbbell,
   Plus,
-  Minus,
   SkipForward,
   Trash2,
   Edit2,
   Target,
   BookOpen,
-  Award
+  Award,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { proposeNextSet, calculatePBProfiles } from '../utils/ProgressionEngine';
 import type { SetData, ProgressionTarget } from '../utils/ProgressionEngine';
@@ -48,6 +49,43 @@ interface WorkoutTabProps {
   bodyFat: number;
   language: 'es' | 'en';
 }
+
+// Web Audio API Synthesized Sounds
+const playBeep = (frequency: number, duration: number, type: OscillatorType = 'sine') => {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+    
+    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    oscillator.start();
+    oscillator.stop(audioCtx.currentTime + duration);
+  } catch (error) {
+    console.warn("Web Audio API not supported or blocked by browser policies:", error);
+  }
+};
+
+const playWarningBeep = () => {
+  playBeep(650, 0.08, 'sine');
+};
+
+const playCompletionSound = () => {
+  playBeep(880, 0.15, 'sine');
+  setTimeout(() => {
+    playBeep(1200, 0.25, 'sine');
+  }, 120);
+};
 
 export default function WorkoutTab({ 
   activeInjury, 
@@ -289,6 +327,9 @@ export default function WorkoutTab({
   const [restTimeTotal, setRestTimeTotal] = useState<number>(90);
   const [restTimeRemaining, setRestTimeRemaining] = useState<number>(0);
   const [restTimerActive, setRestTimerActive] = useState<boolean>(false);
+  const [restTimerMuted, setRestTimerMuted] = useState<boolean>(() => {
+    return localStorage.getItem('plnexc_rest_timer_muted') === 'true';
+  });
 
   // Timer Effect (Main workout duration)
   useEffect(() => {
@@ -311,19 +352,34 @@ export default function WorkoutTab({
         setRestTimeRemaining(r => {
           if (r <= 1) {
             setRestTimerActive(false);
+            
+            const soundEnabled = localStorage.getItem('plnexc_rest_timer_sound_enabled') !== 'false';
+            if (soundEnabled && !restTimerMuted) {
+              playCompletionSound();
+            }
+
             if ('vibrate' in navigator) {
               navigator.vibrate([100, 50, 100]);
             }
             return 0;
           }
-          return r - 1;
+
+          const nextVal = r - 1;
+          if (nextVal >= 1 && nextVal <= 3) {
+            const soundEnabled = localStorage.getItem('plnexc_rest_timer_sound_enabled') !== 'false';
+            if (soundEnabled && !restTimerMuted) {
+              playWarningBeep();
+            }
+          }
+
+          return nextVal;
         });
       }, 1000);
     } else {
       clearInterval(interval);
     }
     return () => clearInterval(interval);
-  }, [restTimerActive, restTimeRemaining]);
+  }, [restTimerActive, restTimeRemaining, restTimerMuted]);
 
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -666,25 +722,26 @@ export default function WorkoutTab({
   };
 
   const handleToggleCompleted = (exIdx: number, setIdx: number) => {
+    if (!activeSession) return;
+
+    const targetExercise = activeSession.exercises[exIdx];
+    const targetSet = targetExercise.sets[setIdx];
+    const newCompleted = !targetSet.completed;
+
     let triggeredRest = false;
     let isCompound = false;
 
+    if (newCompleted) {
+      triggeredRest = true;
+      const titleLower = targetExercise.title.toLowerCase();
+      isCompound = titleLower.includes('squat') || 
+                   titleLower.includes('deadlift') || 
+                   titleLower.includes('bench press') || 
+                   titleLower.includes('overhead press');
+    }
+
     setActiveSession((prev: any) => {
       if (!prev) return prev;
-      
-      const targetExercise = prev.exercises[exIdx];
-      const targetSet = targetExercise.sets[setIdx];
-      const newCompleted = !targetSet.completed;
-
-      if (newCompleted) {
-        triggeredRest = true;
-        const titleLower = targetExercise.title.toLowerCase();
-        isCompound = titleLower.includes('squat') || 
-                     titleLower.includes('deadlift') || 
-                     titleLower.includes('bench press') || 
-                     titleLower.includes('overhead press');
-      }
-
       return {
         ...prev,
         exercises: prev.exercises.map((ex: any, eIdx: number) => {
@@ -704,13 +761,21 @@ export default function WorkoutTab({
     });
 
     if (triggeredRest) {
-      const seconds = isCompound ? 120 : 90;
-      setRestTimeTotal(seconds);
-      setRestTimeRemaining(seconds);
-      setRestTimerActive(true);
+      const isTimerEnabled = localStorage.getItem('plnexc_rest_timer_enabled') !== 'false';
+      if (isTimerEnabled) {
+        const savedCompound = localStorage.getItem('plnexc_rest_time_compound');
+        const savedAccessory = localStorage.getItem('plnexc_rest_time_accessory');
+        const defaultCompound = savedCompound ? parseInt(savedCompound, 10) : 120;
+        const defaultAccessory = savedAccessory ? parseInt(savedAccessory, 10) : 90;
 
-      if ('vibrate' in navigator) {
-        navigator.vibrate(100);
+        const seconds = isCompound ? defaultCompound : defaultAccessory;
+        setRestTimeTotal(seconds);
+        setRestTimeRemaining(seconds);
+        setRestTimerActive(true);
+
+        if ('vibrate' in navigator) {
+          navigator.vibrate(100);
+        }
       }
     }
   };
@@ -1464,7 +1529,7 @@ export default function WorkoutTab({
       ) : (
         
         /* 2. ACTIVE WORKOUT LOGGER */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className={`active-workout-container ${restTimeRemaining > 0 ? 'has-active-rest' : ''}`}>
           
           {/* Active Workout Info Panel */}
           <div className="glass-panel" style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
@@ -1525,58 +1590,76 @@ export default function WorkoutTab({
           </div>
 
           {/* Rest Timer Banner */}
-          {restTimeRemaining > 0 && (
-            <div className="glass-panel fade-in" style={{ 
-              padding: '16px 20px', 
-              background: 'hsla(var(--secondary) / 0.08)', 
-              borderColor: 'hsla(var(--secondary) / 0.3)',
-              boxShadow: '0 0 15px hsla(var(--secondary) / 0.15)',
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: '12px',
-              borderRadius: 'var(--border-radius-md)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Clock size={20} color="hsl(var(--secondary))" style={{ animation: 'fadeIn 1.5s infinite alternate' }} />
-                  <div>
-                    <strong style={{ fontSize: '0.95rem', color: '#ffffff' }}>Tiempo de Descanso Activo</strong>
-                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
-                      Espera o ajusta el tiempo de recuperación entre series
+          {restTimeRemaining > 0 && createPortal(
+            (() => {
+              const soundEnabledGlobal = localStorage.getItem('plnexc_rest_timer_sound_enabled') !== 'false';
+              return (
+                <div className="glass-panel fade-in floating-rest-timer">
+                  <div className="timer-row">
+                    <div className="timer-info">
+                      <Clock size={16} color="hsl(var(--secondary))" style={{ animation: 'fadeIn 1.5s infinite alternate', flexShrink: 0 }} />
+                      <span className="timer-title">
+                        {language === 'es' ? 'Descanso:' : 'Rest:'}
+                      </span>
+                      <span className="timer-countdown">
+                        {formatTime(restTimeRemaining)}
+                      </span>
+                    </div>
+                    
+                    <div className="timer-controls">
+                      {soundEnabledGlobal && (
+                        <button 
+                          className="btn btn-secondary timer-btn" 
+                          type="button"
+                          onClick={() => {
+                            const nextMute = !restTimerMuted;
+                            setRestTimerMuted(nextMute);
+                            localStorage.setItem('plnexc_rest_timer_muted', String(nextMute));
+                          }} 
+                          style={{ 
+                            background: restTimerMuted ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                            border: '1px solid ' + (restTimerMuted ? 'rgb(239, 68, 68)' : 'hsl(var(--border))'),
+                            color: restTimerMuted ? 'rgb(239, 68, 68)' : '#ffffff',
+                          }}
+                          title={t.activeWorkoutMuteTooltip || 'Silenciar / Activar sonido'}
+                        >
+                          {restTimerMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                        </button>
+                      )}
+                      <button className="btn btn-secondary timer-btn time-adj-btn" onClick={handleSubtractRestTime} title="-30s">
+                        -30s
+                      </button>
+                      <button className="btn btn-secondary timer-btn time-adj-btn" onClick={handleAddRestTime} title="+30s">
+                        +30s
+                      </button>
+                      <button className="btn btn-warning timer-btn timer-skip-btn" onClick={handleSkipRest} title={language === 'es' ? 'Omitir descanso' : 'Skip rest'}>
+                        <SkipForward size={14} />
+                        <span className="timer-btn-text">{language === 'es' ? 'Omitir' : 'Skip'}</span>
+                      </button>
                     </div>
                   </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '1.6rem', fontWeight: 800, fontFamily: 'monospace', color: 'hsl(var(--secondary))' }}>
-                    {formatTime(restTimeRemaining)}
-                  </span>
                   
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button className="btn btn-secondary" onClick={handleSubtractRestTime} style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                      <Minus size={12} /> 30s
-                    </button>
-                    <button className="btn btn-secondary" onClick={handleAddRestTime} style={{ padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                      <Plus size={12} /> 30s
-                    </button>
-                    <button className="btn btn-warning" onClick={handleSkipRest} style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <SkipForward size={12} /> Omitir
-                    </button>
+                  {/* Description - shown on PC/Desktop via CSS */}
+                  <div className="timer-desc" style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '6px', marginTop: '2px' }}>
+                    {language === 'es' 
+                      ? 'Espera o ajusta el tiempo de recuperación entre series' 
+                      : 'Wait or adjust the recovery time between sets'}
+                  </div>
+
+                  {/* Progress bar */}
+                  <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      height: '100%', 
+                      width: `${(restTimeRemaining / restTimeTotal) * 100}%`, 
+                      background: 'hsl(var(--secondary))',
+                      borderRadius: '2px',
+                      transition: 'width 1s linear'
+                    }} />
                   </div>
                 </div>
-              </div>
-
-              {/* Progress bar */}
-              <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ 
-                  height: '100%', 
-                  width: `${(restTimeRemaining / restTimeTotal) * 100}%`, 
-                  background: 'hsl(var(--secondary))',
-                  borderRadius: '3px',
-                  transition: 'width 1s linear'
-                }} />
-              </div>
-            </div>
+              );
+            })(),
+            document.body
           )}
 
           {/* Paused Session Warning Banner */}
