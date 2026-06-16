@@ -38,6 +38,7 @@ interface WorkoutTabProps {
   } | null;
   onSaveWorkout: (newSession: any) => void;
   onDeleteWorkout: (parsedDate: string) => void;
+  onUpdateWorkout: (updatedSession: any) => void;
   localHistory: any[];
   customRoutines: any[];
   onSaveCustomRoutine: (name: string, exercises: string[], originalName?: string) => void;
@@ -50,47 +51,155 @@ interface WorkoutTabProps {
   language: 'es' | 'en';
 }
 
-// Web Audio API Synthesized Sounds
-const playBeep = (frequency: number, duration: number, type: OscillatorType = 'sine') => {
-  try {
-    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
+// Dynamically generate a beep sound as a WAV Data URI/Blob to bypass iOS Web Audio API mute/silent-switch limitations
+const generateBeepWav = (frequency: number, duration: number) => {
+  const sampleRate = 8000;
+  const numChannels = 1;
+  const bitsPerSample = 8;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataSize = Math.floor(sampleRate * duration);
+  const fileSize = 36 + dataSize;
+
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  // Write WAV header
+  view.setUint32(0, 0x52494646, false); // "RIFF"
+  view.setUint32(4, fileSize, true);
+  view.setUint32(8, 0x57415645, false); // "WAVE"
+  view.setUint32(12, 0x666d7420, false); // "fmt "
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  view.setUint32(36, 0x64617461, false); // "data"
+  view.setUint32(40, dataSize, true);
+
+  // Generate sine wave samples with attack (fade-in) and decay (fade-out) envelope
+  // to avoid pops/clicks and make it sound soft and premium
+  const attackSamples = Math.floor(dataSize * 0.15); // 15% fade-in
+  const decaySamples = Math.floor(dataSize * 0.40);  // 40% fade-out
+
+  for (let i = 0; i < dataSize; i++) {
+    const t = i / sampleRate;
+    let volumeScale = 1.0;
+
+    if (i < attackSamples) {
+      volumeScale = i / attackSamples;
+    } else if (i > dataSize - decaySamples) {
+      volumeScale = (dataSize - i) / decaySamples;
     }
-    const oscillator = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
 
-    oscillator.type = type;
-    oscillator.frequency.value = frequency;
-    
-    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    oscillator.start();
-    oscillator.stop(audioCtx.currentTime + duration);
-  } catch (error) {
-    console.warn("Web Audio API not supported or blocked by browser policies:", error);
+    // Use a maximum amplitude of 100 to prevent clipping/distortion
+    const sample = 128 + Math.round(100 * volumeScale * Math.sin(2 * Math.PI * frequency * t));
+    view.setUint8(44 + i, sample);
   }
+
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  return URL.createObjectURL(blob);
+};
+
+let warningBeepUrl = '';
+let completionSound1Url = '';
+let completionSound2Url = '';
+
+const getWarningBeepUrl = () => {
+  if (!warningBeepUrl) {
+    warningBeepUrl = generateBeepWav(650, 0.18); // Increased from 0.08 to 0.18s
+  }
+  return warningBeepUrl;
+};
+
+const getCompletionSound1Url = () => {
+  if (!completionSound1Url) {
+    completionSound1Url = generateBeepWav(880, 0.28); // Increased from 0.15 to 0.28s
+  }
+  return completionSound1Url;
+};
+
+const getCompletionSound2Url = () => {
+  if (!completionSound2Url) {
+    completionSound2Url = generateBeepWav(1175, 0.45); // Harmonious perfect fourth (1175Hz instead of 1200Hz, duration increased from 0.25 to 0.45s)
+  }
+  return completionSound2Url;
 };
 
 const playWarningBeep = () => {
-  playBeep(650, 0.08, 'sine');
+  try {
+    const audio = new Audio(getWarningBeepUrl());
+    audio.volume = 0.8;
+    audio.play().catch(err => console.warn('Warning beep play blocked:', err));
+  } catch (e) {
+    console.warn('Warning beep failed:', e);
+  }
 };
 
 const playCompletionSound = () => {
-  playBeep(880, 0.15, 'sine');
-  setTimeout(() => {
-    playBeep(1200, 0.25, 'sine');
-  }, 120);
+  try {
+    const audio1 = new Audio(getCompletionSound1Url());
+    audio1.volume = 0.8;
+    audio1.play().catch(err => console.warn('Completion sound 1 play blocked:', err));
+    
+    setTimeout(() => {
+      try {
+        const audio2 = new Audio(getCompletionSound2Url());
+        audio2.volume = 0.8;
+        audio2.play().catch(err => console.warn('Completion sound 2 play blocked:', err));
+      } catch (e) {
+        console.warn('Completion sound 2 failed:', e);
+      }
+    }, 180); // Increased delay between starts from 120ms to 180ms
+  } catch (e) {
+    console.warn('Completion sound 1 failed:', e);
+  }
+};
+
+let feedbackSound1Url = '';
+let feedbackSound2Url = '';
+
+const getFeedbackSound1Url = () => {
+  if (!feedbackSound1Url) {
+    feedbackSound1Url = generateBeepWav(523, 0.22); // Increased from 0.08 to 0.22s
+  }
+  return feedbackSound1Url;
+};
+
+const getFeedbackSound2Url = () => {
+  if (!feedbackSound2Url) {
+    feedbackSound2Url = generateBeepWav(659, 0.35); // Increased from 0.12 to 0.35s
+  }
+  return feedbackSound2Url;
+};
+
+const playFeedbackSound = () => {
+  try {
+    const audio1 = new Audio(getFeedbackSound1Url());
+    audio1.volume = 0.5;
+    audio1.play().catch(err => console.warn('Feedback sound 1 play blocked:', err));
+    
+    setTimeout(() => {
+      try {
+        const audio2 = new Audio(getFeedbackSound2Url());
+        audio2.volume = 0.5;
+        audio2.play().catch(err => console.warn('Feedback sound 2 play blocked:', err));
+      } catch (e) {
+        console.warn('Feedback sound 2 failed:', e);
+      }
+    }, 140); // Increased delay between starts from 60ms to 140ms
+  } catch (e) {
+    console.warn('Feedback sound 1 failed:', e);
+  }
 };
 
 export default function WorkoutTab({ 
   activeInjury, 
   onSaveWorkout, 
   onDeleteWorkout,
+  onUpdateWorkout,
   localHistory,
   customRoutines,
   onSaveCustomRoutine,
@@ -256,6 +365,63 @@ export default function WorkoutTab({
   const [brokenPBs, setBrokenPBs] = useState<any[]>([]);
   const [pendingSessionToSave, setPendingSessionToSave] = useState<any | null>(null);
   const [showCelebrationModal, setShowCelebrationModal] = useState<boolean>(false);
+  const [showAllHistory, setShowAllHistory] = useState<boolean>(false);
+
+  // For history session details/editing
+  const [selectedHistorySession, setSelectedHistorySession] = useState<any | null>(null);
+  const [isEditingHistorySession, setIsEditingHistorySession] = useState<boolean>(false);
+  const [editingHistorySessionData, setEditingHistorySessionData] = useState<any | null>(null);
+
+  const updateEditingSet = (exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'hasPain', value: any) => {
+    if (!editingHistorySessionData) return;
+    const clone = JSON.parse(JSON.stringify(editingHistorySessionData));
+    const set = clone.exercises[exIdx].sets[setIdx];
+    if (field === 'weight') {
+      if (set.weightKg !== undefined) set.weightKg = value;
+      if (set.weight_kg !== undefined) set.weight_kg = value;
+      if (set.weightKg === undefined && set.weight_kg === undefined) {
+        set.weightKg = value;
+      }
+    } else if (field === 'reps') {
+      set.reps = value;
+    } else if (field === 'hasPain') {
+      set.hasPain = value;
+    }
+    setEditingHistorySessionData(clone);
+  };
+
+  const addEditingSet = (exIdx: number) => {
+    if (!editingHistorySessionData) return;
+    const clone = JSON.parse(JSON.stringify(editingHistorySessionData));
+    const setsObj = clone.exercises[exIdx].sets;
+    const lastSet = setsObj[setsObj.length - 1] || { weightKg: 20, weight_kg: 20, reps: 10, hasPain: false };
+    setsObj.push({
+      weightKg: lastSet.weightKg !== undefined ? lastSet.weightKg : lastSet.weight_kg,
+      weight_kg: lastSet.weight_kg !== undefined ? lastSet.weight_kg : lastSet.weightKg,
+      reps: lastSet.reps,
+      hasPain: false
+    });
+    setEditingHistorySessionData(clone);
+  };
+
+  const deleteEditingSet = (exIdx: number, setIdx: number) => {
+    if (!editingHistorySessionData) return;
+    const clone = JSON.parse(JSON.stringify(editingHistorySessionData));
+    clone.exercises[exIdx].sets.splice(setIdx, 1);
+    if (clone.exercises[exIdx].sets.length === 0) {
+      clone.exercises.splice(exIdx, 1);
+    }
+    setEditingHistorySessionData(clone);
+  };
+
+  const deleteEditingExercise = (exIdx: number) => {
+    if (!editingHistorySessionData) return;
+    const confirmDel = window.confirm(language === 'es' ? '¿Eliminar este ejercicio completo?' : 'Delete this entire exercise?');
+    if (!confirmDel) return;
+    const clone = JSON.parse(JSON.stringify(editingHistorySessionData));
+    clone.exercises.splice(exIdx, 1);
+    setEditingHistorySessionData(clone);
+  };
 
   // pre-workout recovery wizard states
   const [showRecoveryWizard, setShowRecoveryWizard] = useState<boolean>(false);
@@ -428,7 +594,7 @@ export default function WorkoutTab({
           }
 
           const nextVal = r - 1;
-          if (nextVal >= 1 && nextVal <= 3) {
+          if (nextVal >= 1 && nextVal <= 5) {
             const soundEnabled = localStorage.getItem('plnexc_rest_timer_sound_enabled') !== 'false';
             if (soundEnabled && !restTimerMuted) {
               playWarningBeep();
@@ -813,6 +979,11 @@ export default function WorkoutTab({
                    titleLower.includes('deadlift') || 
                    titleLower.includes('bench press') || 
                    titleLower.includes('overhead press');
+
+      const soundEnabled = localStorage.getItem('plnexc_rest_timer_sound_enabled') !== 'false';
+      if (soundEnabled && !restTimerMuted) {
+        playFeedbackSound();
+      }
     }
 
     setActiveSession((prev: any) => {
@@ -1507,11 +1678,11 @@ export default function WorkoutTab({
           <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Clock size={20} color="hsl(var(--primary))" />
-              Historial de Entrenamientos Recientes
+              Historial
             </h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {localHistory.slice(0, 5).map((session, idx) => {
+              {(showAllHistory ? localHistory : localHistory.slice(0, 5)).map((session, idx) => {
                 let totalSets = 0;
                 let totalVolume = 0;
                 let hasSessionPain = false;
@@ -1537,9 +1708,14 @@ export default function WorkoutTab({
                   year: 'numeric'
                 });
 
-                return (
+                 return (
                   <div 
                     key={`${session.title}_${session.startTime}_${idx}`}
+                    onClick={() => {
+                      setSelectedHistorySession(session);
+                      setEditingHistorySessionData(JSON.parse(JSON.stringify(session)));
+                      setIsEditingHistorySession(false);
+                    }}
                     style={{ 
                       padding: '16px', 
                       background: 'rgba(255,255,255,0.01)',
@@ -1547,28 +1723,41 @@ export default function WorkoutTab({
                       borderRadius: 'var(--border-radius-md)',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '8px'
+                      gap: '8px',
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-fast)'
                     }}
+                    className="hover-card"
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                       <strong style={{ fontSize: '0.95rem', color: '#ffffff' }}>{session.title}</strong>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>{dateStr}</span>
                         <button
-                          onClick={() => onDeleteWorkout(session.parsedDate)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteWorkout(session.parsedDate);
+                          }}
                           style={{
                             background: 'transparent',
                             border: 'none',
                             color: 'hsl(var(--muted))',
                             cursor: 'pointer',
-                            padding: '4px',
+                            padding: '8px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            borderRadius: '50%',
+                            transition: 'all var(--transition-fast)',
+                            width: '36px',
+                            height: '36px',
+                            minWidth: '36px',
+                            minHeight: '36px',
                           }}
-                          title="Eliminar entrenamiento"
+                          className="hover-danger"
+                          title={language === 'es' ? "Eliminar entrenamiento" : "Delete workout"}
                         >
-                          <X size={14} className="hover-danger" />
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </div>
@@ -1600,6 +1789,32 @@ export default function WorkoutTab({
                 );
               })}
             </div>
+
+            {localHistory.length > 5 && (
+              <button
+                onClick={() => setShowAllHistory(!showAllHistory)}
+                className="btn btn-secondary"
+                style={{
+                  alignSelf: 'center',
+                  padding: '8px 16px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  marginTop: '8px',
+                  width: '100%',
+                  maxWidth: '200px',
+                  border: '1px solid hsl(var(--border))',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  color: '#ffffff',
+                  borderRadius: 'var(--border-radius-sm)',
+                  cursor: 'pointer',
+                  transition: 'all var(--transition-fast)'
+                }}
+              >
+                {showAllHistory 
+                  ? (language === 'es' ? 'Ver menos' : 'Show less') 
+                  : (language === 'es' ? `Ver todo (${localHistory.length})` : `Show all (${localHistory.length})`)}
+              </button>
+            )}
           </div>
         </>
       ) : (
@@ -2640,6 +2855,467 @@ export default function WorkoutTab({
                 <Play size={16} /> {t.routineStartBtn}
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* History Details and Editing Modal */}
+      {selectedHistorySession && editingHistorySessionData && createPortal(
+        <div 
+          onClick={() => {
+            setSelectedHistorySession(null);
+            setIsEditingHistorySession(false);
+          }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(5, 7, 12, 0.85)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '20px'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="glass-panel fade-in" 
+            style={{ 
+              maxWidth: '650px',
+              width: '100%',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              padding: '24px', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '20px',
+              border: '1px solid hsla(var(--primary) / 0.3)',
+              borderRadius: 'var(--border-radius-md)',
+              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.6)',
+              background: '#0a0e17'
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsla(var(--border) / 0.5)', paddingBottom: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Dumbbell size={20} color="hsl(var(--primary))" />
+                  {isEditingHistorySession ? (t.editWorkout || 'Editar Entrenamiento') : (t.workoutDetails || 'Detalle del Entrenamiento')}
+                </h3>
+                <p style={{ color: 'hsl(var(--muted))', fontSize: '0.8rem', margin: '4px 0 0 0' }}>
+                  {isEditingHistorySession 
+                    ? (language === 'es' ? 'Modifica los detalles de la sesión registrada' : 'Modify the details of the logged session')
+                    : (language === 'es' ? 'Visualiza los detalles de tu sesión de entrenamiento' : 'View the details of your workout session')
+                  }
+                </p>
+              </div>
+              <button 
+                onClick={() => {
+                  setSelectedHistorySession(null);
+                  setIsEditingHistorySession(false);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'hsl(var(--muted))',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '6px',
+                  borderRadius: '50%',
+                  transition: 'all var(--transition-fast)'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'hsl(var(--muted))'; e.currentTarget.style.background = 'transparent'; }}
+                title={t.close}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Title & Date Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: 'hsl(var(--muted))', marginBottom: '6px', fontWeight: 600 }}>
+                    {t.workoutTitle || 'Título del Entrenamiento'}
+                  </label>
+                  {isEditingHistorySession ? (
+                    <input 
+                      type="text" 
+                      value={editingHistorySessionData.title}
+                      onChange={(e) => setEditingHistorySessionData({ ...editingHistorySessionData, title: e.target.value })}
+                      style={{
+                        width: '100%',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: 'var(--border-radius-sm)',
+                        padding: '10px',
+                        color: '#ffffff',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        transition: 'border-color var(--transition-fast)'
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = 'hsl(var(--primary))'}
+                      onBlur={(e) => e.target.style.borderColor = 'hsl(var(--border))'}
+                    />
+                  ) : (
+                    <div style={{ fontSize: '1rem', fontWeight: 700, color: '#ffffff', padding: '6px 0' }}>
+                      {selectedHistorySession.title}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', color: 'hsl(var(--muted))', marginBottom: '6px', fontWeight: 600 }}>
+                    {t.workoutDate || 'Fecha del Entrenamiento'}
+                  </label>
+                  {isEditingHistorySession ? (
+                    <input 
+                      type="date" 
+                      value={editingHistorySessionData.parsedDate ? editingHistorySessionData.parsedDate.split('T')[0] : ''}
+                      onChange={(e) => {
+                        const timePart = editingHistorySessionData.parsedDate.split('T')[1] || '12:00:00.000Z';
+                        setEditingHistorySessionData({ 
+                          ...editingHistorySessionData, 
+                          parsedDate: e.target.value ? `${e.target.value}T${timePart}` : new Date().toISOString()
+                        });
+                      }}
+                      style={{
+                        width: '100%',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: 'var(--border-radius-sm)',
+                        padding: '10px',
+                        color: '#ffffff',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        transition: 'border-color var(--transition-fast)'
+                      }}
+                      onFocus={(e) => e.target.style.borderColor = 'hsl(var(--primary))'}
+                      onBlur={(e) => e.target.style.borderColor = 'hsl(var(--border))'}
+                    />
+                  ) : (
+                    <div style={{ fontSize: '1rem', color: '#ffffff', padding: '6px 0' }}>
+                      {new Date(selectedHistorySession.parsedDate).toLocaleDateString(language === 'es' ? 'es-ES' : 'en-US', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Exercises List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '8px' }}>
+                {(isEditingHistorySession ? editingHistorySessionData.exercises : selectedHistorySession.exercises).map((ex: any, exIdx: number) => {
+                  return (
+                    <div 
+                      key={`${ex.title || ex.id}_${exIdx}`}
+                      style={{
+                        background: 'rgba(255,255,255,0.01)',
+                        border: '1px solid hsla(var(--border) / 0.6)',
+                        borderRadius: 'var(--border-radius-sm)',
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 700, color: 'hsl(var(--primary))', fontSize: '0.95rem' }}>
+                          {resolveExerciseDisplayName(ex.title)}
+                        </span>
+                        {isEditingHistorySession && (
+                          <button
+                            onClick={() => deleteEditingExercise(exIdx)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'hsl(var(--danger))',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              transition: 'all var(--transition-fast)'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <Trash2 size={12} /> {t.deleteExercise || 'Eliminar Ejercicio'}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Sets Table */}
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid hsla(var(--border) / 0.3)', textAlign: 'left' }}>
+                            <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))', width: '40px' }}>#</th>
+                            <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.weightLabel || 'Peso'} (kg)</th>
+                            <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.repsLabel || 'Reps'}</th>
+                            <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))', width: '110px', textAlign: 'center' }}>{t.pain || 'Molestia'}</th>
+                            {isEditingHistorySession && <th style={{ padding: '6px 4px', width: '40px' }}></th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ex.sets.map((set: any, setIdx: number) => {
+                            const weightVal = set.weightKg !== undefined ? set.weightKg : (set.weight_kg !== undefined ? set.weight_kg : 0);
+                            return (
+                              <tr key={setIdx} style={{ borderBottom: '1px solid hsla(var(--border) / 0.15)' }}>
+                                <td style={{ padding: '8px 4px', fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--muted))' }}>
+                                  {setIdx + 1}
+                                </td>
+                                <td style={{ padding: '8px 4px' }}>
+                                  {isEditingHistorySession ? (
+                                    <input 
+                                      type="number" 
+                                      step="any"
+                                      value={weightVal}
+                                      onChange={(e) => updateEditingSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)}
+                                      style={{
+                                        background: 'rgba(255,255,255,0.05)',
+                                        border: '1px solid hsl(var(--border))',
+                                        color: '#ffffff',
+                                        borderRadius: '4px',
+                                        padding: '6px',
+                                        width: '75px',
+                                        textAlign: 'center',
+                                        fontSize: '0.85rem'
+                                      }}
+                                    />
+                                  ) : (
+                                    <span style={{ fontSize: '0.85rem', color: '#ffffff' }}>{weightVal} kg</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '8px 4px' }}>
+                                  {isEditingHistorySession ? (
+                                    <input 
+                                      type="number" 
+                                      value={set.reps || 0}
+                                      onChange={(e) => updateEditingSet(exIdx, setIdx, 'reps', parseInt(e.target.value, 10) || 0)}
+                                      style={{
+                                        background: 'rgba(255,255,255,0.05)',
+                                        border: '1px solid hsl(var(--border))',
+                                        color: '#ffffff',
+                                        borderRadius: '4px',
+                                        padding: '6px',
+                                        width: '65px',
+                                        textAlign: 'center',
+                                        fontSize: '0.85rem'
+                                      }}
+                                    />
+                                  ) : (
+                                    <span style={{ fontSize: '0.85rem', color: '#ffffff' }}>{set.reps}</span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                                  {isEditingHistorySession ? (
+                                    <button
+                                      onClick={() => updateEditingSet(exIdx, setIdx, 'hasPain', !set.hasPain)}
+                                      style={{
+                                        background: set.hasPain ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.02)',
+                                        border: `1px solid ${set.hasPain ? 'hsl(var(--danger))' : 'hsla(var(--border) / 0.5)'}`,
+                                        color: set.hasPain ? 'hsl(var(--danger))' : 'hsl(var(--muted))',
+                                        borderRadius: '4px',
+                                        padding: '4px 8px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        width: '100px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '4px',
+                                        transition: 'all var(--transition-fast)'
+                                      }}
+                                    >
+                                      {set.hasPain ? (
+                                        <>⚠️ {t.hasPain || 'Con molestia'}</>
+                                      ) : (
+                                        t.noPain || 'Sin molestia'
+                                      )}
+                                    </button>
+                                  ) : (
+                                    set.hasPain ? (
+                                      <span className="badge badge-danger" style={{ fontSize: '0.7rem', padding: '2px 6px', display: 'inline-block' }}>
+                                        ⚠️ Molestia
+                                      </span>
+                                    ) : (
+                                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>—</span>
+                                    )
+                                  )}
+                                </td>
+                                {isEditingHistorySession && (
+                                  <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                                    <button
+                                      onClick={() => deleteEditingSet(exIdx, setIdx)}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: 'hsl(var(--danger))',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        borderRadius: '50%'
+                                      }}
+                                      className="hover-danger"
+                                      title={t.deleteSet || 'Eliminar Serie'}
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {isEditingHistorySession && (
+                        <button
+                          onClick={() => addEditingSet(exIdx)}
+                          className="btn btn-secondary"
+                          style={{
+                            alignSelf: 'flex-start',
+                            padding: '6px 12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: 'rgba(255,255,255,0.02)',
+                            border: '1px dashed hsla(var(--border) / 0.5)'
+                          }}
+                        >
+                          <Plus size={12} /> {t.addSet || 'Añadir Serie'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', borderTop: '1px solid hsla(var(--border) / 0.5)', paddingTop: '16px' }}>
+              {isEditingHistorySession ? (
+                <>
+                  <button
+                    onClick={() => {
+                      setIsEditingHistorySession(false);
+                      setEditingHistorySessionData(JSON.parse(JSON.stringify(selectedHistorySession)));
+                    }}
+                    className="btn btn-secondary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.85rem',
+                      padding: '10px 20px'
+                    }}
+                  >
+                    <X size={14} /> {t.discardChanges || 'Descartar Cambios'}
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      if (!editingHistorySessionData.title.trim()) {
+                        alert(language === 'es' ? 'El título no puede estar vacío.' : 'Title cannot be empty.');
+                        return;
+                      }
+                      if (editingHistorySessionData.exercises.length === 0) {
+                        alert(language === 'es' ? 'El entrenamiento debe tener al menos un ejercicio.' : 'Workout must have at least one exercise.');
+                        return;
+                      }
+                      onUpdateWorkout(editingHistorySessionData);
+                      setSelectedHistorySession(editingHistorySessionData);
+                      setIsEditingHistorySession(false);
+                    }}
+                    className="btn btn-primary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.85rem',
+                      padding: '10px 20px',
+                      background: 'hsl(var(--primary))',
+                      color: '#000000',
+                      fontWeight: 700
+                    }}
+                  >
+                    <Check size={14} /> {t.saveChanges || 'Guardar Cambios'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      const confirmDelete = window.confirm(t.confirmDeleteWorkout || '¿Estás seguro de que deseas eliminar este entrenamiento?');
+                      if (confirmDelete) {
+                        onDeleteWorkout(selectedHistorySession.parsedDate);
+                        setSelectedHistorySession(null);
+                      }
+                    }}
+                    className="btn btn-secondary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.85rem',
+                      padding: '10px 20px',
+                      borderColor: 'hsl(var(--danger))',
+                      color: 'hsl(var(--danger))',
+                      marginRight: 'auto'
+                    }}
+                  >
+                    <Trash2 size={14} /> {t.deleteWorkout || 'Eliminar'}
+                  </button>
+
+                  <button
+                    onClick={() => setIsEditingHistorySession(true)}
+                    className="btn btn-secondary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.85rem',
+                      padding: '10px 20px'
+                    }}
+                  >
+                    <Edit2 size={14} /> {t.editWorkout || 'Editar'}
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedHistorySession(null)}
+                    className="btn btn-primary"
+                    style={{
+                      fontSize: '0.85rem',
+                      padding: '10px 24px',
+                      fontWeight: 700
+                    }}
+                  >
+                    {t.close || 'Cerrar'}
+                  </button>
+                </>
+              )}
+            </div>
+
           </div>
         </div>,
         document.body

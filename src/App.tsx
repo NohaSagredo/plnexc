@@ -15,11 +15,21 @@ import SyncPanel from './components/SyncPanel';
 import { uploadUserData } from './utils/firebaseSync';
 import { auth } from './utils/firebase';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { TRANSLATIONS } from './utils/translations';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile'>('dashboard');
+  const scrollPositions = useRef<Record<string, number>>({});
+
+  const handleTabChange = (newTab: 'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile') => {
+    scrollPositions.current[activeTab] = window.scrollY;
+    setActiveTab(newTab);
+    setTimeout(() => {
+      window.scrollTo(0, scrollPositions.current[newTab] || 0);
+    }, 0);
+  };
+
   const [language, setLanguage] = useState<'es' | 'en'>(() => {
     const saved = localStorage.getItem('plnexc_language');
     return (saved === 'es' || saved === 'en') ? saved : 'es';
@@ -354,7 +364,7 @@ export default function App() {
     setLocalHistory(fullMergedHistory);
     
     // Auto toggle to dashboard to see progression charts updated
-    setActiveTab('dashboard');
+    handleTabChange('dashboard');
 
     const currentUser = auth.currentUser;
     if (currentUser) {
@@ -380,6 +390,29 @@ export default function App() {
     if (currentUser) {
       uploadUserData(currentUser.uid, { userSessions: updatedUserSessions }).catch(err => {
         console.error('Error auto-syncing workout deletion:', err);
+      });
+    }
+  };
+
+  const handleUpdateWorkout = (updatedSession: any) => {
+    const savedUserSessions = localStorage.getItem('milo_user_sessions');
+    const parsedUserSessions = savedUserSessions ? JSON.parse(savedUserSessions) : [];
+    
+    const updatedUserSessions = parsedUserSessions.map((session: any) => 
+      session.parsedDate === updatedSession.parsedDate ? updatedSession : session
+    );
+    localStorage.setItem('milo_user_sessions', JSON.stringify(updatedUserSessions));
+
+    const fullMergedHistory = localHistory.map((session: any) => 
+      session.parsedDate === updatedSession.parsedDate ? updatedSession : session
+    );
+    fullMergedHistory.sort((a: any, b: any) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
+    setLocalHistory(fullMergedHistory);
+
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      uploadUserData(currentUser.uid, { userSessions: updatedUserSessions }).catch(err => {
+        console.error('Error auto-syncing workout session update:', err);
       });
     }
   };
@@ -491,7 +524,7 @@ export default function App() {
           <nav className="nav-tabs desktop-nav">
             <button 
               className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setActiveTab('dashboard')}
+              onClick={() => handleTabChange('dashboard')}
             >
               <TrendingUp size={18} />
               {t.progreso}
@@ -499,7 +532,7 @@ export default function App() {
             
             <button 
               className={`nav-tab ${activeTab === 'workout' ? 'active' : ''}`}
-              onClick={() => setActiveTab('workout')}
+              onClick={() => handleTabChange('workout')}
             >
               <Dumbbell size={18} />
               {t.entrenar}
@@ -507,7 +540,7 @@ export default function App() {
 
             <button 
               className={`nav-tab ${activeTab === 'cardio' ? 'active' : ''}`}
-              onClick={() => setActiveTab('cardio')}
+              onClick={() => handleTabChange('cardio')}
             >
               <Flame size={18} />
               {t.cardio}
@@ -515,7 +548,7 @@ export default function App() {
             
             <button 
               className={`nav-tab ${activeTab === 'rehab' ? 'active' : ''}`}
-              onClick={() => setActiveTab('rehab')}
+              onClick={() => handleTabChange('rehab')}
               style={{ 
                 borderColor: activeInjury ? 'hsl(var(--warning))' : 'transparent',
                 color: activeInjury ? 'hsl(var(--warning))' : undefined
@@ -527,7 +560,7 @@ export default function App() {
 
             <button 
               className={`nav-tab ${activeTab === 'profile' ? 'active' : ''}`}
-              onClick={() => setActiveTab('profile')}
+              onClick={() => handleTabChange('profile')}
             >
               <User size={18} />
               {t.perfil}
@@ -570,104 +603,110 @@ export default function App() {
       </header>
 
       {/* Main Tab Render Slots */}
-      <main style={{ minHeight: 'calc(100vh - 180px)' }}>
-        {activeTab === 'dashboard' && (
-          <div className="tab-transition">
-            <DashboardTab 
-              localHistory={localHistory}
-              activeInjury={activeInjury}
-              weightHistory={weightHistory}
-              cardioHistory={cardioHistory}
-              profilePicture={profilePicture}
-              progressPhotos={progressPhotos}
-              onAddProgressPhoto={handleAddProgressPhoto}
-              onDeleteProgressPhoto={handleDeleteProgressPhoto}
-              bodyWeight={bodyWeight}
-              language={language}
-            />
-          </div>
-        )}
+      <main style={{ minHeight: 'calc(100vh - 180px)', position: 'relative' }}>
+        <div 
+          className="tab-transition" 
+          style={activeTab === 'dashboard' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+        >
+          <DashboardTab 
+            localHistory={localHistory}
+            activeInjury={activeInjury}
+            weightHistory={weightHistory}
+            cardioHistory={cardioHistory}
+            profilePicture={profilePicture}
+            progressPhotos={progressPhotos}
+            onAddProgressPhoto={handleAddProgressPhoto}
+            onDeleteProgressPhoto={handleDeleteProgressPhoto}
+            bodyWeight={bodyWeight}
+            language={language}
+          />
+        </div>
         
-        {activeTab === 'workout' && (
-          <div className="tab-transition">
-            <WorkoutTab 
-              activeInjury={activeInjury} 
-              onSaveWorkout={handleSaveWorkout}
-              onDeleteWorkout={handleDeleteWorkout}
-              localHistory={localHistory}
-              customRoutines={customRoutines}
-              onSaveCustomRoutine={handleSaveCustomRoutine}
-              onDeleteRoutine={handleDeleteRoutine}
-              deletedRoutines={deletedRoutines}
-              bodyWeight={bodyWeight}
-              height={height}
-              gender={gender}
-              bodyFat={bodyFat}
-              language={language}
-            />
-          </div>
-        )}
+        <div 
+          className="tab-transition" 
+          style={activeTab === 'workout' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+        >
+          <WorkoutTab 
+            activeInjury={activeInjury} 
+            onSaveWorkout={handleSaveWorkout}
+            onDeleteWorkout={handleDeleteWorkout}
+            onUpdateWorkout={handleUpdateWorkout}
+            localHistory={localHistory}
+            customRoutines={customRoutines}
+            onSaveCustomRoutine={handleSaveCustomRoutine}
+            onDeleteRoutine={handleDeleteRoutine}
+            deletedRoutines={deletedRoutines}
+            bodyWeight={bodyWeight}
+            height={height}
+            gender={gender}
+            bodyFat={bodyFat}
+            language={language}
+          />
+        </div>
         
-        {activeTab === 'rehab' && (
-          <div className="tab-transition">
-            <RehabTab 
-              activeInjury={activeInjury} 
-              setActiveInjury={handleSetInjury} 
-              language={language}
-            />
-          </div>
-        )}
+        <div 
+          className="tab-transition" 
+          style={activeTab === 'rehab' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+        >
+          <RehabTab 
+            activeInjury={activeInjury} 
+            setActiveInjury={handleSetInjury} 
+            language={language}
+          />
+        </div>
 
-        {activeTab === 'profile' && (
-          <div className="tab-transition">
-            <ProfileTab 
-              bodyWeight={bodyWeight}
-              setBodyWeight={handleSetBodyWeight}
-              height={height}
-              setHeight={handleSetHeight}
-              gender={gender}
-              setGender={handleSetGender}
-              bodyFat={bodyFat}
-              setBodyFat={handleSetBodyFat}
-              weightHistory={weightHistory}
-              onAddWeightRecord={handleAddWeightRecord}
-              onDeleteWeightRecord={handleDeleteWeightRecord}
-              profilePicture={profilePicture}
-              onSaveProfilePicture={handleSaveProfilePicture}
-              progressPhotos={progressPhotos}
-              onAddProgressPhoto={handleAddProgressPhoto}
-              onDeleteProgressPhoto={handleDeleteProgressPhoto}
-              localHistory={localHistory}
-              cardioHistory={cardioHistory}
-              language={language}
-              onToggleLanguage={handleToggleLanguage}
-            />
-          </div>
-        )}
+        <div 
+          className="tab-transition" 
+          style={activeTab === 'profile' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+        >
+          <ProfileTab 
+            bodyWeight={bodyWeight}
+            setBodyWeight={handleSetBodyWeight}
+            height={height}
+            setHeight={handleSetHeight}
+            gender={gender}
+            setGender={handleSetGender}
+            bodyFat={bodyFat}
+            setBodyFat={handleSetBodyFat}
+            weightHistory={weightHistory}
+            onAddWeightRecord={handleAddWeightRecord}
+            onDeleteWeightRecord={handleDeleteWeightRecord}
+            profilePicture={profilePicture}
+            onSaveProfilePicture={handleSaveProfilePicture}
+            progressPhotos={progressPhotos}
+            onAddProgressPhoto={handleAddProgressPhoto}
+            onDeleteProgressPhoto={handleDeleteProgressPhoto}
+            localHistory={localHistory}
+            cardioHistory={cardioHistory}
+            language={language}
+            onToggleLanguage={handleToggleLanguage}
+          />
+        </div>
 
-        {activeTab === 'cardio' && (
-          <div className="tab-transition">
-            <CardioTab 
-              cardioGoalType={cardioGoalType}
-              setCardioGoalType={handleSetCardioGoalType}
-              cardioTargetMinutes={cardioTargetMinutes}
-              setCardioTargetMinutes={handleSetCardioTargetMinutes}
-              cardioHistory={cardioHistory}
-              onAddCardioSession={handleAddCardioSession}
-              onDeleteCardioSession={handleDeleteCardioSession}
-              bodyWeight={bodyWeight}
-              bodyFat={bodyFat}
-              language={language}
-            />
-          </div>
-        )}
+        <div 
+          className="tab-transition" 
+          style={activeTab === 'cardio' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+        >
+          <CardioTab 
+            cardioGoalType={cardioGoalType}
+            setCardioGoalType={handleSetCardioGoalType}
+            cardioTargetMinutes={cardioTargetMinutes}
+            setCardioTargetMinutes={handleSetCardioTargetMinutes}
+            cardioHistory={cardioHistory}
+            onAddCardioSession={handleAddCardioSession}
+            onDeleteCardioSession={handleDeleteCardioSession}
+            bodyWeight={bodyWeight}
+            bodyFat={bodyFat}
+            language={language}
+          />
+        </div>
       </main>
 
       {/* Mobile Bottom Tabbar Navigation */}
       <nav className="mobile-nav">
         <button 
           className={`mobile-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setActiveTab('dashboard')}
+          onClick={() => handleTabChange('dashboard')}
         >
           <TrendingUp size={22} />
           <span>{t.progreso}</span>
@@ -675,7 +714,7 @@ export default function App() {
         
         <button 
           className={`mobile-tab ${activeTab === 'workout' ? 'active' : ''}`}
-          onClick={() => setActiveTab('workout')}
+          onClick={() => handleTabChange('workout')}
         >
           <Dumbbell size={22} />
           <span>{t.entrenar}</span>
@@ -683,7 +722,7 @@ export default function App() {
 
         <button 
           className={`mobile-tab ${activeTab === 'cardio' ? 'active' : ''}`}
-          onClick={() => setActiveTab('cardio')}
+          onClick={() => handleTabChange('cardio')}
         >
           <Flame size={22} />
           <span>{t.cardio}</span>
@@ -691,7 +730,7 @@ export default function App() {
         
         <button 
           className={`mobile-tab ${activeTab === 'rehab' ? 'active' : ''}`}
-          onClick={() => setActiveTab('rehab')}
+          onClick={() => handleTabChange('rehab')}
           style={{ 
             color: activeInjury && activeTab !== 'rehab' ? 'hsl(var(--warning))' : undefined 
           }}
@@ -702,7 +741,7 @@ export default function App() {
 
         <button 
           className={`mobile-tab ${activeTab === 'profile' ? 'active' : ''}`}
-          onClick={() => setActiveTab('profile')}
+          onClick={() => handleTabChange('profile')}
         >
           <User size={22} />
           <span>{t.perfil}</span>
