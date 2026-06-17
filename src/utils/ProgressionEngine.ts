@@ -1,3 +1,5 @@
+import { EXERCISES_DB } from '../data/exercises_db';
+
 export interface SetData {
   setIndex: number;
   setType: string; // 'normal' | 'warmup' | 'failure' | 'dropset'
@@ -42,19 +44,111 @@ export function getRepRangeForExercise(exerciseName: string): { min: number; max
   return { min: 8, max: 12 };
 }
 
+export function getBodyweightPercentage(exerciseTitle: string): number {
+  const name = exerciseTitle.toLowerCase();
+  
+  // Single-leg squats (unilateral leg squats) support 100% of body weight on one leg
+  if (
+    name.includes('single-leg squat') || 
+    name.includes('pistol squat') || 
+    name.includes('sentadilla a una pierna') || 
+    name.includes('sentadilla pistola') ||
+    name.includes('bulgarian') || 
+    name.includes('búlgara') ||
+    name.includes('step-up') ||
+    name.includes('step up') ||
+    name.includes('unipodal')
+  ) {
+    return 1.0; // 100% of body weight
+  }
+
+  // Bilateral bodyweight squats (bodyweight squat, slant board squat, Spanish squat, glute bridge)
+  if (
+    name.includes('bodyweight squat') ||
+    name.includes('sentadilla con peso corporal') ||
+    name.includes('air squat') ||
+    name.includes('free squat') ||
+    name.includes('bridge') ||
+    name.includes('puente') ||
+    name.includes('hip thrust') ||
+    name.includes('slant board squat')
+  ) {
+    return 0.50; // 50% of body weight per leg (distributed on both legs)
+  }
+
+  // Pull-up / Chin-up / Hanging (90% of body weight)
+  if (
+    name.includes('pull-up') || 
+    name.includes('pull up') || 
+    name.includes('chin-up') || 
+    name.includes('chin up') || 
+    name.includes('dominada') || 
+    name.includes('hang') || 
+    name.includes('colgado')
+  ) {
+    return 0.90; // 90%
+  }
+
+  // Push-up / Dips (65% of body weight)
+  if (
+    name.includes('push-up') || 
+    name.includes('push up') || 
+    name.includes('lagartija') || 
+    name.includes('flexión') || 
+    name.includes('dip') || 
+    name.includes('fondo')
+  ) {
+    return 0.65; // 65%
+  }
+
+  // Planks / Core / Bird-Dog / Abdominal exercises (50% of body weight)
+  if (
+    name.includes('plank') || 
+    name.includes('plancha') || 
+    name.includes('bird dog') || 
+    name.includes('bird-dog') || 
+    name.includes('mcgill') || 
+    name.includes('core') || 
+    name.includes('crunch') || 
+    name.includes('sit-up') || 
+    name.includes('sit up') || 
+    name.includes('raise')
+  ) {
+    return 0.50; // 50%
+  }
+
+  // Default for other bodyweight movements
+  return 0.60;
+}
+
 export function proposeNextSet(
   exerciseName: string,
   lastSets: SetData[],
   recoveryScore: number = 10, // 1 to 10 (10 = fully recovered)
   isActivePain: boolean = false,
-  daysSinceLastSession?: number
+  daysSinceLastSession?: number,
+  bodyWeight: number = 75
 ): ProgressionTarget {
   const defaultRange = getRepRangeForExercise(exerciseName);
+  
+  const dbEx = EXERCISES_DB.find(db => db.title.toLowerCase() === exerciseName.toLowerCase() || db.id === exerciseName);
+  const isBodyweight = dbEx?.equipment === 'Peso Corporal';
   
   // Filtering only normal and failure sets (actual work sets)
   const workSets = lastSets.filter(s => s.setType === 'normal' || s.setType === 'failure');
   
   if (workSets.length === 0) {
+    if (isBodyweight) {
+      const percentage = getBodyweightPercentage(exerciseName);
+      const bwWeight = Math.round(bodyWeight * percentage * 2) / 2;
+      return {
+        suggestedWeight: bwWeight,
+        suggestedReps: defaultRange.min,
+        message: `🏋️ Primer registro de peso corporal: Carga sugerida de ${bwWeight}kg (${Math.round(percentage * 100)}% de tu peso corporal de ${bodyWeight}kg) calculado de forma inteligente para este ejercicio.`,
+        isDeload: false
+      };
+    }
+    
     // Fallback if no work sets exist (e.g. running or warmup only)
     return {
       suggestedWeight: lastSets[0]?.weightKg || 10,
@@ -64,15 +158,46 @@ export function proposeNextSet(
     };
   }
 
+  // Check if they had pain during any of these sets
+  const reportedPain = isActivePain || workSets.some(s => s.hasPain);
+  
+  if (reportedPain) {
+    // AUTO-REGULATED DELOAD FOR INJURY/PAIN
+    // Reduce weight by 20% to train safely
+    const lastWeight = workSets[0].weightKg || (isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : 10);
+    const reducedWeight = Math.round((lastWeight * 0.8) / 0.5) * 0.5; // Redondea al 0.5kg más cercano
+    return {
+      suggestedWeight: Math.max(0.5, reducedWeight),
+      suggestedReps: defaultRange.min,
+      message: isBodyweight 
+        ? `⚠️ Alerta de Dolor Activa: Carga reducida a ${reducedWeight}kg. Realiza una variante asistida (ej. con bandas o apoyando rodillas) para entrenar sin dolor.`
+        : '⚠️ Alerta de Dolor Activa: Peso reducido un 20% para recuperación activa. Concéntrate en la forma perfecta y controlada.',
+      isDeload: true
+    };
+  }
+
+  // Check fatigue score (wellness check)
+  if (recoveryScore <= 4) {
+    // AUTO-REGULATED fatigue deload (Reduce intensity by 10% and sets)
+    const lastWeight = workSets[0].weightKg || (isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : 10);
+    const reducedWeight = Math.round((lastWeight * 0.9) / 0.5) * 0.5;
+    return {
+      suggestedWeight: Math.max(0.5, reducedWeight),
+      suggestedReps: defaultRange.min,
+      message: '🔋 Baja recuperación reportada: Deload del 10% aplicado para prevenir fatiga acumulada.',
+      isDeload: true
+    };
+  }
+
   // 1. CHECK DETRAINING (Return after a long break)
   if (daysSinceLastSession !== undefined && daysSinceLastSession > 14) {
-    const lastWeight = workSets[0].weightKg || 10;
+    const lastWeight = workSets[0].weightKg || (isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : 10);
     
     if (daysSinceLastSession > 28) {
       // More than 4 weeks: 20% safety deload
-      const reducedWeight = Math.round((lastWeight * 0.8) / 2.5) * 2.5;
+      const reducedWeight = Math.round((lastWeight * 0.8) / 0.5) * 0.5;
       return {
-        suggestedWeight: Math.max(2.5, reducedWeight),
+        suggestedWeight: Math.max(0.5, reducedWeight),
         suggestedReps: defaultRange.min,
         message: `💤 Reactivación segura (>4 semanas): No has hecho este ejercicio en ${daysSinceLastSession} días. Reducimos peso un 20% para acondicionar tendones y evitar dolor agudo.`,
         isDeload: true
@@ -88,42 +213,14 @@ export function proposeNextSet(
     }
   }
 
-  // Check if they had pain during any of these sets
-  const reportedPain = isActivePain || workSets.some(s => s.hasPain);
-  
-  if (reportedPain) {
-    // AUTO-REGULATED DELOAD FOR INJURY/PAIN
-    // Reduce weight by 20% to train safely
-    const lastWeight = workSets[0].weightKg || 10;
-    const reducedWeight = Math.round((lastWeight * 0.8) / 2.5) * 2.5; // Redondea al 2.5kg más cercano
-    return {
-      suggestedWeight: Math.max(2.5, reducedWeight),
-      suggestedReps: defaultRange.min,
-      message: '⚠️ Alerta de Dolor Activa: Peso reducido un 20% para recuperación activa. Concéntrate en la forma perfecta y controlada.',
-      isDeload: true
-    };
-  }
-
-  // Check fatigue score (wellness check)
-  if (recoveryScore <= 4) {
-    // AUTO-REGULATED fatigue deload (Reduce intensity by 10% and sets)
-    const lastWeight = workSets[0].weightKg || 10;
-    const reducedWeight = Math.round((lastWeight * 0.9) / 2.5) * 2.5;
-    return {
-      suggestedWeight: Math.max(2.5, reducedWeight),
-      suggestedReps: defaultRange.min,
-      message: '🔋 Baja recuperación reportada: Deload del 10% aplicado para prevenir fatiga acumulada.',
-      isDeload: true
-    };
-  }
-
   // Get max reps accomplished with the heaviest weight in work sets
   const maxWeight = Math.max(...workSets.map(s => s.weightKg || 0));
   const heavySets = workSets.filter(s => s.weightKg === maxWeight);
   
   if (heavySets.length === 0) {
+    const defaultWeight = isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : maxWeight;
     return {
-      suggestedWeight: maxWeight,
+      suggestedWeight: defaultWeight,
       suggestedReps: defaultRange.min,
       message: 'Sugerido continuar con la misma carga.',
       isDeload: false
@@ -135,6 +232,17 @@ export function proposeNextSet(
   const hitTopRangeAllSets = heavySets.every(s => (s.reps || 0) >= defaultRange.max);
   
   if (hitTopRangeAllSets) {
+    if (isBodyweight) {
+      const percentage = getBodyweightPercentage(exerciseName);
+      const bwWeight = Math.round(bodyWeight * percentage * 2) / 2;
+      return {
+        suggestedWeight: bwWeight,
+        suggestedReps: defaultRange.max,
+        message: `🎉 ¡Objetivo completado con peso corporal! Has dominado el ejercicio con ${bwWeight}kg (${Math.round(percentage * 100)}% de tu peso de ${bodyWeight}kg). Mantén esta carga base y concéntrate en mejorar la velocidad controlada o avanzar a una variante más difícil.`,
+        isDeload: false
+      };
+    }
+
     // Propose load increment!
     let increment = 2.5; // Barbell default
     if (exerciseName.toLowerCase().includes('dumbbell') || exerciseName.toLowerCase().includes('raise') || exerciseName.toLowerCase().includes('curl')) {
@@ -157,10 +265,14 @@ export function proposeNextSet(
     // Propose increasing reps on the lowest sets
     const targetReps = Math.min(defaultRange.max, minRepsDone + 1);
     
+    const suggestedWeightVal = isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : maxWeight;
+    
     return {
-      suggestedWeight: maxWeight,
+      suggestedWeight: suggestedWeightVal,
       suggestedReps: targetReps,
-      message: `💪 Sigue empujando con ${maxWeight}kg. Intenta alcanzar al menos ${targetReps} repeticiones en todas tus series antes de subir peso.`,
+      message: isBodyweight
+        ? `💪 Progreso con peso corporal: Carga base inteligente de ${suggestedWeightVal}kg (${Math.round(getBodyweightPercentage(exerciseName) * 100)}% de tu peso). Intenta alcanzar al menos ${targetReps} repeticiones en todas tus series.`
+        : `💪 Sigue empujando con ${maxWeight}kg. Intenta alcanzar al menos ${targetReps} repeticiones en todas tus series antes de subir peso.`,
       isDeload: false
     };
   }

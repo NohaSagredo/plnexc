@@ -19,7 +19,7 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import { proposeNextSet, calculatePBProfiles } from '../utils/ProgressionEngine';
+import { proposeNextSet, calculatePBProfiles, getBodyweightPercentage } from '../utils/ProgressionEngine';
 import type { SetData, ProgressionTarget } from '../utils/ProgressionEngine';
 import { getSubstitutedExercise, MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import type { SubstitutionRule } from '../utils/MiloRehabEngine';
@@ -653,11 +653,29 @@ export default function WorkoutTab({
       exerciseHistory.sort((a, b) => a.date.getTime() - b.date.getTime());
       const latestSession = exerciseHistory[exerciseHistory.length - 1];
       
+      // 3. Rebuilding Milo Substitution check
+      let activeSub: SubstitutionRule | undefined = undefined;
+      let finalTitle = exTitle;
+      
+      if (activeInjury) {
+        const subRule = getSubstitutedExercise(exTitle);
+        if (subRule) {
+          // If the exercise affects the injured joint, substitute it
+          activeSub = subRule;
+          finalTitle = subRule.substitutedExercise;
+        }
+      }
+
+      const dbEx = EXERCISES_DB.find(db => db.title.toLowerCase() === finalTitle.toLowerCase() || db.id === finalTitle);
+      const isBodyweight = dbEx?.equipment === 'Peso Corporal';
+
       // Calculate progressive overload suggestions
       let target: ProgressionTarget = {
-        suggestedWeight: 10,
+        suggestedWeight: isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(finalTitle) * 2) / 2 : 10,
         suggestedReps: 10,
-        message: 'Comienza con una carga moderada para explorar el rango de movimiento.',
+        message: isBodyweight 
+          ? `Carga sugerida inteligente de ${Math.round(bodyWeight * getBodyweightPercentage(finalTitle) * 2) / 2}kg basado en el peso corporal (${Math.round(getBodyweightPercentage(finalTitle) * 100)}% de tu peso).`
+          : 'Comienza con una carga moderada para explorar el rango de movimiento.',
         isDeload: false
       };
 
@@ -674,27 +692,14 @@ export default function WorkoutTab({
         const diffTime = Math.abs(new Date().getTime() - latestSession.date.getTime());
         const daysSinceLastSession = Math.floor(diffTime / (1000 * 60 * 60 * 24));
         
-        target = proposeNextSet(exTitle, lastSetsMapped, scoreToUse, false, daysSinceLastSession);
-      }
-
-      // 3. Rebuilding Milo Substitution check
-      let activeSub: SubstitutionRule | undefined = undefined;
-      let finalTitle = exTitle;
-      
-      if (activeInjury) {
-        const subRule = getSubstitutedExercise(exTitle);
-        if (subRule) {
-          // If the exercise affects the injured joint, substitute it
-          activeSub = subRule;
-          finalTitle = subRule.substitutedExercise;
-        }
+        target = proposeNextSet(finalTitle, lastSetsMapped, scoreToUse, false, daysSinceLastSession, bodyWeight);
       }
 
       // Generate 3 standard sets with suggested values
       const initialSets = Array.from({ length: 3 }).map((_, i) => ({
         setIndex: i,
-        setType: i === 0 && target.suggestedWeight > 20 ? 'warmup' : 'normal',
-        weightKg: i === 0 && target.suggestedWeight > 20 ? Math.round((target.suggestedWeight * 0.6) / 2.5) * 2.5 : target.suggestedWeight,
+        setType: (i === 0 && target.suggestedWeight > 20 && !isBodyweight) ? 'warmup' : 'normal',
+        weightKg: (i === 0 && target.suggestedWeight > 20 && !isBodyweight) ? Math.round((target.suggestedWeight * 0.6) / 2.5) * 2.5 : target.suggestedWeight,
         reps: target.suggestedReps,
         rpe: null as number | null,
         completed: false,
