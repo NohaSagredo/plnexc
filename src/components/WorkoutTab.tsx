@@ -17,10 +17,13 @@ import {
   BookOpen,
   Award,
   Volume2,
-  VolumeX
+  VolumeX,
+  TrendingUp,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
-import { proposeNextSet, calculatePBProfiles, getBodyweightPercentage } from '../utils/ProgressionEngine';
-import type { SetData, ProgressionTarget } from '../utils/ProgressionEngine';
+import { proposeNextSet, calculatePBProfiles, getBodyweightPercentage, projectFutureSessions } from '../utils/ProgressionEngine';
+import type { SetData, ProgressionTarget, ProgressionSystem } from '../utils/ProgressionEngine';
 import { getSubstitutedExercise, MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import type { SubstitutionRule } from '../utils/MiloRehabEngine';
 import RoutineBuilder from './RoutineBuilder';
@@ -49,6 +52,7 @@ interface WorkoutTabProps {
   gender: 'Masculino' | 'Femenino';
   bodyFat: number;
   language: 'es' | 'en';
+  progressionSystem: ProgressionSystem;
 }
 
 // Dynamically generate a beep sound as a WAV Data URI/Blob to bypass iOS Web Audio API mute/silent-switch limitations
@@ -209,7 +213,8 @@ export default function WorkoutTab({
   height,
   gender,
   bodyFat,
-  language
+  language,
+  progressionSystem
 }: WorkoutTabProps) {
   const t = TRANSLATIONS[language];
 
@@ -367,10 +372,41 @@ export default function WorkoutTab({
   const [showCelebrationModal, setShowCelebrationModal] = useState<boolean>(false);
   const [showAllHistory, setShowAllHistory] = useState<boolean>(false);
 
+  // Strength Road Map States
+  const [projectionExercise, setProjectionExercise] = useState<string | null>(null);
+
+  const projectionData = useMemo(() => {
+    if (!projectionExercise) return [];
+    
+    const matchingSessions = [...localHistory]
+      .filter(s => s.exercises && s.exercises.some((e: any) => e.title.toLowerCase() === projectionExercise.toLowerCase()));
+      
+    matchingSessions.sort((a, b) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
+    
+    const latestMatch = matchingSessions[0];
+    const latestExercise = latestMatch?.exercises.find((e: any) => e.title.toLowerCase() === projectionExercise.toLowerCase());
+    
+    const lastSetsMapped = latestExercise ? latestExercise.sets.map((s: any) => ({
+      setIndex: s.setIndex,
+      setType: s.setType || 'normal',
+      weightKg: s.weight_kg !== undefined ? s.weight_kg : (s.weightKg !== undefined ? s.weightKg : 0),
+      reps: s.reps || 0,
+      rpe: s.rpe || null
+    })) : [];
+
+    return projectFutureSessions(
+      projectionExercise,
+      lastSetsMapped,
+      progressionSystem,
+      bodyWeight
+    );
+  }, [projectionExercise, localHistory, progressionSystem, bodyWeight]);
+
   // For history session details/editing
   const [selectedHistorySession, setSelectedHistorySession] = useState<any | null>(null);
   const [isEditingHistorySession, setIsEditingHistorySession] = useState<boolean>(false);
   const [editingHistorySessionData, setEditingHistorySessionData] = useState<any | null>(null);
+  const [expandedHistoryExercises, setExpandedHistoryExercises] = useState<{[key: string]: boolean}>({});
 
   const updateEditingSet = (exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'hasPain', value: any) => {
     if (!editingHistorySessionData) return;
@@ -692,7 +728,7 @@ export default function WorkoutTab({
         const diffTime = Math.abs(new Date().getTime() - latestSession.date.getTime());
         const daysSinceLastSession = Math.floor(diffTime / (1000 * 60 * 60 * 24));
         
-        target = proposeNextSet(finalTitle, lastSetsMapped, scoreToUse, false, daysSinceLastSession, bodyWeight);
+        target = proposeNextSet(finalTitle, lastSetsMapped, scoreToUse, false, daysSinceLastSession, bodyWeight, progressionSystem);
       }
 
       // Generate 3 standard sets with suggested values
@@ -2030,6 +2066,15 @@ export default function WorkoutTab({
                       </button>
                     );
                   })()}
+                  <button 
+                    type="button"
+                    onClick={() => setProjectionExercise(ex.title)}
+                    className="btn-standards"
+                    style={{ marginTop: '4px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', color: '#60a5fa' }}
+                  >
+                    <TrendingUp size={12} />
+                    <span>{t.viewProjection || 'Ver Proyección'}</span>
+                  </button>
                   {(() => {
                     let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
                     if (!foundEx && ex.originalTitle) {
@@ -2686,6 +2731,29 @@ export default function WorkoutTab({
                             );
                           })()}
 
+                          {/* Proyección Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => setProjectionExercise(ex.title)}
+                            style={{
+                              background: 'rgba(59, 130, 246, 0.08)',
+                              border: '1px solid rgba(59, 130, 246, 0.2)',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              fontSize: '0.68rem',
+                              color: '#60a5fa',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                              transition: 'all var(--transition-fast)'
+                            }}
+                          >
+                            <TrendingUp size={12} />
+                            <span>{language === 'es' ? 'Proyección' : 'Projection'}</span>
+                          </button>
+
                           {/* Tech Guide Toggle */}
                           {(() => {
                             let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
@@ -2871,6 +2939,7 @@ export default function WorkoutTab({
           onClick={() => {
             setSelectedHistorySession(null);
             setIsEditingHistorySession(false);
+            setExpandedHistoryExercises({});
           }}
           style={{
             position: 'fixed',
@@ -2924,6 +2993,7 @@ export default function WorkoutTab({
                 onClick={() => {
                   setSelectedHistorySession(null);
                   setIsEditingHistorySession(false);
+                  setExpandedHistoryExercises({});
                 }}
                 style={{
                   background: 'transparent',
@@ -3023,6 +3093,7 @@ export default function WorkoutTab({
               {/* Exercises List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '8px' }}>
                 {(isEditingHistorySession ? editingHistorySessionData.exercises : selectedHistorySession.exercises).map((ex: any, exIdx: number) => {
+                  const isExpanded = isEditingHistorySession || !!expandedHistoryExercises[`${ex.title || ex.id}_${exIdx}`];
                   return (
                     <div 
                       key={`${ex.title || ex.id}_${exIdx}`}
@@ -3040,176 +3111,218 @@ export default function WorkoutTab({
                         <span style={{ fontWeight: 700, color: 'hsl(var(--primary))', fontSize: '0.95rem' }}>
                           {resolveExerciseDisplayName(ex.title)}
                         </span>
-                        {isEditingHistorySession && (
-                          <button
-                            onClick={() => deleteEditingExercise(exIdx)}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'hsl(var(--danger))',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              transition: 'all var(--transition-fast)'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                          >
-                            <Trash2 size={12} /> {t.deleteExercise || 'Eliminar Ejercicio'}
-                          </button>
-                        )}
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {isEditingHistorySession && (
+                            <button
+                              onClick={() => deleteEditingExercise(exIdx)}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'hsl(var(--danger))',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                transition: 'all var(--transition-fast)'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <Trash2 size={12} /> {t.deleteExercise || 'Eliminar Ejercicio'}
+                            </button>
+                          )}
+                          
+                          {!isEditingHistorySession && (
+                            <button
+                              onClick={() => {
+                                const key = `${ex.title || ex.id}_${exIdx}`;
+                                setExpandedHistoryExercises(prev => ({ ...prev, [key]: !prev[key] }));
+                              }}
+                              style={{
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid hsla(var(--border) / 0.5)',
+                                borderRadius: '6px',
+                                padding: '6px 12px',
+                                fontSize: '0.72rem',
+                                color: isExpanded ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                transition: 'all var(--transition-fast)'
+                              }}
+                            >
+                              {isExpanded ? (
+                                <>
+                                  <ChevronUp size={14} />
+                                  <span>{language === 'es' ? 'Ocultar' : 'Hide'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown size={14} />
+                                  <span>{language === 'es' ? 'Ver series' : 'View sets'} ({ex.sets.length})</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Sets Table */}
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid hsla(var(--border) / 0.3)', textAlign: 'left' }}>
-                            <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))', width: '40px' }}>#</th>
-                            <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.weightLabel || 'Peso'} (kg)</th>
-                            <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.repsLabel || 'Reps'}</th>
-                            <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))', width: '110px', textAlign: 'center' }}>{t.pain || 'Molestia'}</th>
-                            {isEditingHistorySession && <th style={{ padding: '6px 4px', width: '40px' }}></th>}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ex.sets.map((set: any, setIdx: number) => {
-                            const weightVal = set.weightKg !== undefined ? set.weightKg : (set.weight_kg !== undefined ? set.weight_kg : 0);
-                            return (
-                              <tr key={setIdx} style={{ borderBottom: '1px solid hsla(var(--border) / 0.15)' }}>
-                                <td style={{ padding: '8px 4px', fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--muted))' }}>
-                                  {setIdx + 1}
-                                </td>
-                                <td style={{ padding: '8px 4px' }}>
-                                  {isEditingHistorySession ? (
-                                    <input 
-                                      type="number" 
-                                      step="any"
-                                      value={weightVal}
-                                      onChange={(e) => updateEditingSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)}
-                                      style={{
-                                        background: 'rgba(255,255,255,0.05)',
-                                        border: '1px solid hsl(var(--border))',
-                                        color: '#ffffff',
-                                        borderRadius: '4px',
-                                        padding: '6px',
-                                        width: '75px',
-                                        textAlign: 'center',
-                                        fontSize: '0.85rem'
-                                      }}
-                                    />
-                                  ) : (
-                                    <span style={{ fontSize: '0.85rem', color: '#ffffff' }}>{weightVal} kg</span>
-                                  )}
-                                </td>
-                                <td style={{ padding: '8px 4px' }}>
-                                  {isEditingHistorySession ? (
-                                    <input 
-                                      type="number" 
-                                      value={set.reps || 0}
-                                      onChange={(e) => updateEditingSet(exIdx, setIdx, 'reps', parseInt(e.target.value, 10) || 0)}
-                                      style={{
-                                        background: 'rgba(255,255,255,0.05)',
-                                        border: '1px solid hsl(var(--border))',
-                                        color: '#ffffff',
-                                        borderRadius: '4px',
-                                        padding: '6px',
-                                        width: '65px',
-                                        textAlign: 'center',
-                                        fontSize: '0.85rem'
-                                      }}
-                                    />
-                                  ) : (
-                                    <span style={{ fontSize: '0.85rem', color: '#ffffff' }}>{set.reps}</span>
-                                  )}
-                                </td>
-                                <td style={{ padding: '8px 4px', textAlign: 'center' }}>
-                                  {isEditingHistorySession ? (
-                                    <button
-                                      onClick={() => updateEditingSet(exIdx, setIdx, 'hasPain', !set.hasPain)}
-                                      style={{
-                                        background: set.hasPain ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.02)',
-                                        border: `1px solid ${set.hasPain ? 'hsl(var(--danger))' : 'hsla(var(--border) / 0.5)'}`,
-                                        color: set.hasPain ? 'hsl(var(--danger))' : 'hsl(var(--muted))',
-                                        borderRadius: '4px',
-                                        padding: '4px 8px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                        width: '100px',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '4px',
-                                        transition: 'all var(--transition-fast)'
-                                      }}
-                                    >
-                                      {set.hasPain ? (
-                                        <>⚠️ {t.hasPain || 'Con molestia'}</>
-                                      ) : (
-                                        t.noPain || 'Sin molestia'
-                                      )}
-                                    </button>
-                                  ) : (
-                                    set.hasPain ? (
-                                      <span className="badge badge-danger" style={{ fontSize: '0.7rem', padding: '2px 6px', display: 'inline-block' }}>
-                                        ⚠️ Molestia
-                                      </span>
-                                    ) : (
-                                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>—</span>
-                                    )
-                                  )}
-                                </td>
-                                {isEditingHistorySession && (
-                                  <td style={{ padding: '8px 4px', textAlign: 'center' }}>
-                                    <button
-                                      onClick={() => deleteEditingSet(exIdx, setIdx)}
-                                      style={{
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: 'hsl(var(--danger))',
-                                        cursor: 'pointer',
-                                        padding: '4px',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        borderRadius: '50%'
-                                      }}
-                                      className="hover-danger"
-                                      title={t.deleteSet || 'Eliminar Serie'}
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  </td>
-                                )}
+                      {isExpanded && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+                          {/* Sets Table */}
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid hsla(var(--border) / 0.3)', textAlign: 'left' }}>
+                                <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))', width: '40px' }}>#</th>
+                                <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.weightLabel || 'Peso'} (kg)</th>
+                                <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.repsLabel || 'Reps'}</th>
+                                <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))', width: '110px', textAlign: 'center' }}>{t.pain || 'Molestia'}</th>
+                                {isEditingHistorySession && <th style={{ padding: '6px 4px', width: '40px' }}></th>}
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                            </thead>
+                            <tbody>
+                              {ex.sets.map((set: any, setIdx: number) => {
+                                const weightVal = set.weightKg !== undefined ? set.weightKg : (set.weight_kg !== undefined ? set.weight_kg : 0);
+                                return (
+                                  <tr key={setIdx} style={{ borderBottom: '1px solid hsla(var(--border) / 0.15)' }}>
+                                    <td style={{ padding: '8px 4px', fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--muted))' }}>
+                                      {setIdx + 1}
+                                    </td>
+                                    <td style={{ padding: '8px 4px' }}>
+                                      {isEditingHistorySession ? (
+                                        <input 
+                                          type="number" 
+                                          step="any"
+                                          value={weightVal}
+                                          onChange={(e) => updateEditingSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)}
+                                          style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid hsl(var(--border))',
+                                            color: '#ffffff',
+                                            borderRadius: '4px',
+                                            padding: '6px',
+                                            width: '75px',
+                                            textAlign: 'center',
+                                            fontSize: '0.85rem'
+                                          }}
+                                        />
+                                      ) : (
+                                        <span style={{ fontSize: '0.85rem', color: '#ffffff' }}>{weightVal} kg</span>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '8px 4px' }}>
+                                      {isEditingHistorySession ? (
+                                        <input 
+                                          type="number" 
+                                          value={set.reps || 0}
+                                          onChange={(e) => updateEditingSet(exIdx, setIdx, 'reps', parseInt(e.target.value, 10) || 0)}
+                                          style={{
+                                            background: 'rgba(255,255,255,0.05)',
+                                            border: '1px solid hsl(var(--border))',
+                                            color: '#ffffff',
+                                            borderRadius: '4px',
+                                            padding: '6px',
+                                            width: '65px',
+                                            textAlign: 'center',
+                                            fontSize: '0.85rem'
+                                          }}
+                                        />
+                                      ) : (
+                                        <span style={{ fontSize: '0.85rem', color: '#ffffff' }}>{set.reps}</span>
+                                      )}
+                                    </td>
+                                    <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                                      {isEditingHistorySession ? (
+                                        <button
+                                          onClick={() => updateEditingSet(exIdx, setIdx, 'hasPain', !set.hasPain)}
+                                          style={{
+                                            background: set.hasPain ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.02)',
+                                            border: `1px solid ${set.hasPain ? 'hsl(var(--danger))' : 'hsla(var(--border) / 0.5)'}`,
+                                            color: set.hasPain ? 'hsl(var(--danger))' : 'hsl(var(--muted))',
+                                            borderRadius: '4px',
+                                            padding: '4px 8px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            width: '100px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '4px',
+                                            transition: 'all var(--transition-fast)'
+                                          }}
+                                        >
+                                          {set.hasPain ? (
+                                            <>⚠️ {t.hasPain || 'Con molestia'}</>
+                                          ) : (
+                                            t.noPain || 'Sin molestia'
+                                          )}
+                                        </button>
+                                      ) : (
+                                        set.hasPain ? (
+                                          <span className="badge badge-danger" style={{ fontSize: '0.7rem', padding: '2px 6px', display: 'inline-block' }}>
+                                            ⚠️ Molestia
+                                          </span>
+                                        ) : (
+                                          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)' }}>—</span>
+                                        )
+                                      )}
+                                    </td>
+                                    {isEditingHistorySession && (
+                                      <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                                        <button
+                                          onClick={() => deleteEditingSet(exIdx, setIdx)}
+                                          style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            color: 'hsl(var(--danger))',
+                                            cursor: 'pointer',
+                                            padding: '4px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            borderRadius: '50%'
+                                          }}
+                                          className="hover-danger"
+                                          title={t.deleteSet || 'Eliminar Serie'}
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
 
-                      {isEditingHistorySession && (
-                        <button
-                          onClick={() => addEditingSet(exIdx)}
-                          className="btn btn-secondary"
-                          style={{
-                            alignSelf: 'flex-start',
-                            padding: '6px 12px',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            background: 'rgba(255,255,255,0.02)',
-                            border: '1px dashed hsla(var(--border) / 0.5)'
-                          }}
-                        >
-                          <Plus size={12} /> {t.addSet || 'Añadir Serie'}
-                        </button>
+                          {isEditingHistorySession && (
+                            <button
+                              onClick={() => addEditingSet(exIdx)}
+                              className="btn btn-secondary"
+                              style={{
+                                alignSelf: 'flex-start',
+                                padding: '6px 12px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: 'rgba(255,255,255,0.02)',
+                                border: '1px dashed hsla(var(--border) / 0.5)'
+                              }}
+                            >
+                              <Plus size={12} /> {t.addSet || 'Añadir Serie'}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
@@ -3218,7 +3331,15 @@ export default function WorkoutTab({
             </div>
 
             {/* Footer Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px', borderTop: '1px solid hsla(var(--border) / 0.5)', paddingTop: '16px' }}>
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              justifyContent: 'flex-end', 
+              gap: '12px', 
+              marginTop: '16px', 
+              borderTop: '1px solid hsla(var(--border) / 0.5)', 
+              paddingTop: '16px' 
+            }}>
               {isEditingHistorySession ? (
                 <>
                   <button
@@ -3230,9 +3351,12 @@ export default function WorkoutTab({
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'center',
                       gap: '8px',
                       fontSize: '0.85rem',
-                      padding: '10px 20px'
+                      padding: '10px 20px',
+                      flex: '1 1 auto',
+                      minWidth: '140px'
                     }}
                   >
                     <X size={14} /> {t.discardChanges || 'Descartar Cambios'}
@@ -3256,12 +3380,15 @@ export default function WorkoutTab({
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'center',
                       gap: '8px',
                       fontSize: '0.85rem',
                       padding: '10px 20px',
                       background: 'hsl(var(--primary))',
                       color: '#000000',
-                      fontWeight: 700
+                      fontWeight: 700,
+                      flex: '1 1 auto',
+                      minWidth: '140px'
                     }}
                   >
                     <Check size={14} /> {t.saveChanges || 'Guardar Cambios'}
@@ -3275,44 +3402,59 @@ export default function WorkoutTab({
                       if (confirmDelete) {
                         onDeleteWorkout(selectedHistorySession.parsedDate);
                         setSelectedHistorySession(null);
+                        setExpandedHistoryExercises({});
                       }
                     }}
                     className="btn btn-secondary"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'center',
                       gap: '8px',
                       fontSize: '0.85rem',
                       padding: '10px 20px',
                       borderColor: 'hsl(var(--danger))',
                       color: 'hsl(var(--danger))',
-                      marginRight: 'auto'
+                      marginRight: 'auto',
+                      flex: '1 1 auto',
+                      minWidth: '140px'
                     }}
                   >
                     <Trash2 size={14} /> {t.deleteWorkout || 'Eliminar'}
                   </button>
-
+ 
                   <button
                     onClick={() => setIsEditingHistorySession(true)}
                     className="btn btn-secondary"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'center',
                       gap: '8px',
                       fontSize: '0.85rem',
-                      padding: '10px 20px'
+                      padding: '10px 20px',
+                      flex: '1 1 auto',
+                      minWidth: '120px'
                     }}
                   >
                     <Edit2 size={14} /> {t.editWorkout || 'Editar'}
                   </button>
-
+ 
                   <button
-                    onClick={() => setSelectedHistorySession(null)}
+                    onClick={() => {
+                      setSelectedHistorySession(null);
+                      setExpandedHistoryExercises({});
+                    }}
                     className="btn btn-primary"
                     style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                       fontSize: '0.85rem',
                       padding: '10px 24px',
-                      fontWeight: 700
+                      fontWeight: 700,
+                      flex: '1 1 auto',
+                      minWidth: '100px'
                     }}
                   >
                     {t.close || 'Cerrar'}
@@ -3321,6 +3463,186 @@ export default function WorkoutTab({
               )}
             </div>
 
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Strength Road Map Projection Portal Overlay */}
+      {projectionExercise && projectionData.length > 0 && createPortal(
+        <div 
+          onClick={() => setProjectionExercise(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(5, 7, 12, 0.9)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="glass-panel fade-in" 
+            style={{ 
+              maxWidth: '600px',
+              width: '100%',
+              padding: '24px', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '20px',
+              border: '1px solid hsla(var(--primary) / 0.4)',
+              borderRadius: '16px',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7)',
+              background: 'linear-gradient(180deg, #0d1321 0%, #070a12 100%)',
+              color: '#fff'
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsla(var(--border) / 0.5)', paddingBottom: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <TrendingUp size={20} color="hsl(var(--primary))" />
+                  {t.forecastTitle || 'Strength Road Map'}
+                </h3>
+                <p style={{ color: 'hsl(var(--muted))', fontSize: '0.8rem', margin: '4px 0 0 0' }}>
+                  {resolveExerciseDisplayName(projectionExercise)} • {
+                    progressionSystem === 'double_progression' ? t.doubleProgression :
+                    progressionSystem === 'linear_periodization' ? t.linearPeriodization :
+                    t.dup
+                  }
+                </p>
+              </div>
+              <button 
+                onClick={() => setProjectionExercise(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: 'none',
+                  color: 'hsl(var(--muted))',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '6px',
+                  borderRadius: '50%',
+                  transition: 'all var(--transition-fast)'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#ffffff'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'hsl(var(--muted))'; e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Description */}
+            <p style={{ fontSize: '0.85rem', color: '#cbd5e1', margin: 0, lineHeight: 1.4 }}>
+              {t.forecastDesc || 'Proyección de cargas y reps para las siguientes 4 sesiones.'}
+            </p>
+
+            {/* Timeline Layout */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+              {projectionData.map((proj) => {
+                const focusName = 
+                  proj.focusKey === 'focusHypertrophy' ? t.focusHypertrophy :
+                  proj.focusKey === 'focusStrength' ? t.focusStrength :
+                  proj.focusKey === 'focusPeaking' ? t.focusPeaking :
+                  proj.focusKey === 'focusDeload' ? t.focusDeload :
+                  proj.focusKey === 'focusPower' ? t.focusPower : proj.focusKey;
+
+                return (
+                  <div 
+                    key={proj.step}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '16px',
+                      padding: '14px 16px',
+                      background: proj.isCurrent ? 'linear-gradient(90deg, hsla(var(--primary) / 0.15) 0%, rgba(255, 255, 255, 0.02) 100%)' : 'rgba(255, 255, 255, 0.02)',
+                      border: proj.isCurrent ? '1px solid hsl(var(--primary))' : '1px solid hsla(var(--border) / 0.5)',
+                      borderRadius: '12px',
+                      position: 'relative',
+                      boxShadow: proj.isCurrent ? '0 0 15px hsla(var(--primary) / 0.1)' : 'none',
+                      transition: 'transform 0.2s ease'
+                    }}
+                    className="hover-card-highlight"
+                  >
+                    {/* Step indicator */}
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      background: proj.isCurrent ? 'hsl(var(--primary))' : 'rgba(255, 255, 255, 0.05)',
+                      color: proj.isCurrent ? '#000' : 'hsl(var(--muted))',
+                      fontWeight: 'bold',
+                      fontSize: '0.9rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      {proj.step}
+                    </div>
+
+                    {/* Proj details */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff' }}>
+                          {proj.weightKg} kg x {proj.reps} {t.reps}
+                        </span>
+                        <span style={{ 
+                          fontSize: '0.7rem', 
+                          padding: '2px 8px', 
+                          borderRadius: '20px', 
+                          background: 
+                            proj.focusKey === 'focusDeload' ? 'rgba(239, 68, 68, 0.15)' :
+                            proj.focusKey === 'focusPeaking' ? 'rgba(245, 158, 11, 0.15)' :
+                            proj.focusKey === 'focusStrength' ? 'rgba(139, 92, 246, 0.15)' :
+                            'rgba(16, 185, 129, 0.15)',
+                          color: 
+                            proj.focusKey === 'focusDeload' ? '#f87171' :
+                            proj.focusKey === 'focusPeaking' ? '#fbbf24' :
+                            proj.focusKey === 'focusStrength' ? '#a78bfa' :
+                            '#34d399',
+                          fontWeight: 700
+                        }}>
+                          {focusName}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'hsl(var(--muted))', marginTop: '2px' }}>
+                        <span>{proj.sets} {t.series || 'series'}</span>
+                        <span>{t.projectedVolume || 'Volumen'}: <strong style={{ color: 'hsl(var(--primary))' }}>{proj.volume.toLocaleString()} kg</strong></span>
+                      </div>
+                    </div>
+
+                    {/* Current Tag */}
+                    {proj.isCurrent && (
+                      <span style={{
+                        position: 'absolute',
+                        top: '-8px',
+                        right: '16px',
+                        background: 'hsl(var(--primary))',
+                        color: '#000',
+                        fontSize: '0.6rem',
+                        fontWeight: 'bold',
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        {language === 'es' ? 'Siguiente Sesión' : 'Next Session'}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>,
         document.body

@@ -17,6 +17,7 @@ import { auth } from './utils/firebase';
 
 import { useState, useRef } from 'react';
 import { TRANSLATIONS } from './utils/translations';
+import type { ProgressionSystem } from './utils/ProgressionEngine';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile'>('dashboard');
@@ -182,6 +183,27 @@ export default function App() {
     }
     return [];
   });
+
+  // 8. Progression System
+  const [progressionSystem, setProgressionSystem] = useState<ProgressionSystem>(() => {
+    const saved = localStorage.getItem('plnexc_progression_system');
+    return (saved === 'double_progression' || saved === 'linear_periodization' || saved === 'dup')
+      ? (saved as ProgressionSystem)
+      : 'double_progression';
+  });
+
+  const handleSetProgressionSystem = (system: ProgressionSystem, skipCloudUpload = false) => {
+    setProgressionSystem(system);
+    localStorage.setItem('plnexc_progression_system', system);
+    if (!skipCloudUpload) {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        uploadUserData(currentUser.uid, { progressionSystem: system }).catch(err => {
+          console.error('Error auto-syncing progression system:', err);
+        });
+      }
+    }
+  };
 
   const handleSetCardioGoalType = (type: 'daily' | 'weekly', skipCloudUpload = false) => {
     setCardioGoalType(type);
@@ -598,6 +620,8 @@ export default function App() {
             setProgressPhotos={setProgressPhotos}
             language={language}
             setLanguage={setLanguage}
+            progressionSystem={progressionSystem}
+            setProgressionSystem={handleSetProgressionSystem}
           />
         </div>
       </header>
@@ -619,6 +643,7 @@ export default function App() {
             onDeleteProgressPhoto={handleDeleteProgressPhoto}
             bodyWeight={bodyWeight}
             language={language}
+            progressionSystem={progressionSystem}
           />
         </div>
         
@@ -641,6 +666,7 @@ export default function App() {
             gender={gender}
             bodyFat={bodyFat}
             language={language}
+            progressionSystem={progressionSystem}
           />
         </div>
         
@@ -680,6 +706,8 @@ export default function App() {
             cardioHistory={cardioHistory}
             language={language}
             onToggleLanguage={handleToggleLanguage}
+            progressionSystem={progressionSystem}
+            onSetProgressionSystem={handleSetProgressionSystem}
           />
         </div>
 

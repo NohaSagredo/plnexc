@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Scale, User, Trash2, Calendar, Plus, Minus, HelpCircle, Calculator, ChevronDown, ChevronUp, Check, Info, Lock, Camera, Award, X, Image as ImageIcon, Settings, Volume2 } from 'lucide-react';
-import type { WeightRecord } from '../utils/firebaseSync';
-import { calculatePBProfiles, calculateAchievements, compressAndResizeImage } from '../utils/ProgressionEngine';
+import { calculatePBProfiles, calculateAchievements, compressAndResizeImage, getAthleteLevel } from '../utils/ProgressionEngine';
+import type { ProgressionSystem } from '../utils/ProgressionEngine';
 import { TRANSLATIONS } from '../utils/translations';
 import AlgorithmsTab from './AlgorithmsTab';
 
@@ -14,7 +14,7 @@ interface ProfileTabProps {
   setGender: (gender: 'Masculino' | 'Femenino') => void;
   bodyFat: number;
   setBodyFat: (fat: number) => void;
-  weightHistory: WeightRecord[];
+  weightHistory: any[];
   onAddWeightRecord: (weight: number, dateStr?: string) => void;
   onDeleteWeightRecord: (dateStr: string) => void;
   profilePicture: string;
@@ -26,6 +26,8 @@ interface ProfileTabProps {
   cardioHistory: any[];
   language: 'es' | 'en';
   onToggleLanguage: () => void;
+  progressionSystem: ProgressionSystem;
+  onSetProgressionSystem: (system: ProgressionSystem) => void;
 }
 
 export default function ProfileTab({
@@ -48,7 +50,9 @@ export default function ProfileTab({
   localHistory,
   cardioHistory,
   language,
-  onToggleLanguage
+  onToggleLanguage,
+  progressionSystem,
+  onSetProgressionSystem
 }: ProfileTabProps) {
   const t = TRANSLATIONS[language];
   const [newWeightInput, setNewWeightInput] = useState<string>('');
@@ -171,6 +175,7 @@ export default function ProfileTab({
   const pbProfiles = useMemo(() => calculatePBProfiles(localHistory), [localHistory]);
   const achievements = useMemo(() => calculateAchievements(localHistory, pbProfiles, cardioHistory), [localHistory, pbProfiles, cardioHistory]);
   const unlockedCount = useMemo(() => achievements.filter(a => a.isUnlocked).length, [achievements]);
+  const athleteLevel = useMemo(() => getAthleteLevel(pbProfiles, bodyWeight, gender, height, bodyFat), [pbProfiles, bodyWeight, gender, height, bodyFat]);
 
   // Sync state defaults when gender changes
   useEffect(() => {
@@ -1267,6 +1272,80 @@ export default function ProfileTab({
             >
               {restTimerSoundEnabled ? (language === 'es' ? 'Activado' : 'Enabled') : (language === 'es' ? 'Desactivado' : 'Disabled')}
             </button>
+          </div>
+
+          {/* Selector de Sistema de Progresión */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            padding: '16px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            borderRadius: '12px',
+            border: '1px solid hsl(var(--border))'
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={18} color="hsl(var(--primary))" />
+                {t.progressionSystemLabel}
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>
+                {t.progressionSystemDesc}
+              </span>
+            </div>
+            
+            <select
+              value={progressionSystem}
+              onChange={(e) => onSetProgressionSystem(e.target.value as ProgressionSystem)}
+              style={{
+                background: 'rgba(0, 0, 0, 0.2)',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px',
+                padding: '10px',
+                color: '#fff',
+                fontSize: '0.9rem',
+                outline: 'none',
+                cursor: 'pointer',
+                width: '100%',
+                transition: 'border-color var(--transition-fast)'
+              }}
+              className="hover-card-highlight"
+            >
+              <option value="double_progression" style={{ background: '#18181b', color: '#fff' }}>
+                {t.doubleProgression}
+              </option>
+              <option value="linear_periodization" style={{ background: '#18181b', color: '#fff' }}>
+                {t.linearPeriodization}
+              </option>
+              <option value="dup" style={{ background: '#18181b', color: '#fff' }}>
+                {t.dup}
+              </option>
+            </select>
+
+            {/* Alerta inteligente del Coach (DUP o Linear Periodization) */}
+            {((athleteLevel === 'intermediate' || athleteLevel === 'advanced') && progressionSystem === 'double_progression') && (
+              <div style={{
+                marginTop: '8px',
+                padding: '16px',
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.04) 100%)',
+                border: '1px solid hsl(38, 92%, 50%)',
+                borderRadius: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                boxShadow: '0 4px 20px rgba(245, 158, 11, 0.05)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Award size={18} color="hsl(38, 92%, 50%)" />
+                  <strong style={{ fontSize: '0.9rem', color: 'hsl(38, 92%, 60%)' }}>
+                    {t.coachRecommendation}
+                  </strong>
+                </div>
+                <span style={{ fontSize: '0.85rem', color: '#fef3c7', lineHeight: '1.4' }}>
+                  {t.coachAdviseChange}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

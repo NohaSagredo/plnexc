@@ -38,6 +38,25 @@ export const TRANSLATIONS = {
     noPain: 'Sin molestia',
     hasPain: 'Con molestia',
 
+    // Periodization & Strength Road Map
+    progressionSystemLabel: 'Sistema de Sobrecarga y Progresión',
+    progressionSystemDesc: 'Elige cómo el motor inteligente calcula tus recomendaciones y proyección de cargas.',
+    doubleProgression: 'Progresión Doble (Hipertrofia)',
+    linearPeriodization: 'Periodización Lineal (Fuerza / 1RM)',
+    dup: 'Periodización Ondulante - DUP',
+    viewProjection: 'Ver Proyección de Cargas (Strength Road Map)',
+    forecastTitle: 'Strength Road Map: Proyección de Sobrecarga',
+    forecastDesc: 'Línea de tiempo proyectada para tus siguientes 4 sesiones basada en tu 1RM estimado.',
+    focusStrength: 'Fuerza Máxima',
+    focusHypertrophy: 'Hipertrofia / Volumen',
+    focusPeaking: 'Fuerza Máxima / Peaking',
+    focusDeload: 'Descarga Activa',
+    focusPower: 'Potencia / Velocidad',
+    forecastStep: 'Sesión {step}',
+    projectedVolume: 'Volumen Proyectado',
+    coachRecommendation: 'Recomendación del Coach',
+    coachAdviseChange: '¡Felicidades! Has alcanzado un nivel Intermedio/Avanzado en tus levantamientos base. Te sugerimos cambiar a Periodización Lineal o DUP para gestionar mejor la fatiga y evitar estancamientos.',
+
     // Dashboard
     goodMorning: '¡Buenos días',
     goodAfternoon: '¡Buenas tardes',
@@ -77,6 +96,13 @@ export const TRANSLATIONS = {
     widgetSplitsPrs: 'Récords Personales (PBs/PRs)',
     widgetProgressPhoto: 'Última Foto de Progreso',
     widgetWeeklySets: 'Volumen de Series Semanal por Músculo',
+    widgetProjections: 'Proyección de Fuerza y Cargas (Strength Road Map)',
+    projectionsTitle: 'Strength Road Map: Proyección de Cargas',
+    projectionsSubtitle: 'Simulación y planificación de tus siguientes 4 sesiones basada en tu historial.',
+    projectionsSelectExercise: 'Seleccionar ejercicio:',
+    projectionsSimulateSystem: 'Simular Sistema:',
+    projectionsSuggestedWeight: 'Peso Proyectado',
+    projectionsProjectedVolume: 'Volumen Proyectado',
 
     // Weekly Sets Widget
     weeklySetsTitle: 'Volumen de Series Semanal por Músculo',
@@ -501,6 +527,25 @@ export const TRANSLATIONS = {
     noPain: 'No pain',
     hasPain: 'Has pain',
 
+    // Periodization & Strength Road Map
+    progressionSystemLabel: 'Progression & Overload System',
+    progressionSystemDesc: 'Choose how the smart engine calculates your load suggestions and projections.',
+    doubleProgression: 'Double Progression (Hypertrophy)',
+    linearPeriodization: 'Linear Periodization (Max Strength / 1RM)',
+    dup: 'Daily Undulating Periodization - DUP',
+    viewProjection: 'View Strength Road Map',
+    forecastTitle: 'Strength Road Map: Load Projection',
+    forecastDesc: 'Projected timeline for your next 4 sessions based on your estimated 1RM.',
+    focusStrength: 'Max Strength',
+    focusHypertrophy: 'Hypertrophy / Volume',
+    focusPeaking: 'Max Strength / Peaking',
+    focusDeload: 'Active Deload',
+    focusPower: 'Power / Speed',
+    forecastStep: 'Session {step}',
+    projectedVolume: 'Projected Volume',
+    coachRecommendation: 'Coach Recommendation',
+    coachAdviseChange: 'Congratulations! You have reached an Intermediate/Advanced level in your base lifts. We suggest switching to Linear Periodization or DUP to optimize fatigue management and avoid plateaus.',
+
     // Dashboard
     goodMorning: 'Good morning',
     goodAfternoon: 'Good afternoon',
@@ -540,6 +585,13 @@ export const TRANSLATIONS = {
     widgetSplitsPrs: 'Personal Records (PBs/PRs)',
     widgetProgressPhoto: 'Latest Progress Photo',
     widgetWeeklySets: 'Weekly Completed Sets per Muscle',
+    widgetProjections: 'Strength Road Map & Load Projections',
+    projectionsTitle: 'Strength Road Map: Load Projections',
+    projectionsSubtitle: 'Simulation and planning for your next 4 sessions based on history.',
+    projectionsSelectExercise: 'Select exercise:',
+    projectionsSimulateSystem: 'Simulate System:',
+    projectionsSuggestedWeight: 'Projected Weight',
+    projectionsProjectedVolume: 'Projected Volume',
 
     // Weekly Sets Widget
     weeklySetsTitle: 'Weekly Sets per Muscle Group',

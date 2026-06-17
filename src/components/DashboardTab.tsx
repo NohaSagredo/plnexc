@@ -19,7 +19,8 @@ import {
   LineChart,
   Line
 } from 'recharts';
-import { calculatePBProfiles, compressAndResizeImage } from '../utils/ProgressionEngine';
+import { calculatePBProfiles, compressAndResizeImage, projectFutureSessions } from '../utils/ProgressionEngine';
+import type { ProgressionSystem } from '../utils/ProgressionEngine';
 import { 
   TrendingUp, 
   Calendar, 
@@ -85,6 +86,7 @@ interface DashboardTabProps {
   onDeleteProgressPhoto?: (id: string) => void;
   bodyWeight?: number;
   language: 'es' | 'en';
+  progressionSystem?: ProgressionSystem;
 }
 
 export default function DashboardTab({ 
@@ -97,7 +99,8 @@ export default function DashboardTab({
   onAddProgressPhoto,
   onDeleteProgressPhoto,
   bodyWeight = 75,
-  language
+  language,
+  progressionSystem = 'double_progression'
 }: DashboardTabProps) {
   const t = TRANSLATIONS[language];
   const sessions = localHistory as WorkoutSession[];
@@ -261,12 +264,12 @@ export default function DashboardTab({
   }, [sessions, selectedExercise]);
 
   // Widget ID Type & Layout States
-  type WidgetId = 'stats' | 'coach' | 'strength' | 'weight' | 'cardio' | 'splits_prs' | 'progress_photo' | 'weekly_sets';
+  type WidgetId = 'stats' | 'coach' | 'strength' | 'weight' | 'cardio' | 'splits_prs' | 'progress_photo' | 'weekly_sets' | 'projections';
 
   const [isEditingLayout, setIsEditingLayout] = useState<boolean>(false);
   const [layoutOrder, setLayoutOrder] = useState<WidgetId[]>(() => {
     const saved = localStorage.getItem('plnexc_dashboard_layout');
-    const required: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo', 'weekly_sets'];
+    const required: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo', 'weekly_sets', 'projections'];
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -379,7 +382,57 @@ export default function DashboardTab({
     if (uniqueExerciseNames.length > 0 && !selectedExerciseForRepsTab) {
       setSelectedExerciseForRepsTab(uniqueExerciseNames[0]);
     }
-  }, [uniqueExerciseNames]);
+  }, [uniqueExerciseNames, selectedExerciseForRepsTab]);
+
+  // Projections widget states
+  const [projectionsExercise, setProjectionsExercise] = useState<string>('');
+  const [projectionsSystem, setProjectionsSystem] = useState<string>(progressionSystem);
+
+  // Set default selected exercise for projections widget
+  useEffect(() => {
+    if (uniqueExerciseNames.length > 0 && !projectionsExercise) {
+      setProjectionsExercise(uniqueExerciseNames[0]);
+    }
+  }, [uniqueExerciseNames, projectionsExercise]);
+
+  // Sync simulation system when prop changes
+  useEffect(() => {
+    if (progressionSystem) {
+      setProjectionsSystem(progressionSystem);
+    }
+  }, [progressionSystem]);
+
+  // Extract latest session and sets for projections calculation
+  const latestExerciseSession = useMemo(() => {
+    if (!projectionsExercise) return null;
+    const matching = [...localHistory]
+      .filter(s => s.exercises && s.exercises.some((e: any) => e.title.toLowerCase() === projectionsExercise.toLowerCase()));
+    matching.sort((a, b) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
+    return matching[0];
+  }, [projectionsExercise, localHistory]);
+
+  const lastSetsForProjections = useMemo(() => {
+    if (!latestExerciseSession || !projectionsExercise) return [];
+    const ex = latestExerciseSession.exercises.find((e: any) => e.title.toLowerCase() === projectionsExercise.toLowerCase());
+    if (!ex) return [];
+    return ex.sets.map((s: any) => ({
+      setIndex: s.setIndex,
+      setType: s.setType || 'normal',
+      weightKg: s.weight_kg !== undefined ? s.weight_kg : (s.weightKg !== undefined ? s.weightKg : 0),
+      reps: s.reps || 0,
+      rpe: s.rpe || null
+    }));
+  }, [latestExerciseSession, projectionsExercise]);
+
+  const projectedData = useMemo(() => {
+    if (!projectionsExercise) return [];
+    return projectFutureSessions(
+      projectionsExercise,
+      lastSetsForProjections,
+      (projectionsSystem || progressionSystem || 'double_progression') as any,
+      bodyWeight
+    );
+  }, [projectionsExercise, lastSetsForProjections, projectionsSystem, progressionSystem, bodyWeight]);
 
   // Filter out any hidden widgets (like strength when there is no selectedExercise)
   const activeLayoutOrder = useMemo(() => {
@@ -1633,6 +1686,239 @@ export default function DashboardTab({
     );
   };
 
+  const renderProjectionsChart = () => {
+    const hasData = uniqueExerciseNames.length > 0 && projectionsExercise && projectedData.length > 0;
+    
+    // Prepare chart data format
+    const chartData = hasData ? projectedData.map(pt => ({
+      name: language === 'es' ? `Sesión ${pt.step}` : `Session ${pt.step}`,
+      weight: pt.weightKg,
+      volume: pt.volume,
+      reps: pt.reps,
+      sets: pt.sets,
+      focus: pt.focusKey
+    })) : [];
+
+    return (
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <TrendingUp size={20} color="hsl(var(--primary))" />
+            {t.widgetProjections || 'Proyección de Fuerza y Cargas (Strength Road Map)'}
+          </h3>
+          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.78rem', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+            {t.projectionsSubtitle || 'Simula y visualiza el comportamiento de tus siguientes 4 sesiones.'}
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', marginTop: '4px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: '1 1 auto', minWidth: '150px' }}>
+            <span style={{ fontSize: '0.72rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
+              {t.projectionsSelectExercise || 'Seleccionar ejercicio:'}
+            </span>
+            <select
+              value={projectionsExercise}
+              onChange={(e) => setProjectionsExercise(e.target.value)}
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                color: '#ffffff',
+                fontSize: '0.825rem',
+                width: '100%',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              {uniqueExerciseNames.length === 0 ? (
+                <option value="">{language === 'es' ? 'Sin ejercicios registrados' : 'No logged exercises'}</option>
+              ) : (
+                uniqueExerciseNames.map(ex => (
+                  <option key={ex} value={ex}>
+                    {resolveExerciseDisplayName(ex)}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: '1 1 auto', minWidth: '180px' }}>
+            <span style={{ fontSize: '0.72rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
+              {t.projectionsSimulateSystem || 'Simular Sistema:'}
+            </span>
+            <select
+              value={projectionsSystem}
+              onChange={(e) => setProjectionsSystem(e.target.value)}
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                color: '#ffffff',
+                fontSize: '0.825rem',
+                width: '100%',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="double_progression">{t.doubleProgression || 'Progresión Doble (Hipertrofia)'}</option>
+              <option value="linear_periodization">{t.linearPeriodization || 'Periodización Lineal (Fuerza / 1RM)'}</option>
+              <option value="dup">{language === 'es' ? 'Periodización Ondulante - DUP' : 'Daily Undulating Periodization - DUP'}</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ height: '240px', width: '100%', background: 'rgba(0,0,0,0.15)', border: '1px solid hsl(var(--border))', borderRadius: '8px', padding: '16px 12px 4px 12px', marginTop: '4px' }}>
+          {!hasData ? (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'hsl(var(--muted))', fontSize: '0.85rem', textAlign: 'center', padding: '20px' }}>
+              {t.pbNoHistory || 'Sin historial de levantamientos para este ejercicio.'}
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                <XAxis 
+                  dataKey="name" 
+                  stroke="hsl(var(--muted))" 
+                  fontSize={10}
+                  tickLine={false} 
+                  axisLine={false}
+                />
+                <YAxis 
+                  yAxisId="left"
+                  stroke="hsl(var(--primary))" 
+                  fontSize={10}
+                  tickLine={false} 
+                  axisLine={false}
+                  domain={['auto', 'auto']}
+                  tickFormatter={(val) => `${val}kg`}
+                />
+                <YAxis 
+                  yAxisId="right"
+                  orientation="right"
+                  stroke="hsl(var(--secondary))" 
+                  fontSize={10}
+                  tickLine={false} 
+                  axisLine={false}
+                  domain={['auto', 'auto']}
+                  tickFormatter={(val) => `${val}kg`}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    background: 'hsl(var(--bg-surface))', 
+                    borderColor: 'hsl(var(--border))',
+                    borderRadius: '8px',
+                    color: '#ffffff',
+                    fontFamily: 'inherit',
+                    fontSize: '0.78rem'
+                  }}
+                  formatter={(value, name) => {
+                    if (name === 'weight') {
+                      return [`${value} kg`, t.projectionsSuggestedWeight || 'Peso Proyectado'];
+                    }
+                    if (name === 'volume') {
+                      return [`${value} kg`, t.projectionsProjectedVolume || 'Volumen Proyectado'];
+                    }
+                    return [value, name];
+                  }}
+                  labelFormatter={(label, items) => {
+                    const stepData = items[0]?.payload;
+                    const focusTranslated = stepData ? (
+                      stepData.focus === 'hypertrophy' ? (language === 'es' ? 'Hipertrofia' : 'Hypertrophy') :
+                      stepData.focus === 'strength' ? (language === 'es' ? 'Fuerza Máxima' : 'Max Strength') :
+                      stepData.focus === 'peaking' ? (language === 'es' ? 'Fuerza/Peaking' : 'Strength/Peaking') :
+                      stepData.focus === 'deload' ? (language === 'es' ? 'Descarga' : 'Deload') : stepData.focus
+                    ) : '';
+                    const setsReps = stepData ? `${stepData.sets}x${stepData.reps}` : '';
+                    return `${label} (${focusTranslated}) - ${setsReps}`;
+                  }}
+                />
+                <Line 
+                  yAxisId="left"
+                  type="monotone" 
+                  dataKey="weight" 
+                  stroke="hsl(var(--primary))" 
+                  strokeWidth={3}
+                  activeDot={{ r: 6, stroke: 'hsl(var(--primary))', strokeWidth: 2 }}
+                  dot={{ r: 4, stroke: 'hsl(var(--primary))', strokeWidth: 1 }}
+                />
+                <Line 
+                  yAxisId="right"
+                  type="monotone" 
+                  dataKey="volume" 
+                  stroke="hsl(var(--secondary))" 
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  activeDot={{ r: 5, stroke: 'hsl(var(--secondary))', strokeWidth: 1 }}
+                  dot={{ r: 3, stroke: 'hsl(var(--secondary))', strokeWidth: 1 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {hasData && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '10px', marginTop: '4px' }}>
+            {projectedData.map((proj) => {
+              const focusTranslated = 
+                proj.focusKey === 'hypertrophy' ? (language === 'es' ? 'Hipertrofia' : 'Hypertrophy') :
+                proj.focusKey === 'strength' ? (language === 'es' ? 'Fuerza' : 'Strength') :
+                proj.focusKey === 'peaking' ? (language === 'es' ? 'Peaking' : 'Peaking') :
+                proj.focusKey === 'deload' ? (language === 'es' ? 'Descarga' : 'Deload') : proj.focusKey;
+              
+              let focusColor = 'rgba(0, 242, 254, 0.15)';
+              let textColor = 'hsl(var(--primary))';
+              if (proj.focusKey === 'strength') { focusColor = 'rgba(59, 130, 246, 0.15)'; textColor = '#60a5fa'; }
+              if (proj.focusKey === 'peaking') { focusColor = 'rgba(147, 51, 234, 0.15)'; textColor = '#c084fc'; }
+              if (proj.focusKey === 'deload') { focusColor = 'rgba(239, 68, 68, 0.15)'; textColor = '#f87171'; }
+
+              return (
+                <div 
+                  key={proj.step} 
+                  style={{ 
+                    background: 'rgba(255,255,255,0.01)', 
+                    border: '1px solid hsla(var(--border) / 0.4)', 
+                    borderRadius: '6px', 
+                    padding: '8px', 
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <span style={{ fontSize: '0.65rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
+                    {language === 'es' ? `Sesión ${proj.step}` : `Session ${proj.step}`}
+                  </span>
+                  <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>
+                    {proj.weightKg} kg
+                  </strong>
+                  <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)' }}>
+                    {proj.sets}x{proj.reps} reps
+                  </span>
+                  <span 
+                    style={{ 
+                      fontSize: '0.625rem', 
+                      padding: '2px 4px', 
+                      borderRadius: '4px', 
+                      background: focusColor, 
+                      color: textColor, 
+                      fontWeight: 700,
+                      marginTop: '2px',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    {focusTranslated}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderWidget = (id: WidgetId) => {
     switch (id) {
       case 'stats':
@@ -1651,6 +1937,8 @@ export default function DashboardTab({
         return renderProgressPhotoWidget();
       case 'weekly_sets':
         return renderWeeklySets();
+      case 'projections':
+        return renderProjectionsChart();
       default:
         return null;
     }

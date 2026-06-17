@@ -60,6 +60,8 @@ interface SyncPanelProps {
   setProgressPhotos: (photos: any[]) => void;
   language: 'es' | 'en';
   setLanguage: (lang: 'es' | 'en') => void;
+  progressionSystem: 'double_progression' | 'linear_periodization' | 'dup';
+  setProgressionSystem: (system: 'double_progression' | 'linear_periodization' | 'dup', skipCloudUpload?: boolean) => void;
 }
 
 export default function SyncPanel({
@@ -91,7 +93,9 @@ export default function SyncPanel({
   progressPhotos,
   setProgressPhotos,
   language,
-  setLanguage
+  setLanguage,
+  progressionSystem,
+  setProgressionSystem
 }: SyncPanelProps) {
   const t = TRANSLATIONS[language];
   const [user, setUser] = useState<User | null>(null);
@@ -163,7 +167,8 @@ export default function SyncPanel({
         cardioHistory,
         profilePicture,
         progressPhotos,
-        language
+        language,
+        progressionSystem
       };
 
       // 2. Download from Cloud Firestore
@@ -208,6 +213,9 @@ export default function SyncPanel({
           setLanguage(merged.language);
           localStorage.setItem('plnexc_language', merged.language);
         }
+        if (merged.progressionSystem) {
+          setProgressionSystem(merged.progressionSystem, true);
+        }
         
         // Update local user sessions in localStorage
         localStorage.setItem('milo_user_sessions', JSON.stringify(merged.userSessions));
@@ -223,6 +231,9 @@ export default function SyncPanel({
         localStorage.setItem('plnexc_cardio_history', JSON.stringify(merged.cardioHistory));
         localStorage.setItem('plnexc_profile_picture', merged.profilePicture);
         localStorage.setItem('plnexc_progress_photos', JSON.stringify(merged.progressPhotos));
+        if (merged.progressionSystem) {
+          localStorage.setItem('plnexc_progression_system', merged.progressionSystem);
+        }
         if (merged.activeInjury) {
           localStorage.setItem('milo_active_injury', JSON.stringify(merged.activeInjury));
         } else {
@@ -251,7 +262,8 @@ export default function SyncPanel({
             cardioHistory: merged.cardioHistory,
             profilePicture: merged.profilePicture,
             progressPhotos: merged.progressPhotos,
-            language: merged.language
+            language: merged.language,
+            progressionSystem: merged.progressionSystem
           });
         }
       } else {
@@ -271,7 +283,8 @@ export default function SyncPanel({
           cardioHistory: localData.cardioHistory,
           profilePicture: localData.profilePicture,
           progressPhotos: localData.progressPhotos,
-          language: localData.language
+          language: localData.language,
+          progressionSystem: localData.progressionSystem
         });
       }
 

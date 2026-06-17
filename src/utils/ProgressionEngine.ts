@@ -1,4 +1,5 @@
 import { EXERCISES_DB } from '../data/exercises_db';
+import { getStrengthStandards } from './StrengthStandards';
 
 export interface SetData {
   setIndex: number;
@@ -127,31 +128,33 @@ export function proposeNextSet(
   recoveryScore: number = 10, // 1 to 10 (10 = fully recovered)
   isActivePain: boolean = false,
   daysSinceLastSession?: number,
-  bodyWeight: number = 75
+  bodyWeight: number = 75,
+  progressionSystem: ProgressionSystem = 'double_progression'
 ): ProgressionTarget {
   const defaultRange = getRepRangeForExercise(exerciseName);
   
   const dbEx = EXERCISES_DB.find(db => db.title.toLowerCase() === exerciseName.toLowerCase() || db.id === exerciseName);
   const isBodyweight = dbEx?.equipment === 'Peso Corporal';
+  const bwPercentage = getBodyweightPercentage(exerciseName);
+  const bwWeight = Math.round(bodyWeight * bwPercentage * 2) / 2;
   
   // Filtering only normal and failure sets (actual work sets)
   const workSets = lastSets.filter(s => s.setType === 'normal' || s.setType === 'failure');
   
   if (workSets.length === 0) {
     if (isBodyweight) {
-      const percentage = getBodyweightPercentage(exerciseName);
-      const bwWeight = Math.round(bodyWeight * percentage * 2) / 2;
       return {
         suggestedWeight: bwWeight,
         suggestedReps: defaultRange.min,
-        message: `🏋️ Primer registro de peso corporal: Carga sugerida de ${bwWeight}kg (${Math.round(percentage * 100)}% de tu peso corporal de ${bodyWeight}kg) calculado de forma inteligente para este ejercicio.`,
+        message: `🏋️ Primer registro de peso corporal: Carga sugerida de ${bwWeight}kg (${Math.round(bwPercentage * 100)}% de tu peso corporal de ${bodyWeight}kg) calculado de forma inteligente para este ejercicio.`,
         isDeload: false
       };
     }
     
     // Fallback if no work sets exist (e.g. running or warmup only)
+    const startWeight = lastSets[0]?.weightKg || 10;
     return {
-      suggestedWeight: lastSets[0]?.weightKg || 10,
+      suggestedWeight: startWeight,
       suggestedReps: defaultRange.min,
       message: 'Comienza con tu carga habitual del historial.',
       isDeload: false
@@ -164,7 +167,7 @@ export function proposeNextSet(
   if (reportedPain) {
     // AUTO-REGULATED DELOAD FOR INJURY/PAIN
     // Reduce weight by 20% to train safely
-    const lastWeight = workSets[0].weightKg || (isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : 10);
+    const lastWeight = workSets[0].weightKg || (isBodyweight ? bwWeight : 10);
     const reducedWeight = Math.round((lastWeight * 0.8) / 0.5) * 0.5; // Redondea al 0.5kg más cercano
     return {
       suggestedWeight: Math.max(0.5, reducedWeight),
@@ -179,7 +182,7 @@ export function proposeNextSet(
   // Check fatigue score (wellness check)
   if (recoveryScore <= 4) {
     // AUTO-REGULATED fatigue deload (Reduce intensity by 10% and sets)
-    const lastWeight = workSets[0].weightKg || (isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : 10);
+    const lastWeight = workSets[0].weightKg || (isBodyweight ? bwWeight : 10);
     const reducedWeight = Math.round((lastWeight * 0.9) / 0.5) * 0.5;
     return {
       suggestedWeight: Math.max(0.5, reducedWeight),
@@ -191,7 +194,7 @@ export function proposeNextSet(
 
   // 1. CHECK DETRAINING (Return after a long break)
   if (daysSinceLastSession !== undefined && daysSinceLastSession > 14) {
-    const lastWeight = workSets[0].weightKg || (isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : 10);
+    const lastWeight = workSets[0].weightKg || (isBodyweight ? bwWeight : 10);
     
     if (daysSinceLastSession > 28) {
       // More than 4 weeks: 20% safety deload
@@ -213,12 +216,150 @@ export function proposeNextSet(
     }
   }
 
+  // Calculate 1RM for periodization
+  const est1RM = getEstimated1RM(exerciseName, lastSets, bodyWeight);
+
+  // PERIODIZATION AND UNDULATING SYSTEM CALCULATIONS
+  if (progressionSystem === 'linear_periodization') {
+    // Determine last week based on reps
+    const lastReps = workSets[0].reps || 10;
+    
+    if (isBodyweight) {
+      // Calisthenics: reps scale: min -> min+2 -> max -> min-2 (Deload)
+      if (lastReps <= defaultRange.min + 1 && lastReps >= defaultRange.min) {
+        // Was Week 1. Move to Week 2 (min + 2 reps)
+        const nextReps = Math.min(defaultRange.max, defaultRange.min + 2);
+        return {
+          suggestedWeight: bwWeight,
+          suggestedReps: nextReps,
+          message: `📈 Periodización Lineal (Semana 2): Carga corporal base de ${bwWeight}kg. Incrementamos la intensidad subiendo a ${nextReps} repeticiones.`,
+          isDeload: false
+        };
+      } else if (lastReps <= defaultRange.min + 3 && lastReps > defaultRange.min + 1) {
+        // Was Week 2. Move to Week 3 (max reps)
+        return {
+          suggestedWeight: bwWeight,
+          suggestedReps: defaultRange.max,
+          message: `📈 Periodización Lineal (Semana 3 - Pico): Carga corporal base de ${bwWeight}kg. Busca tu máximo rendimiento con ${defaultRange.max} repeticiones.`,
+          isDeload: false
+        };
+      } else if (lastReps >= defaultRange.max) {
+        // Was Week 3 (Pico). Move to Week 4 (Deload)
+        const deloadReps = Math.max(1, defaultRange.min - 2);
+        return {
+          suggestedWeight: bwWeight,
+          suggestedReps: deloadReps,
+          message: `🔋 Periodización Lineal (Semana 4 - Descarga): Semana de recuperación. Mantén ${bwWeight}kg pero reduce a ${deloadReps} repeticiones para asimilar el esfuerzo.`,
+          isDeload: true
+        };
+      } else {
+        // Deload done, or fallback to Week 1
+        return {
+          suggestedWeight: bwWeight,
+          suggestedReps: defaultRange.min,
+          message: `📈 Periodización Lineal (Semana 1 - Volumen): Reiniciamos ciclo. Carga corporal de ${bwWeight}kg para ${defaultRange.min} repeticiones enfocadas en hipertrofia.`,
+          isDeload: false
+        };
+      }
+    } else {
+      // External loading:
+      // Week 1: 70% 1RM (10 reps)
+      // Week 2: 77.5% 1RM (8 reps)
+      // Week 3: 85% 1RM (6 reps)
+      // Week 4 (Deload): 70% 1RM (6 reps)
+      if (lastReps >= 9) {
+        // Was Week 1. Next is Week 2 (77.5% 1RM, 8 reps)
+        const w = Math.round((est1RM * 0.775) / 0.5) * 0.5;
+        return {
+          suggestedWeight: w,
+          suggestedReps: 8,
+          message: `📈 Periodización Lineal (Semana 2 - Fuerza): Subimos carga a 77.5% de 1RM (${w}kg) para 8 repeticiones.`,
+          isDeload: false
+        };
+      } else if (lastReps >= 7 && lastReps <= 8) {
+        // Was Week 2. Next is Week 3 (85% 1RM, 6 reps)
+        const w = Math.round((est1RM * 0.85) / 0.5) * 0.5;
+        return {
+          suggestedWeight: w,
+          suggestedReps: 6,
+          message: `📈 Periodización Lineal (Semana 3 - Fuerza Máxima): Carga pico a 85% de 1RM (${w}kg) para 6 repeticiones.`,
+          isDeload: false
+        };
+      } else if (lastReps === 6 && workSets.length >= defaultRange.min - 5) {
+        // Was Week 3 (and not a deload). Next is Week 4 (Deload: 70% 1RM, 6 reps)
+        const w = Math.round((est1RM * 0.70) / 0.5) * 0.5;
+        return {
+          suggestedWeight: w,
+          suggestedReps: 6,
+          message: `🔋 Periodización Lineal (Semana 4 - Descarga): Descarga activa. Carga a 70% de 1RM (${w}kg) para 6 repeticiones con volumen reducido.`,
+          isDeload: true
+        };
+      } else {
+        // Was Week 4 (Deload), or fallback. Next is Week 1 (70% 1RM, 10 reps)
+        const w = Math.round((est1RM * 0.70) / 0.5) * 0.5;
+        return {
+          suggestedWeight: w,
+          suggestedReps: 10,
+          message: `📈 Periodización Lineal (Semana 1 - Hipertrofia): Nueva fase de volumen. Carga a 70% de 1RM (${w}kg) para 10 repeticiones.`,
+          isDeload: false
+        };
+      }
+    }
+  } else if (progressionSystem === 'dup') {
+    // DUP alternating daily:
+    // Session A (Hypertrophy): 70% 1RM (10 reps)
+    // Session B (Strength): 82.5% 1RM (5 reps)
+    const lastReps = workSets[0].reps || 10;
+    
+    if (isBodyweight) {
+      if (lastReps >= defaultRange.min) {
+        // Was Hypertrophy session. Next is Strength session
+        const nextReps = Math.max(1, Math.round(defaultRange.min / 2));
+        return {
+          suggestedWeight: bwWeight,
+          suggestedReps: nextReps,
+          message: `🔄 DUP - Sesión de Fuerza: Carga de ${bwWeight}kg. Intenta realizar ${nextReps} repeticiones con máxima velocidad de empuje y control.`,
+          isDeload: false
+        };
+      } else {
+        // Was Strength session. Next is Hypertrophy session
+        return {
+          suggestedWeight: bwWeight,
+          suggestedReps: defaultRange.min,
+          message: `🔄 DUP - Sesión de Hipertrofia: Carga de ${bwWeight}kg para ${defaultRange.min} repeticiones buscando acumulación de volumen.`,
+          isDeload: false
+        };
+      }
+    } else {
+      if (lastReps >= 8) {
+        // Was Hypertrophy. Next is Strength (82.5% 1RM for 5 reps)
+        const w = Math.round((est1RM * 0.825) / 0.5) * 0.5;
+        return {
+          suggestedWeight: w,
+          suggestedReps: 5,
+          message: `🔄 DUP - Sesión de Fuerza: Carga de 82.5% de 1RM (${w}kg) para 5 repeticiones de alta tensión mecánica.`,
+          isDeload: false
+        };
+      } else {
+        // Was Strength. Next is Hypertrophy (70% 1RM for 10 reps)
+        const w = Math.round((est1RM * 0.70) / 0.5) * 0.5;
+        return {
+          suggestedWeight: w,
+          suggestedReps: 10,
+          message: `🔄 DUP - Sesión de Hipertrofia: Carga de 70% de 1RM (${w}kg) para 10 repeticiones de volumen acumulativo.`,
+          isDeload: false
+        };
+      }
+    }
+  }
+
+  // DEFAULT DOUBLE PROGRESSION
   // Get max reps accomplished with the heaviest weight in work sets
   const maxWeight = Math.max(...workSets.map(s => s.weightKg || 0));
   const heavySets = workSets.filter(s => s.weightKg === maxWeight);
   
   if (heavySets.length === 0) {
-    const defaultWeight = isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : maxWeight;
+    const defaultWeight = isBodyweight ? bwWeight : maxWeight;
     return {
       suggestedWeight: defaultWeight,
       suggestedReps: defaultRange.min,
@@ -227,18 +368,14 @@ export function proposeNextSet(
     };
   }
 
-  // Double Progression logic
-  // Did they hit the top of the rep range in ALL heavy sets?
   const hitTopRangeAllSets = heavySets.every(s => (s.reps || 0) >= defaultRange.max);
   
   if (hitTopRangeAllSets) {
     if (isBodyweight) {
-      const percentage = getBodyweightPercentage(exerciseName);
-      const bwWeight = Math.round(bodyWeight * percentage * 2) / 2;
       return {
         suggestedWeight: bwWeight,
         suggestedReps: defaultRange.max,
-        message: `🎉 ¡Objetivo completado con peso corporal! Has dominado el ejercicio con ${bwWeight}kg (${Math.round(percentage * 100)}% de tu peso de ${bodyWeight}kg). Mantén esta carga base y concéntrate en mejorar la velocidad controlada o avanzar a una variante más difícil.`,
+        message: `🎉 ¡Objetivo completado con peso corporal! Has dominado el ejercicio con ${bwWeight}kg (${Math.round(bwPercentage * 100)}% de tu peso de ${bodyWeight}kg). Mantén esta carga base y concéntrate en mejorar la velocidad controlada o avanzar a una variante más difícil.`,
         isDeload: false
       };
     }
@@ -259,19 +396,15 @@ export function proposeNextSet(
     };
   } else {
     // Propose reps progress!
-    // Find what was the minimum reps done in work sets
     const minRepsDone = Math.min(...workSets.map(s => s.reps || 0));
-    
-    // Propose increasing reps on the lowest sets
     const targetReps = Math.min(defaultRange.max, minRepsDone + 1);
-    
-    const suggestedWeightVal = isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exerciseName) * 2) / 2 : maxWeight;
+    const suggestedWeightVal = isBodyweight ? bwWeight : maxWeight;
     
     return {
       suggestedWeight: suggestedWeightVal,
       suggestedReps: targetReps,
       message: isBodyweight
-        ? `💪 Progreso con peso corporal: Carga base inteligente de ${suggestedWeightVal}kg (${Math.round(getBodyweightPercentage(exerciseName) * 100)}% de tu peso). Intenta alcanzar al menos ${targetReps} repeticiones en todas tus series.`
+        ? `💪 Progreso con peso corporal: Carga base inteligente de ${suggestedWeightVal}kg (${Math.round(bwPercentage * 100)}% de tu peso). Intenta alcanzar al menos ${targetReps} repeticiones en todas tus series.`
         : `💪 Sigue empujando con ${maxWeight}kg. Intenta alcanzar al menos ${targetReps} repeticiones en todas tus series antes de subir peso.`,
       isDeload: false
     };
@@ -591,6 +724,205 @@ export function calculateAchievements(
   cardio.progressText = `${maxCardioMin}/45 min`;
 
   return achievements;
+}
+
+export type ProgressionSystem = 'double_progression' | 'linear_periodization' | 'dup';
+
+export function getEstimated1RM(
+  exerciseName: string,
+  lastSets: SetData[],
+  bodyWeight: number = 75
+): number {
+  // Try to find the max estimated 1RM from the workSets first
+  const workSets = lastSets.filter(s => s.setType === 'normal' || s.setType === 'failure');
+  if (workSets.length > 0) {
+    let maxEst = 0;
+    workSets.forEach(s => {
+      const w = s.weightKg || 0;
+      const r = s.reps || 0;
+      if (w > 0 && r > 0) {
+        const est = calculateEpley1RM(w, r);
+        if (est > maxEst) maxEst = est;
+      }
+    });
+    if (maxEst > 0) return maxEst;
+  }
+
+  // Fallback if no sets recorded
+  const dbEx = EXERCISES_DB.find(db => db.title.toLowerCase() === exerciseName.toLowerCase() || db.id === exerciseName);
+  const isBodyweight = dbEx?.equipment === 'Peso Corporal';
+  if (isBodyweight) {
+    const percentage = getBodyweightPercentage(exerciseName);
+    const baseWeight = bodyWeight * percentage;
+    // Assume 10 reps of base weight
+    return calculateEpley1RM(baseWeight, 10);
+  }
+
+  // Barbell/Dumbbell default starting weight fallback
+  const defaultWeight = exerciseName.toLowerCase().includes('barbell') || exerciseName.toLowerCase().includes('squat') || exerciseName.toLowerCase().includes('deadlift') ? 40 : 15;
+  return calculateEpley1RM(defaultWeight, 10);
+}
+
+export function getAthleteLevel(
+  pbProfiles: { [exercise: string]: ExercisePBProfile },
+  bodyWeight: number,
+  gender: 'Masculino' | 'Femenino' = 'Masculino',
+  heightCm: number = 175,
+  bodyFat: number = 15
+): 'beginner' | 'intermediate' | 'advanced' {
+  const coreLifts = [
+    'Squat (Barbell)',
+    'Deadlift (Barbell)',
+    'Bench Press (Barbell)',
+    'Overhead Press (Barbell)'
+  ];
+
+  let maxLevel: 'beginner' | 'intermediate' | 'advanced' = 'beginner';
+
+  for (const lift of coreLifts) {
+    const pb = pbProfiles[lift];
+    if (!pb || !pb.maxWeight || pb.maxWeight.weight === 0) continue;
+
+    const standards = getStrengthStandards(lift, bodyWeight, gender, heightCm, bodyFat);
+    if (!standards) continue;
+
+    const intermediateVal = parseFloat(standards.intermediate);
+    const advancedVal = parseFloat(standards.advanced);
+
+    const userVal = pb.maxEst1RM?.value || pb.maxWeight.weight; // Using 1RM or weight
+
+    if (userVal >= advancedVal) {
+      return 'advanced';
+    } else if (userVal >= intermediateVal) {
+      maxLevel = 'intermediate';
+    }
+  }
+
+  return maxLevel;
+}
+
+export interface ProjectedSession {
+  step: number;
+  weightKg: number;
+  reps: number;
+  sets: number;
+  volume: number;
+  focusKey: string;
+  isCurrent: boolean;
+}
+
+export function projectFutureSessions(
+  exerciseName: string,
+  lastSets: SetData[],
+  progressionSystem: ProgressionSystem = 'double_progression',
+  bodyWeight: number = 75
+): ProjectedSession[] {
+  const dbEx = EXERCISES_DB.find(db => db.title.toLowerCase() === exerciseName.toLowerCase() || db.id === exerciseName);
+  const isBodyweight = dbEx?.equipment === 'Peso Corporal';
+  const repRange = getRepRangeForExercise(exerciseName);
+  const est1RM = getEstimated1RM(exerciseName, lastSets, bodyWeight);
+  const bwPercentage = getBodyweightPercentage(exerciseName);
+  const bwWeight = Math.round(bodyWeight * bwPercentage * 2) / 2;
+
+  // Let's get baseline weights/reps
+  const workSets = lastSets.filter(s => s.setType === 'normal' || s.setType === 'failure');
+  const baseWeight = workSets.length > 0 ? (workSets[0].weightKg || (isBodyweight ? bwWeight : 10)) : (isBodyweight ? bwWeight : 10);
+  const baseReps = workSets.length > 0 ? (workSets[0].reps || repRange.min) : repRange.min;
+  const baseSetsCount = workSets.length > 0 ? workSets.length : 3;
+
+  const projections: ProjectedSession[] = [];
+
+  if (progressionSystem === 'double_progression') {
+    let currWeight = baseWeight;
+    let currReps = baseReps;
+
+    for (let step = 1; step <= 4; step++) {
+      if (step > 1) {
+        if (currReps >= repRange.max) {
+          if (isBodyweight) {
+            currReps = repRange.max;
+          } else {
+            let increment = 2.5;
+            if (exerciseName.toLowerCase().includes('dumbbell') || exerciseName.toLowerCase().includes('raise') || exerciseName.toLowerCase().includes('curl')) {
+              increment = 1.0;
+            }
+            currWeight = Math.round((currWeight + increment) / 0.5) * 0.5;
+            currReps = repRange.min;
+          }
+        } else {
+          currReps = Math.min(repRange.max, currReps + 1);
+        }
+      }
+
+      projections.push({
+        step,
+        weightKg: currWeight,
+        reps: currReps,
+        sets: baseSetsCount,
+        volume: currWeight * currReps * baseSetsCount,
+        focusKey: 'focusHypertrophy',
+        isCurrent: step === 1
+      });
+    }
+  } else if (progressionSystem === 'linear_periodization') {
+    const percentages = [0.70, 0.775, 0.85, 0.70];
+    const repsList = [10, 8, 6, 6];
+    const focuses = ['focusHypertrophy', 'focusStrength', 'focusPeaking', 'focusDeload'];
+
+    const caliRepsList = [
+      repRange.min,
+      Math.min(repRange.max, repRange.min + 2),
+      repRange.max,
+      Math.max(1, repRange.min - 2)
+    ];
+
+    for (let step = 1; step <= 4; step++) {
+      const idx = step - 1;
+      let w = isBodyweight ? bwWeight : Math.round((est1RM * percentages[idx]) / 0.5) * 0.5;
+      let r = isBodyweight ? caliRepsList[idx] : repsList[idx];
+      let s = idx === 3 ? Math.max(1, baseSetsCount - 1) : baseSetsCount;
+
+      projections.push({
+        step,
+        weightKg: w,
+        reps: r,
+        sets: s,
+        volume: w * r * s,
+        focusKey: focuses[idx],
+        isCurrent: step === 1
+      });
+    }
+  } else if (progressionSystem === 'dup') {
+    const percentages = [0.70, 0.825, 0.725, 0.85];
+    const repsList = [10, 5, 10, 5];
+    const focuses = ['focusHypertrophy', 'focusStrength', 'focusHypertrophy', 'focusStrength'];
+
+    const caliRepsList = [
+      repRange.min,
+      Math.max(1, Math.round(repRange.min / 2)),
+      repRange.min + 1,
+      Math.max(1, Math.round((repRange.min + 1) / 2))
+    ];
+
+    for (let step = 1; step <= 4; step++) {
+      const idx = step - 1;
+      let w = isBodyweight ? bwWeight : Math.round((est1RM * percentages[idx]) / 0.5) * 0.5;
+      let r = isBodyweight ? caliRepsList[idx] : repsList[idx];
+      let s = baseSetsCount;
+
+      projections.push({
+        step,
+        weightKg: w,
+        reps: r,
+        sets: s,
+        volume: w * r * s,
+        focusKey: focuses[idx],
+        isCurrent: step === 1
+      });
+    }
+  }
+
+  return projections;
 }
 
 

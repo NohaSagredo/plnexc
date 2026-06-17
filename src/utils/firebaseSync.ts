@@ -22,6 +22,7 @@ export interface SyncedData {
   profilePicture?: string;
   progressPhotos?: { id: string; date: string; weight?: number; photoUrl: string; note?: string }[];
   language?: 'es' | 'en';
+  progressionSystem?: 'double_progression' | 'linear_periodization' | 'dup';
   updatedAt: string;
 }
 
@@ -84,6 +85,7 @@ export function mergeLocalAndCloudData(local: {
   profilePicture: string;
   progressPhotos: any[];
   language: 'es' | 'en';
+  progressionSystem: 'double_progression' | 'linear_periodization' | 'dup';
 }, cloud: SyncedData): {
   merged: {
     customRoutines: any[];
@@ -101,6 +103,7 @@ export function mergeLocalAndCloudData(local: {
     profilePicture: string;
     progressPhotos: any[];
     language: 'es' | 'en';
+    progressionSystem: 'double_progression' | 'linear_periodization' | 'dup';
   };
   hasChanges: boolean;
 } {
@@ -311,6 +314,15 @@ export function mergeLocalAndCloudData(local: {
     hasChanges = true;
   }
 
+  // 16. Merge Progression System
+  let mergedProgression = local.progressionSystem;
+  if (cloud.progressionSystem !== undefined && cloud.progressionSystem !== local.progressionSystem) {
+    mergedProgression = cloud.progressionSystem;
+    hasChanges = true;
+  } else if (cloud.progressionSystem === undefined) {
+    hasChanges = true;
+  }
+
   return {
     merged: {
       customRoutines: mergedRoutines,
@@ -327,7 +339,8 @@ export function mergeLocalAndCloudData(local: {
       cardioHistory: mergedCardioHistory,
       profilePicture: mergedProfilePic,
       progressPhotos: mergedProgressPhotos,
-      language: mergedLanguage
+      language: mergedLanguage,
+      progressionSystem: mergedProgression
     },
     hasChanges
   };
