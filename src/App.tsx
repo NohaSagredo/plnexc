@@ -630,7 +630,7 @@ export default function App() {
       <main style={{ minHeight: 'calc(100vh - 180px)', position: 'relative' }}>
         <div 
           className="tab-transition" 
-          style={activeTab === 'dashboard' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+          style={activeTab === 'dashboard' ? { width: '100%' } : { display: 'none' }}
         >
           <DashboardTab 
             localHistory={localHistory}
@@ -649,7 +649,7 @@ export default function App() {
         
         <div 
           className="tab-transition" 
-          style={activeTab === 'workout' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+          style={activeTab === 'workout' ? { width: '100%' } : { display: 'none' }}
         >
           <WorkoutTab 
             activeInjury={activeInjury} 
@@ -672,7 +672,7 @@ export default function App() {
         
         <div 
           className="tab-transition" 
-          style={activeTab === 'rehab' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+          style={activeTab === 'rehab' ? { width: '100%' } : { display: 'none' }}
         >
           <RehabTab 
             activeInjury={activeInjury} 
@@ -683,7 +683,7 @@ export default function App() {
 
         <div 
           className="tab-transition" 
-          style={activeTab === 'profile' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+          style={activeTab === 'profile' ? { width: '100%' } : { display: 'none' }}
         >
           <ProfileTab 
             bodyWeight={bodyWeight}
@@ -713,7 +713,7 @@ export default function App() {
 
         <div 
           className="tab-transition" 
-          style={activeTab === 'cardio' ? { width: '100%' } : { position: 'absolute', left: '-9999px', width: '100%', visibility: 'hidden', pointerEvents: 'none' }}
+          style={activeTab === 'cardio' ? { width: '100%' } : { display: 'none' }}
         >
           <CardioTab 
             cardioGoalType={cardioGoalType}
