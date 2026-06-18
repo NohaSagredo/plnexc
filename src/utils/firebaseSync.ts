@@ -1,9 +1,53 @@
 import { db } from './firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  collection, 
+  getDocs, 
+  updateDoc, 
+  deleteDoc, 
+  arrayUnion, 
+  arrayRemove, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  addDoc, 
+  increment 
+} from 'firebase/firestore';
 
 export interface WeightRecord {
   date: string;
   weight: number;
+}
+
+export interface FeedPost {
+  id?: string;
+  userId: string;
+  username: string;
+  userDisplayName: string;
+  userProfilePicture?: string;
+  routineTitle: string;
+  durationMinutes: number;
+  totalVolumeKg: number;
+  recordsBroken: string[];
+  comment: string;
+  photoUrl?: string;
+  workoutData: any;
+  likes: string[];
+  commentsCount: number;
+  createdAt: string;
+}
+
+export interface PostComment {
+  id?: string;
+  userId: string;
+  username: string;
+  userDisplayName: string;
+  userProfilePicture?: string;
+  text: string;
+  createdAt: string;
 }
 
 export interface SyncedData {
@@ -23,6 +67,11 @@ export interface SyncedData {
   progressPhotos?: { id: string; date: string; weight?: number; photoUrl: string; note?: string }[];
   language?: 'es' | 'en';
   progressionSystem?: 'double_progression' | 'linear_periodization' | 'dup';
+  username?: string;
+  displayName?: string;
+  bio?: string;
+  followers?: string[];
+  following?: string[];
   updatedAt: string;
 }
 
@@ -86,6 +135,11 @@ export function mergeLocalAndCloudData(local: {
   progressPhotos: any[];
   language: 'es' | 'en';
   progressionSystem: 'double_progression' | 'linear_periodization' | 'dup';
+  username?: string;
+  displayName?: string;
+  bio?: string;
+  followers?: string[];
+  following?: string[];
 }, cloud: SyncedData): {
   merged: {
     customRoutines: any[];
@@ -104,6 +158,11 @@ export function mergeLocalAndCloudData(local: {
     progressPhotos: any[];
     language: 'es' | 'en';
     progressionSystem: 'double_progression' | 'linear_periodization' | 'dup';
+    username: string;
+    displayName: string;
+    bio: string;
+    followers: string[];
+    following: string[];
   };
   hasChanges: boolean;
 } {
@@ -323,6 +382,39 @@ export function mergeLocalAndCloudData(local: {
     hasChanges = true;
   }
 
+  // 17. Merge Username
+  let mergedUsername = local.username || '';
+  if (cloud.username !== undefined && cloud.username !== local.username) {
+    mergedUsername = cloud.username;
+    hasChanges = true;
+  }
+
+  // 18. Merge Display Name
+  let mergedDisplayName = local.displayName || '';
+  if (cloud.displayName !== undefined && cloud.displayName !== local.displayName) {
+    mergedDisplayName = cloud.displayName;
+    hasChanges = true;
+  }
+
+  // 19. Merge Bio
+  let mergedBio = local.bio || '';
+  if (cloud.bio !== undefined && cloud.bio !== local.bio) {
+    mergedBio = cloud.bio;
+    hasChanges = true;
+  }
+
+  // 20. Merge Followers
+  const mergedFollowers = Array.from(new Set([...(local.followers || []), ...(cloud.followers || [])]));
+  if (mergedFollowers.length !== (local.followers || []).length || mergedFollowers.length !== (cloud.followers || []).length) {
+    hasChanges = true;
+  }
+
+  // 21. Merge Following
+  const mergedFollowing = Array.from(new Set([...(local.following || []), ...(cloud.following || [])]));
+  if (mergedFollowing.length !== (local.following || []).length || mergedFollowing.length !== (cloud.following || []).length) {
+    hasChanges = true;
+  }
+
   return {
     merged: {
       customRoutines: mergedRoutines,
@@ -340,8 +432,272 @@ export function mergeLocalAndCloudData(local: {
       profilePicture: mergedProfilePic,
       progressPhotos: mergedProgressPhotos,
       language: mergedLanguage,
-      progressionSystem: mergedProgression
+      progressionSystem: mergedProgression,
+      username: mergedUsername,
+      displayName: mergedDisplayName,
+      bio: mergedBio,
+      followers: mergedFollowers,
+      following: mergedFollowing
     },
     hasChanges
   };
+}
+
+/**
+ * Checks if username is already taken. Returns true if available.
+ */
+export async function isUsernameAvailable(username: string, currentUserId: string): Promise<boolean> {
+  const cleaned = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!cleaned || cleaned.length < 3) return false;
+  
+  const usernameRef = doc(db, 'usernames', cleaned);
+  const usernameSnap = await getDoc(usernameRef);
+  
+  if (!usernameSnap.exists()) {
+    return true;
+  }
+  
+  const data = usernameSnap.data();
+  return data.userId === currentUserId;
+}
+
+/**
+ * Verifies if user has a username, autogenerating one from email prefix if missing
+ */
+export async function checkAndGenerateUsername(userId: string, email: string): Promise<string> {
+  const userDocRef = doc(db, 'users', userId);
+  const userSnap = await getDoc(userDocRef);
+  if (userSnap.exists()) {
+    const data = userSnap.data();
+    if (data.username) {
+      return data.username;
+    }
+  }
+
+  let baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (!baseUsername) {
+    baseUsername = 'atleta';
+  }
+  
+  let username = baseUsername;
+  let isAvailable = false;
+  let attempts = 0;
+  
+  while (!isAvailable && attempts < 15) {
+    if (attempts > 0) {
+      username = `${baseUsername}${Math.floor(100 + Math.random() * 900)}`;
+    }
+    const usernameRef = doc(db, 'usernames', username);
+    const usernameSnap = await getDoc(usernameRef);
+    if (!usernameSnap.exists()) {
+      isAvailable = true;
+    }
+    attempts++;
+  }
+  
+  // Reserve the username
+  const usernameRef = doc(db, 'usernames', username);
+  await setDoc(usernameRef, { userId });
+  
+  // Save to user profile
+  await setDoc(userDocRef, { username, displayName: username }, { merge: true });
+  return username;
+}
+
+/**
+ * Updates user profile details, ensuring username uniqueness if changed
+ */
+export async function updateUserProfile(
+  userId: string,
+  data: { username?: string; displayName?: string; bio?: string; profilePicture?: string }
+): Promise<void> {
+  const userDocRef = doc(db, 'users', userId);
+  const userSnap = await getDoc(userDocRef);
+  const currentProfile = userSnap.exists() ? userSnap.data() : {};
+  const oldUsername = currentProfile.username;
+  
+  const updatePayload: any = { ...data };
+
+  if (data.username && data.username !== oldUsername) {
+    const cleanedNew = data.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const available = await isUsernameAvailable(cleanedNew, userId);
+    if (!available) {
+      throw new Error('El nombre de usuario no está disponible');
+    }
+    
+    // Register new username mapping
+    await setDoc(doc(db, 'usernames', cleanedNew), { userId });
+    
+    // Delete old username mapping
+    if (oldUsername) {
+      await deleteDoc(doc(db, 'usernames', oldUsername.toLowerCase()));
+    }
+    
+    updatePayload.username = cleanedNew;
+  }
+  
+  await setDoc(userDocRef, updatePayload, { merge: true });
+}
+
+/**
+ * Follow/unfollow another user
+ */
+export async function toggleFollowUser(
+  currentUserId: string,
+  targetUserId: string,
+  isFollowing: boolean
+): Promise<void> {
+  const currentUserRef = doc(db, 'users', currentUserId);
+  const targetUserRef = doc(db, 'users', targetUserId);
+  
+  if (isFollowing) {
+    await updateDoc(currentUserRef, {
+      following: arrayRemove(targetUserId)
+    });
+    await updateDoc(targetUserRef, {
+      followers: arrayRemove(currentUserId)
+    });
+  } else {
+    await updateDoc(currentUserRef, {
+      following: arrayUnion(targetUserId)
+    });
+    await updateDoc(targetUserRef, {
+      followers: arrayUnion(currentUserId)
+    });
+  }
+}
+
+/**
+ * Publishes a completed workout to the public community feed
+ */
+export async function publishWorkoutToFeed(
+  postPayload: Omit<FeedPost, 'id' | 'likes' | 'commentsCount' | 'createdAt'>
+): Promise<string> {
+  const feedCollection = collection(db, 'public_workouts');
+  const docRef = await addDoc(feedCollection, {
+    ...postPayload,
+    likes: [],
+    commentsCount: 0,
+    createdAt: new Date().toISOString()
+  });
+  return docRef.id;
+}
+
+/**
+ * Toggles a like on a post, returning true if liked, false if unliked
+ */
+export async function toggleLikePost(postId: string, userId: string): Promise<boolean> {
+  const postRef = doc(db, 'public_workouts', postId);
+  const postSnap = await getDoc(postRef);
+  if (!postSnap.exists()) return false;
+  
+  const data = postSnap.data();
+  const likes: string[] = data.likes || [];
+  const hasLiked = likes.includes(userId);
+  
+  if (hasLiked) {
+    await updateDoc(postRef, {
+      likes: arrayRemove(userId)
+    });
+    return false;
+  } else {
+    await updateDoc(postRef, {
+      likes: arrayUnion(userId)
+    });
+    return true;
+  }
+}
+
+/**
+ * Adds a comment to a public workout post
+ */
+export async function addCommentToPost(
+  postId: string,
+  commentPayload: Omit<PostComment, 'id' | 'createdAt'>
+): Promise<void> {
+  const commentsCollection = collection(db, 'public_workouts', postId, 'comments');
+  await addDoc(commentsCollection, {
+    ...commentPayload,
+    createdAt: new Date().toISOString()
+  });
+  
+  const postRef = doc(db, 'public_workouts', postId);
+  await updateDoc(postRef, {
+    commentsCount: increment(1)
+  });
+}
+
+/**
+ * Fetches comments for a public workout post
+ */
+export async function getPostComments(postId: string): Promise<PostComment[]> {
+  const commentsRef = collection(db, 'public_workouts', postId, 'comments');
+  const q = query(commentsRef, orderBy('createdAt', 'asc'));
+  const querySnapshot = await getDocs(q);
+  const comments: PostComment[] = [];
+  querySnapshot.forEach((docSnap) => {
+    comments.push({
+      id: docSnap.id,
+      ...docSnap.data()
+    } as PostComment);
+  });
+  return comments;
+}
+
+/**
+ * Retrieves public workouts feed: either global "Discover" or "Following"
+ */
+export async function getPublicWorkoutsFeed(followingUserIds?: string[]): Promise<FeedPost[]> {
+  const postsCollection = collection(db, 'public_workouts');
+  let q;
+  
+  if (followingUserIds && followingUserIds.length > 0) {
+    const limitedFollows = followingUserIds.slice(0, 30);
+    q = query(
+      postsCollection,
+      where('userId', 'in', limitedFollows),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+  } else if (followingUserIds) {
+    return [];
+  } else {
+    q = query(
+      postsCollection,
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+  }
+  
+  const querySnapshot = await getDocs(q);
+  const posts: FeedPost[] = [];
+  querySnapshot.forEach((docSnap) => {
+    posts.push({
+      id: docSnap.id,
+      ...docSnap.data()
+    } as FeedPost);
+  });
+  return posts;
+}
+
+/**
+ * Retrieves an athlete's public profile and public stats
+ */
+export async function getAthleteProfile(userId: string): Promise<any | null> {
+  const userDocRef = doc(db, 'users', userId);
+  const docSnap = await getDoc(userDocRef);
+  if (docSnap.exists()) {
+    const data = docSnap.data();
+    return {
+      userId,
+      username: data.username || '',
+      displayName: data.displayName || '',
+      profilePicture: data.profilePicture || '',
+      bio: data.bio || '',
+      followers: data.followers || [],
+      following: data.following || [],
+      userSessions: data.userSessions || []
+    };
+  }
+  return null;
 }

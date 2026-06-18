@@ -34,7 +34,11 @@ import {
   User,
   Plus,
   Trash2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ChevronUp,
+  ChevronDown,
+  ShieldAlert,
+  Zap
 } from 'lucide-react';
 
 interface SetRecord {
@@ -87,6 +91,7 @@ interface DashboardTabProps {
   bodyWeight?: number;
   language: 'es' | 'en';
   progressionSystem?: ProgressionSystem;
+  onTabChange: (newTab: 'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile') => void;
 }
 
 export default function DashboardTab({ 
@@ -100,7 +105,8 @@ export default function DashboardTab({
   onDeleteProgressPhoto,
   bodyWeight = 75,
   language,
-  progressionSystem = 'double_progression'
+  progressionSystem = 'double_progression',
+  onTabChange
 }: DashboardTabProps) {
   const t = TRANSLATIONS[language];
   const sessions = localHistory as WorkoutSession[];
@@ -143,6 +149,8 @@ export default function DashboardTab({
   const [photoWeight, setPhotoWeight] = useState<string>(bodyWeight.toString());
   const [showAddPhoto, setShowAddPhoto] = useState<boolean>(false);
   const [activeLightboxPhoto, setActiveLightboxPhoto] = useState<any | null>(null);
+  const [activeModal, setActiveModal] = useState<'1rm' | 'injury' | 'overload' | null>(null);
+
 
   // Sync photo weight when bodyWeight updates
   useEffect(() => {
@@ -1160,7 +1168,7 @@ export default function DashboardTab({
                         border: '1px solid hsl(var(--border))',
                         cursor: 'pointer'
                       }}
-                      className="hover-card-highlight"
+                      className="hover-card-highlight shimmer-card"
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '70%' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1200,7 +1208,7 @@ export default function DashboardTab({
                         border: '1px solid hsl(var(--border))',
                         cursor: 'pointer'
                       }}
-                      className="hover-card-highlight"
+                      className="hover-card-highlight shimmer-card"
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '70%' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1240,7 +1248,7 @@ export default function DashboardTab({
                         border: '1px solid hsl(var(--border))',
                         cursor: 'pointer'
                       }}
-                      className="hover-card-highlight"
+                      className="hover-card-highlight shimmer-card"
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxWidth: '65%' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1825,10 +1833,11 @@ export default function DashboardTab({
                   labelFormatter={(label, items) => {
                     const stepData = items[0]?.payload;
                     const focusTranslated = stepData ? (
-                      stepData.focus === 'hypertrophy' ? (language === 'es' ? 'Hipertrofia' : 'Hypertrophy') :
-                      stepData.focus === 'strength' ? (language === 'es' ? 'Fuerza Máxima' : 'Max Strength') :
-                      stepData.focus === 'peaking' ? (language === 'es' ? 'Fuerza/Peaking' : 'Strength/Peaking') :
-                      stepData.focus === 'deload' ? (language === 'es' ? 'Descarga' : 'Deload') : stepData.focus
+                      stepData.focus === 'focusHypertrophy' ? t.focusHypertrophy :
+                      stepData.focus === 'focusStrength' ? t.focusStrength :
+                      stepData.focus === 'focusPeaking' ? t.focusPeaking :
+                      stepData.focus === 'focusDeload' ? t.focusDeload :
+                      stepData.focus === 'focusPower' ? t.focusPower : stepData.focus
                     ) : '';
                     const setsReps = stepData ? `${stepData.sets}x${stepData.reps}` : '';
                     return `${label} (${focusTranslated}) - ${setsReps}`;
@@ -1862,16 +1871,17 @@ export default function DashboardTab({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '10px', marginTop: '4px' }}>
             {projectedData.map((proj) => {
               const focusTranslated = 
-                proj.focusKey === 'hypertrophy' ? (language === 'es' ? 'Hipertrofia' : 'Hypertrophy') :
-                proj.focusKey === 'strength' ? (language === 'es' ? 'Fuerza' : 'Strength') :
-                proj.focusKey === 'peaking' ? (language === 'es' ? 'Peaking' : 'Peaking') :
-                proj.focusKey === 'deload' ? (language === 'es' ? 'Descarga' : 'Deload') : proj.focusKey;
+                proj.focusKey === 'focusHypertrophy' ? t.focusHypertrophy :
+                proj.focusKey === 'focusStrength' ? t.focusStrength :
+                proj.focusKey === 'focusPeaking' ? t.focusPeaking :
+                proj.focusKey === 'focusDeload' ? t.focusDeload :
+                proj.focusKey === 'focusPower' ? t.focusPower : proj.focusKey;
               
               let focusColor = 'rgba(0, 242, 254, 0.15)';
               let textColor = 'hsl(var(--primary))';
-              if (proj.focusKey === 'strength') { focusColor = 'rgba(59, 130, 246, 0.15)'; textColor = '#60a5fa'; }
-              if (proj.focusKey === 'peaking') { focusColor = 'rgba(147, 51, 234, 0.15)'; textColor = '#c084fc'; }
-              if (proj.focusKey === 'deload') { focusColor = 'rgba(239, 68, 68, 0.15)'; textColor = '#f87171'; }
+              if (proj.focusKey === 'focusStrength') { focusColor = 'rgba(59, 130, 246, 0.15)'; textColor = '#60a5fa'; }
+              else if (proj.focusKey === 'focusPeaking') { focusColor = 'rgba(147, 51, 234, 0.15)'; textColor = '#c084fc'; }
+              else if (proj.focusKey === 'focusDeload') { focusColor = 'rgba(239, 68, 68, 0.15)'; textColor = '#f87171'; }
 
               return (
                 <div 
@@ -1898,14 +1908,18 @@ export default function DashboardTab({
                   </span>
                   <span 
                     style={{ 
-                      fontSize: '0.625rem', 
-                      padding: '2px 4px', 
+                      fontSize: '0.6rem', 
+                      padding: '3px 4px', 
                       borderRadius: '4px', 
                       background: focusColor, 
                       color: textColor, 
                       fontWeight: 700,
-                      marginTop: '2px',
-                      textTransform: 'uppercase'
+                      marginTop: 'auto',
+                      textTransform: 'uppercase',
+                      display: 'block',
+                      textAlign: 'center',
+                      lineHeight: '1.2',
+                      wordBreak: 'break-word'
                     }}
                   >
                     {focusTranslated}
@@ -1979,37 +1993,43 @@ export default function DashboardTab({
             <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: 'flex', alignItems: 'center', padding: '0 4px', fontWeight: 'bold' }}>
               {language === 'es' ? 'Posición' : 'Position'}
             </span>
-            <button 
+             <button 
               onClick={() => handleMoveWidget(index, 'up')}
               disabled={isFirst}
               style={{ 
-                background: 'rgba(255,255,255,0.03)', 
+                background: 'rgba(255,255,255,0.05)', 
                 border: 'none', 
-                color: isFirst ? 'rgba(255,255,255,0.1)' : '#ffffff', 
+                color: isFirst ? 'rgba(255,255,255,0.15)' : 'hsl(var(--primary))', 
                 cursor: isFirst ? 'not-allowed' : 'pointer',
-                borderRadius: '4px',
-                padding: '2px 6px',
-                fontSize: '0.8rem'
+                borderRadius: '6px',
+                padding: '4px 6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease'
               }}
               title={language === 'es' ? 'Mover Arriba' : 'Move Up'}
             >
-              🔼
+              <ChevronUp size={14} />
             </button>
             <button 
               onClick={() => handleMoveWidget(index, 'down')}
               disabled={isLast}
               style={{ 
-                background: 'rgba(255,255,255,0.03)', 
+                background: 'rgba(255,255,255,0.05)', 
                 border: 'none', 
-                color: isLast ? 'rgba(255,255,255,0.1)' : '#ffffff', 
+                color: isLast ? 'rgba(255,255,255,0.15)' : 'hsl(var(--primary))', 
                 cursor: isLast ? 'not-allowed' : 'pointer',
-                borderRadius: '4px',
-                padding: '2px 6px',
-                fontSize: '0.8rem'
+                borderRadius: '6px',
+                padding: '4px 6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease'
               }}
               title={language === 'es' ? 'Mover Abajo' : 'Move Down'}
             >
-              🔽
+              <ChevronDown size={14} />
             </button>
           </div>
         )}
@@ -2326,28 +2346,88 @@ export default function DashboardTab({
               flexDirection: 'column',
               gap: '12px'
             }}>
+              <style>{`
+                .onboarding-card {
+                  display: flex;
+                  gap: 12px;
+                  align-items: flex-start;
+                  padding: 12px;
+                  border-radius: 12px;
+                  background: rgba(255, 255, 255, 0.01);
+                  border: 1px solid rgba(255, 255, 255, 0.03);
+                  cursor: pointer;
+                  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                .onboarding-card:hover {
+                  background: rgba(255, 255, 255, 0.05) !important;
+                  border-color: hsla(var(--primary) / 0.3) !important;
+                  transform: translateY(-2px);
+                  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                }
+                .onboarding-card:active {
+                  transform: translateY(0);
+                }
+                .glassmorphic-modal-backdrop {
+                  position: fixed;
+                  top: 0;
+                  left: 0;
+                  right: 0;
+                  bottom: 0;
+                  background: rgba(4, 4, 6, 0.75);
+                  backdrop-filter: blur(16px);
+                  -webkit-backdrop-filter: blur(16px);
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  z-index: 9999;
+                  padding: 20px;
+                  animation: modalFadeIn 0.25s ease-out;
+                }
+                .glassmorphic-modal-container {
+                  background: linear-gradient(135deg, rgba(20, 20, 35, 0.75) 0%, rgba(10, 10, 20, 0.9) 100%);
+                  border: 1px solid rgba(255, 255, 255, 0.08);
+                  border-radius: 24px;
+                  padding: 32px;
+                  max-width: 460px;
+                  width: 100%;
+                  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+                  position: relative;
+                  animation: modalScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+                  display: flex;
+                  flex-direction: column;
+                  gap: 20px;
+                }
+                @keyframes modalFadeIn {
+                  from { opacity: 0; }
+                  to { opacity: 1; }
+                }
+                @keyframes modalScaleUp {
+                  from { transform: scale(0.95); opacity: 0; }
+                  to { transform: scale(1); opacity: 1; }
+                }
+              `}</style>
               <h4 style={{ fontSize: '0.9rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--secondary))', marginBottom: '4px' }}>
                 {t.onboardingTitle}
               </h4>
               
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '1.2rem', lineHeight: '1' }}>📊</span>
+              <div className="onboarding-card" onClick={() => setActiveModal('1rm')}>
+                <TrendingUp size={20} color="hsl(var(--primary))" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
                   <strong style={{ fontSize: '0.85rem', color: '#ffffff', display: 'block' }}>{t.onboardingItem1Title}</strong>
                   <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.4' }}>{t.onboardingItem1Desc}</span>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '1.2rem', lineHeight: '1' }}>🩹</span>
+              <div className="onboarding-card" onClick={() => setActiveModal('injury')}>
+                <ShieldAlert size={20} color="hsl(var(--secondary))" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
                   <strong style={{ fontSize: '0.85rem', color: '#ffffff', display: 'block' }}>{t.onboardingItem2Title}</strong>
                   <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.4' }}>{t.onboardingItem2Desc}</span>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '1.2rem', lineHeight: '1' }}>⚡</span>
+              <div className="onboarding-card" onClick={() => setActiveModal('overload')}>
+                <Zap size={20} color="hsl(var(--warning))" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
                   <strong style={{ fontSize: '0.85rem', color: '#ffffff', display: 'block' }}>{t.onboardingItem3Title}</strong>
                   <span style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.4' }}>{t.onboardingItem3Desc}</span>
@@ -2360,7 +2440,8 @@ export default function DashboardTab({
                 {language === 'es' ? '¿Listo para dar el primer paso?' : 'Ready to take the first step?'}
               </span>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                <div 
+                <button 
+                  onClick={() => onTabChange('workout')}
                   style={{ 
                     background: 'linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%)',
                     color: '#000000',
@@ -2372,11 +2453,21 @@ export default function DashboardTab({
                     border: 'none',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '8px'
+                    gap: '8px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.03)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px hsla(var(--primary) / 0.45)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 4px 15px hsla(var(--primary) / 0.3)';
                   }}
                 >
                   <Dumbbell size={16} /> {t.onboardingCta}
-                </div>
+                </button>
               </div>
             </div>
           </div>
@@ -2821,6 +2912,142 @@ export default function DashboardTab({
               }
             }
           `}</style>
+        </div>,
+        document.body
+      )}
+
+      {activeModal && createPortal(
+        <div className="glassmorphic-modal-backdrop" onClick={() => setActiveModal(null)}>
+          <div className="glassmorphic-modal-container" onClick={(e) => e.stopPropagation()}>
+            {/* Close Button */}
+            <button 
+              onClick={() => setActiveModal(null)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#ffffff',
+                transition: 'background 0.2s',
+                outline: 'none'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+            >
+              <X size={16} />
+            </button>
+
+            {/* Modal Content */}
+            {activeModal === '1rm' && (
+              <>
+                <div style={{ display: 'inline-flex', alignSelf: 'flex-start', background: 'hsla(var(--primary) / 0.15)', padding: '14px', borderRadius: '16px', border: '1px solid hsla(var(--primary) / 0.25)' }}>
+                  <TrendingUp size={28} color="hsl(var(--primary))" />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h3 style={{ fontSize: '1.35rem', fontWeight: 850, color: '#ffffff', margin: 0 }}>
+                    {t.onboardingItem1Title}
+                  </h3>
+                  <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', lineHeight: '1.6', margin: 0 }}>
+                    {language === 'es' 
+                      ? 'Nuestra calculadora avanzada utiliza la fórmula de Epley para estimar tu 1RM (Repetición Máxima) teórica basándose en tus series de esfuerzo máximo. A medida que registras entrenamientos, el sistema traza una curva de progreso que te permite ver tu evolución de fuerza sin necesidad de realizar levantamientos de riesgo máximo.' 
+                      : 'Our advanced calculator uses the Epley formula to estimate your theoretical 1RM (One Rep Max) based on your maximum effort sets. As you log workouts, the system tracks a progress curve that lets you see your strength evolution without the need to perform high-risk maximum lifts.'}
+                  </p>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid hsl(var(--border))', borderRadius: '14px', padding: '16px', fontSize: '0.825rem', color: 'hsl(var(--muted))', marginTop: '6px' }}>
+                    <strong style={{ color: '#ffffff', display: 'block', marginBottom: '6px' }}>
+                      {language === 'es' ? 'Fórmula Utilizada:' : 'Formula Used:'}
+                    </strong>
+                    <code style={{ color: 'hsl(var(--primary))', fontWeight: 'bold' }}>1RM = Peso × (1 + Reps / 30)</code>
+                    <p style={{ marginTop: '8px', fontSize: '0.775rem', margin: 0, lineHeight: '1.4' }}>
+                      {language === 'es' 
+                        ? 'Es más precisa para series de entre 1 y 10 repeticiones. A mayor esfuerzo (RPE alto), mejor será la estimación.'
+                        : 'It is most accurate for sets between 1 and 10 repetitions. Higher effort (high RPE) yields better estimation.'}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {activeModal === 'injury' && (
+              <>
+                <div style={{ display: 'inline-flex', alignSelf: 'flex-start', background: 'hsla(var(--warning) / 0.15)', padding: '14px', borderRadius: '16px', border: '1px solid hsla(var(--warning) / 0.25)' }}>
+                  <HeartPulse size={28} color="hsl(var(--warning))" />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h3 style={{ fontSize: '1.35rem', fontWeight: 855, color: '#ffffff', margin: 0 }}>
+                    {t.onboardingItem2Title}
+                  </h3>
+                  <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', lineHeight: '1.6', margin: 0 }}>
+                    {language === 'es' 
+                      ? 'PLNEXC cuenta con un motor inteligente de rehabilitación. Si experimentas dolor o tienes una lesión activa en alguna articulación (como rodillas, hombros o muñecas), puedes registrarla en la pestaña Rehab. El sistema adaptará automáticamente tus entrenamientos de fuerza, limitando la carga y sugiriendo ejercicios alternativos seguros según la fase de tu dolor.' 
+                      : 'PLNEXC features a smart rehabilitation engine. If you experience pain or have an active injury in any joint (such as knees, shoulders, or wrists), you can log it in the Rehab tab. The system will automatically adapt your strength workouts, limiting loads and suggesting safe alternative exercises based on your pain phase.'}
+                  </p>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid hsl(var(--border))', borderRadius: '14px', padding: '16px', fontSize: '0.825rem', color: 'hsl(var(--muted))', marginTop: '6px' }}>
+                    <strong style={{ color: '#ffffff', display: 'block', marginBottom: '6px' }}>
+                      {language === 'es' ? 'Monitoreo de Carga:' : 'Load Monitoring:'}
+                    </strong>
+                    {language === 'es' 
+                      ? 'Evitamos el desentrenamiento mediante protocolos de carga adaptativa y control de volumen por grupo muscular.'
+                      : 'We prevent detraining through adaptive loading protocols and volume management per muscle group.'}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {activeModal === 'overload' && (
+              <>
+                <div style={{ display: 'inline-flex', alignSelf: 'flex-start', background: 'hsla(var(--primary) / 0.15)', padding: '14px', borderRadius: '16px', border: '1px solid hsla(var(--primary) / 0.25)' }}>
+                  <Activity size={28} color="hsl(var(--primary))" />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h3 style={{ fontSize: '1.35rem', fontWeight: 855, color: '#ffffff', margin: 0 }}>
+                    {t.onboardingItem3Title}
+                  </h3>
+                  <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', lineHeight: '1.6', margin: 0 }}>
+                    {language === 'es' 
+                      ? 'Para asegurar que progresas continuamente de forma balanceada, analizamos los grupos musculares que han recibido menos volumen o frecuencia de entrenamiento en los últimos días. El Plan de Acción te sugerirá exactamente qué músculos priorizar y cómo reestructurar tus series semanales.' 
+                      : 'To ensure you continuously progress in a balanced way, we analyze muscle groups that have received less volume or training frequency over the last few days. The Action Plan will suggest exactly which muscles to prioritize and how to restructure your weekly sets.'}
+                  </p>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid hsl(var(--border))', borderRadius: '14px', padding: '16px', fontSize: '0.825rem', color: 'hsl(var(--muted))', marginTop: '6px' }}>
+                    <strong style={{ color: '#ffffff', display: 'block', marginBottom: '6px' }}>
+                      {language === 'es' ? 'Prescripción del Coach:' : 'Coach Prescription:'}
+                    </strong>
+                    {language === 'es' 
+                      ? 'Calcula la fatiga sistémica y sugiere incrementos de intensidad precisos en base a tu sistema de periodización activo.'
+                      : 'Calculates systemic fatigue and suggests precise intensity increments based on your active periodization system.'}
+                  </div>
+                </div>
+              </>
+            )}
+            
+            <button 
+              onClick={() => setActiveModal(null)}
+              style={{
+                background: 'linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%)',
+                color: '#000000',
+                padding: '12px 20px',
+                borderRadius: '12px',
+                fontWeight: 'bold',
+                fontSize: '0.9rem',
+                border: 'none',
+                cursor: 'pointer',
+                textAlign: 'center',
+                marginTop: '10px',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            >
+              {language === 'es' ? 'Entendido' : 'Got it'}
+            </button>
+          </div>
         </div>,
         document.body
       )}

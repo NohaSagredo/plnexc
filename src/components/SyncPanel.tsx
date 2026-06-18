@@ -26,7 +26,8 @@ import type { User } from 'firebase/auth';
 import { 
   downloadUserData, 
   uploadUserData, 
-  mergeLocalAndCloudData 
+  mergeLocalAndCloudData,
+  checkAndGenerateUsername
 } from '../utils/firebaseSync';
 import { TRANSLATIONS } from '../utils/translations';
 
@@ -62,6 +63,17 @@ interface SyncPanelProps {
   setLanguage: (lang: 'es' | 'en') => void;
   progressionSystem: 'double_progression' | 'linear_periodization' | 'dup';
   setProgressionSystem: (system: 'double_progression' | 'linear_periodization' | 'dup', skipCloudUpload?: boolean) => void;
+  username: string;
+  setUsername: (username: string) => void;
+  displayName: string;
+  setDisplayName: (displayName: string) => void;
+  bio: string;
+  setBio: (bio: string) => void;
+  followers: string[];
+  setFollowers: (followers: string[]) => void;
+  following: string[];
+  setFollowing: (following: string[]) => void;
+  onLogout?: () => void;
 }
 
 export default function SyncPanel({
@@ -95,7 +107,18 @@ export default function SyncPanel({
   language,
   setLanguage,
   progressionSystem,
-  setProgressionSystem
+  setProgressionSystem,
+  username,
+  setUsername,
+  displayName,
+  setDisplayName,
+  bio,
+  setBio,
+  followers,
+  setFollowers,
+  following,
+  setFollowing,
+  onLogout
 }: SyncPanelProps) {
   const t = TRANSLATIONS[language];
   const [user, setUser] = useState<User | null>(null);
@@ -168,7 +191,12 @@ export default function SyncPanel({
         profilePicture,
         progressPhotos,
         language,
-        progressionSystem
+        progressionSystem,
+        username,
+        displayName,
+        bio,
+        followers,
+        following
       };
 
       // 2. Download from Cloud Firestore
@@ -189,6 +217,18 @@ export default function SyncPanel({
           throw new Error(t.syncErrorDbNotEnabled);
         }
         throw err;
+      }
+
+      // Check and generate username if missing from cloud data
+      let currentUsername = cloudData?.username;
+      const currentUserObj = auth.currentUser;
+      if (!currentUsername && currentUserObj?.email) {
+        try {
+          currentUsername = await checkAndGenerateUsername(userId, currentUserObj.email);
+          cloudData = await downloadUserData(userId);
+        } catch (usernameErr) {
+          console.error('Error generating username:', usernameErr);
+        }
       }
 
       if (cloudData) {
@@ -216,6 +256,11 @@ export default function SyncPanel({
         if (merged.progressionSystem) {
           setProgressionSystem(merged.progressionSystem, true);
         }
+        setUsername(merged.username);
+        setDisplayName(merged.displayName);
+        setBio(merged.bio);
+        setFollowers(merged.followers);
+        setFollowing(merged.following);
         
         // Update local user sessions in localStorage
         localStorage.setItem('milo_user_sessions', JSON.stringify(merged.userSessions));
@@ -231,6 +276,11 @@ export default function SyncPanel({
         localStorage.setItem('plnexc_cardio_history', JSON.stringify(merged.cardioHistory));
         localStorage.setItem('plnexc_profile_picture', merged.profilePicture);
         localStorage.setItem('plnexc_progress_photos', JSON.stringify(merged.progressPhotos));
+        localStorage.setItem('plnexc_username', merged.username);
+        localStorage.setItem('plnexc_display_name', merged.displayName);
+        localStorage.setItem('plnexc_bio', merged.bio);
+        localStorage.setItem('plnexc_followers', JSON.stringify(merged.followers));
+        localStorage.setItem('plnexc_following', JSON.stringify(merged.following));
         if (merged.progressionSystem) {
           localStorage.setItem('plnexc_progression_system', merged.progressionSystem);
         }
@@ -263,7 +313,12 @@ export default function SyncPanel({
             profilePicture: merged.profilePicture,
             progressPhotos: merged.progressPhotos,
             language: merged.language,
-            progressionSystem: merged.progressionSystem
+            progressionSystem: merged.progressionSystem,
+            username: merged.username,
+            displayName: merged.displayName,
+            bio: merged.bio,
+            followers: merged.followers,
+            following: merged.following
           });
         }
       } else {
@@ -284,7 +339,12 @@ export default function SyncPanel({
           profilePicture: localData.profilePicture,
           progressPhotos: localData.progressPhotos,
           language: localData.language,
-          progressionSystem: localData.progressionSystem
+          progressionSystem: localData.progressionSystem,
+          username: localData.username,
+          displayName: localData.displayName,
+          bio: localData.bio,
+          followers: localData.followers,
+          following: localData.following
         });
       }
 
@@ -376,6 +436,9 @@ export default function SyncPanel({
     try {
       await signOut(auth);
       setUser(null);
+      if (onLogout) {
+        onLogout();
+      }
     } catch (err: any) {
       setError(err.message || t.syncErrorLogout);
     } finally {

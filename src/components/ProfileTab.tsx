@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Scale, User, Trash2, Calendar, Plus, Minus, HelpCircle, Calculator, ChevronDown, ChevronUp, Check, Info, Lock, Camera, Award, X, Image as ImageIcon, Settings, Volume2 } from 'lucide-react';
+import { Scale, User, Trash2, Calendar, Plus, Minus, HelpCircle, Calculator, ChevronDown, ChevronUp, Check, Info, Lock, Camera, Award, X, Image as ImageIcon, Settings, Volume2, Loader2, ShieldAlert } from 'lucide-react';
 import { calculatePBProfiles, calculateAchievements, compressAndResizeImage, getAthleteLevel } from '../utils/ProgressionEngine';
 import type { ProgressionSystem } from '../utils/ProgressionEngine';
 import { TRANSLATIONS } from '../utils/translations';
 import AlgorithmsTab from './AlgorithmsTab';
+import { updateUserProfile, isUsernameAvailable } from '../utils/firebaseSync';
+import { auth } from '../utils/firebase';
 
 interface ProfileTabProps {
   bodyWeight: number;
@@ -28,6 +30,14 @@ interface ProfileTabProps {
   onToggleLanguage: () => void;
   progressionSystem: ProgressionSystem;
   onSetProgressionSystem: (system: ProgressionSystem) => void;
+  username: string;
+  setUsername: (username: string) => void;
+  displayName: string;
+  setDisplayName: (displayName: string) => void;
+  bio: string;
+  setBio: (bio: string) => void;
+  followers: string[];
+  following: string[];
 }
 
 export default function ProfileTab({
@@ -52,12 +62,106 @@ export default function ProfileTab({
   language,
   onToggleLanguage,
   progressionSystem,
-  onSetProgressionSystem
+  onSetProgressionSystem,
+  username,
+  setUsername,
+  displayName,
+  setDisplayName,
+  bio,
+  setBio,
+  followers,
+  following
 }: ProfileTabProps) {
   const t = TRANSLATIONS[language];
   const [newWeightInput, setNewWeightInput] = useState<string>('');
   const [customDateInput, setCustomDateInput] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showAlgorithms, setShowAlgorithms] = useState<boolean>(false);
+
+  // Social Profile edit states
+  const [localUsername, setLocalUsername] = useState(username);
+  const [localDisplayName, setLocalDisplayName] = useState(displayName);
+  const [localBio, setLocalBio] = useState(bio);
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+  const [savingSocial, setSavingSocial] = useState(false);
+  const [socialError, setSocialError] = useState<string | null>(null);
+  const [socialSuccess, setSocialSuccess] = useState(false);
+
+  useEffect(() => {
+    setLocalUsername(username);
+  }, [username]);
+
+  useEffect(() => {
+    setLocalDisplayName(displayName);
+  }, [displayName]);
+
+  useEffect(() => {
+    setLocalBio(bio);
+  }, [bio]);
+
+  // Debounced validation for username input
+  useEffect(() => {
+    if (localUsername === username) {
+      setUsernameStatus('idle');
+      return;
+    }
+    const cleaned = localUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (cleaned !== localUsername) {
+      setUsernameStatus('invalid');
+      return;
+    }
+    if (cleaned.length < 3) {
+      setUsernameStatus('invalid');
+      return;
+    }
+    
+    setUsernameStatus('checking');
+    const timer = setTimeout(async () => {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        try {
+          const ok = await isUsernameAvailable(cleaned, currentUser.uid);
+          setUsernameStatus(ok ? 'available' : 'taken');
+        } catch {
+          setUsernameStatus('taken');
+        }
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [localUsername, username]);
+
+  const handleSaveSocial = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    
+    setSavingSocial(true);
+    setSocialError(null);
+    setSocialSuccess(false);
+    
+    try {
+      const cleaned = localUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+      if (cleaned.length < 3) {
+        throw new Error(language === 'es' ? 'El usuario debe tener al menos 3 caracteres.' : 'Username must be at least 3 characters.');
+      }
+      
+      await updateUserProfile(currentUser.uid, {
+        username: cleaned,
+        displayName: localDisplayName,
+        bio: localBio
+      });
+      
+      setUsername(cleaned);
+      setDisplayName(localDisplayName);
+      setBio(localBio);
+      
+      setSocialSuccess(true);
+      setTimeout(() => setSocialSuccess(false), 3000);
+    } catch (err: any) {
+      setSocialError(err.message || 'Error al guardar el perfil social');
+    } finally {
+      setSavingSocial(false);
+    }
+  };
 
   // Rest Timer Settings State
   const [restTimerEnabled, setRestTimerEnabled] = useState<boolean>(() => {
@@ -397,10 +501,29 @@ export default function ProfileTab({
         />
 
         <div style={{ flex: 1, minWidth: '200px' }}>
-          <h2 style={{ fontSize: '1.8rem', fontWeight: 800, background: 'linear-gradient(135deg, #fff 0%, hsl(var(--muted)) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            {language === 'es' ? 'Atleta PLNEXC' : 'PLNEXC Athlete'}
+          <h2 style={{ fontSize: '1.8rem', fontWeight: 800, background: 'linear-gradient(135deg, #fff 0%, hsl(var(--primary)) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            {displayName || (username ? `@${username}` : (language === 'es' ? 'Atleta PLNEXC' : 'PLNEXC Athlete'))}
           </h2>
-          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', marginTop: '4px' }}>
+          {username && (
+            <p style={{ color: 'hsl(var(--primary))', fontSize: '1rem', fontWeight: 600, marginTop: '-2px' }}>
+              @{username}
+            </p>
+          )}
+          {bio && (
+            <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '4px', fontStyle: 'italic', maxWidth: '500px' }}>
+              {bio}
+            </p>
+          )}
+          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '6px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>
+              <strong style={{ color: '#fff' }}>{followers?.length || 0}</strong> {language === 'es' ? 'seguidores' : 'followers'}
+            </span>
+            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'hsl(var(--muted))' }} />
+            <span>
+              <strong style={{ color: '#fff' }}>{following?.length || 0}</strong> {language === 'es' ? 'seguidos' : 'following'}
+            </span>
+          </p>
+          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.85rem', marginTop: '6px' }}>
             {language === 'es' 
               ? `Miembro desde junio 2026 • Entrenamientos completados: ` 
               : `Member since June 2026 • Workouts completed: `}
@@ -417,6 +540,162 @@ export default function ProfileTab({
               {bodyWeight} kg
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* Sección: Configuración de la Comunidad (Red Social) */}
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ background: 'hsla(var(--primary) / 0.1)', padding: '10px', borderRadius: '10px' }}>
+            <Settings size={24} color="hsl(var(--primary))" />
+          </div>
+          <div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{language === 'es' ? 'Perfil de la Comunidad' : 'Community Profile'}</h2>
+            <p style={{ color: 'hsl(var(--muted))', fontSize: '0.875rem', marginTop: '2px' }}>
+              {language === 'es'
+                ? 'Personaliza tu identidad pública y biografía para interactuar en la red social PLNEXC'
+                : 'Customize your public identity and biography to interact on the PLNEXC social network'}
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Nombre de Usuario (@username) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
+              {language === 'es' ? 'Nombre de usuario (@username)' : 'Username (@username)'}
+            </label>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{ position: 'absolute', left: '12px', color: 'hsl(var(--muted))', fontWeight: 'bold' }}>@</span>
+              <input
+                type="text"
+                value={localUsername}
+                onChange={(e) => setLocalUsername(e.target.value)}
+                placeholder="usuario"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 28px',
+                  fontSize: '0.9rem',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  outline: 'none',
+                  transition: 'border-color 0.2s'
+                }}
+              />
+            </div>
+            {/* Mensajes de validación */}
+            {usernameStatus === 'checking' && (
+              <span style={{ fontSize: '0.75rem', color: 'hsl(var(--warning))', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Loader2 size={12} className="spin" /> {language === 'es' ? 'Verificando disponibilidad...' : 'Verifying availability...'}
+              </span>
+            )}
+            {usernameStatus === 'available' && (
+              <span style={{ fontSize: '0.75rem', color: 'hsl(var(--success))', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Check size={12} /> {language === 'es' ? '¡Nombre de usuario disponible!' : 'Username available!'}
+              </span>
+            )}
+            {usernameStatus === 'taken' && (
+              <span style={{ fontSize: '0.75rem', color: 'hsl(var(--danger))', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ShieldAlert size={12} /> {language === 'es' ? 'Este nombre de usuario ya está en uso.' : 'This username is already taken.'}
+              </span>
+            )}
+            {usernameStatus === 'invalid' && (
+              <span style={{ fontSize: '0.75rem', color: 'hsl(var(--danger))', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ShieldAlert size={12} /> {language === 'es' ? 'Mínimo 3 caracteres alfanuméricos o guiones bajos.' : 'Minimum 3 alphanumeric or underscore characters.'}
+              </span>
+            )}
+          </div>
+
+          {/* Nombre Visible */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
+              {language === 'es' ? 'Nombre visible' : 'Display Name'}
+            </label>
+            <input
+              type="text"
+              value={localDisplayName}
+              onChange={(e) => setLocalDisplayName(e.target.value)}
+              placeholder={language === 'es' ? 'Tu nombre para mostrar' : 'Your display name'}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                fontSize: '0.9rem',
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px',
+                color: '#fff',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          {/* Biografía */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
+              {language === 'es' ? 'Biografía (Máx. 150 caracteres)' : 'Bio (Max 150 characters)'}
+            </label>
+            <textarea
+              value={localBio}
+              onChange={(e) => setLocalBio(e.target.value.slice(0, 150))}
+              placeholder={language === 'es' ? 'Cuéntale a la comunidad sobre tus objetivos, rutinas o marcas...' : 'Tell the community about your goals, routines, or stats...'}
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                fontSize: '0.9rem',
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px',
+                color: '#fff',
+                outline: 'none',
+                resize: 'none'
+              }}
+            />
+            <span style={{ alignSelf: 'flex-end', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
+              {localBio.length} / 150
+            </span>
+          </div>
+
+          {socialError && (
+            <div style={{ color: 'hsl(var(--danger))', fontSize: '0.85rem', padding: '10px', background: 'rgba(220, 38, 38, 0.1)', borderRadius: '6px' }}>
+              {socialError}
+            </div>
+          )}
+
+          {socialSuccess && (
+            <div style={{ color: 'hsl(var(--success))', fontSize: '0.85rem', padding: '10px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '6px' }}>
+              {language === 'es' ? '¡Perfil social actualizado con éxito!' : 'Social profile updated successfully!'}
+            </div>
+          )}
+
+          <button
+            onClick={handleSaveSocial}
+            disabled={savingSocial || usernameStatus === 'taken' || usernameStatus === 'invalid' || usernameStatus === 'checking'}
+            className="btn btn-primary"
+            style={{
+              padding: '12px',
+              fontSize: '0.9rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              cursor: savingSocial || usernameStatus === 'taken' || usernameStatus === 'invalid' || usernameStatus === 'checking' ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {savingSocial ? (
+              <>
+                <Loader2 size={16} className="spin" />
+                {language === 'es' ? 'Guardando...' : 'Saving...'}
+              </>
+            ) : (
+              <>
+                <Check size={16} />
+                {language === 'es' ? 'Guardar Perfil de la Comunidad' : 'Save Community Profile'}
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -1388,7 +1667,7 @@ export default function ProfileTab({
             return (
               <div 
                 key={medal.id}
-                className={`medal-card glass-panel ${medal.isUnlocked ? `unlocked ${currentTier.glow}` : 'locked'}`}
+                className={`medal-card glass-panel shimmer-card ${medal.isUnlocked ? `unlocked ${currentTier.glow}` : 'locked'}`}
                 style={{
                   padding: '16px',
                   display: 'flex',

@@ -1,10 +1,11 @@
-import { 
-  TrendingUp, 
-  Dumbbell, 
-  HeartPulse, 
+import {
+  TrendingUp,
+  Dumbbell,
+  HeartPulse,
   Zap,
   User,
-  Flame
+  Flame,
+  Users
 } from 'lucide-react';
 import DashboardTab from './components/DashboardTab';
 import WorkoutTab from './components/WorkoutTab';
@@ -12,20 +13,58 @@ import RehabTab from './components/RehabTab';
 import CardioTab from './components/CardioTab';
 import ProfileTab from './components/ProfileTab';
 import SyncPanel from './components/SyncPanel';
+import CommunityTab from './components/CommunityTab';
 import { uploadUserData } from './utils/firebaseSync';
 import { auth } from './utils/firebase';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { TRANSLATIONS } from './utils/translations';
 import type { ProgressionSystem } from './utils/ProgressionEngine';
 
+const TABS_ORDER = ['dashboard', 'workout', 'cardio', 'rehab', 'profile', 'community'] as const;
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile' | 'community'>('dashboard');
+  const [prevTab, setPrevTab] = useState<'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile' | 'community'>('dashboard');
   const scrollPositions = useRef<Record<string, number>>({});
 
-  const handleTabChange = (newTab: 'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile') => {
+  const [isNavbarVisible, setIsNavbarVisible] = useState(true);
+  const lastScrollY = useRef(0);
+
+  // Scroll listener to hide/show mobile navigation
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const diff = currentScrollY - lastScrollY.current;
+
+      // Only hide if we have scrolled past 150px from the top
+      if (currentScrollY > 150) {
+        // Only hide if scrolling down by more than a small delta (e.g., 10px)
+        if (diff > 10) {
+          setIsNavbarVisible(false);
+        } else if (diff < -15) {
+          // Show when scrolling up by more than 15px
+          setIsNavbarVisible(true);
+        }
+      } else {
+        // Always show near the top of the page
+        setIsNavbarVisible(true);
+      }
+
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  const handleTabChange = (newTab: 'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile' | 'community') => {
     scrollPositions.current[activeTab] = window.scrollY;
+    setPrevTab(activeTab);
     setActiveTab(newTab);
+    setIsNavbarVisible(true); // Force show navbar on tab change
     setTimeout(() => {
       window.scrollTo(0, scrollPositions.current[newTab] || 0);
     }, 0);
@@ -49,7 +88,7 @@ export default function App() {
       });
     }
   };
-  
+
   // 1. Manage state of historical workouts
   const [localHistory, setLocalHistory] = useState<any[]>(() => {
     const saved = localStorage.getItem('milo_user_sessions');
@@ -122,16 +161,7 @@ export default function App() {
         console.error('Failed to parse weight history:', e);
       }
     }
-    const currentW = localStorage.getItem('plnexc_body_weight') ? parseFloat(localStorage.getItem('plnexc_body_weight')!) : 75;
-    const sampleHistory = [
-      { date: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 1.5 },
-      { date: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 1.0 },
-      { date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 0.5 },
-      { date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: currentW + 0.2 },
-      { date: new Date().toISOString().split('T')[0], weight: currentW }
-    ];
-    localStorage.setItem('plnexc_weight_history', JSON.stringify(sampleHistory));
-    return sampleHistory;
+    return [];
   });
 
   // 5. Manage deleted/hidden routines
@@ -183,6 +213,60 @@ export default function App() {
     }
     return [];
   });
+
+  // Social profile states
+  const [username, setUsername] = useState<string>(() => {
+    return localStorage.getItem('plnexc_username') || '';
+  });
+  const [displayName, setDisplayName] = useState<string>(() => {
+    return localStorage.getItem('plnexc_display_name') || '';
+  });
+  const [bio, setBio] = useState<string>(() => {
+    return localStorage.getItem('plnexc_bio') || '';
+  });
+  const [followers, setFollowers] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('plnexc_followers');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [following, setFollowing] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('plnexc_following');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleSetUsername = (val: string) => {
+    setUsername(val);
+    localStorage.setItem('plnexc_username', val);
+  };
+  const handleSetDisplayName = (val: string) => {
+    setDisplayName(val);
+    localStorage.setItem('plnexc_display_name', val);
+  };
+  const handleSetBio = (val: string) => {
+    setBio(val);
+    localStorage.setItem('plnexc_bio', val);
+  };
+  const handleSetFollowers = (val: string[]) => {
+    setFollowers(val);
+    localStorage.setItem('plnexc_followers', JSON.stringify(val));
+  };
+  const handleSetFollowing = (val: string[]) => {
+    setFollowing(val);
+    localStorage.setItem('plnexc_following', JSON.stringify(val));
+  };
+
+  const [pendingRoutineToStart, setPendingRoutineToStart] = useState<any | null>(null);
+
+  const handleClearPendingRoutine = () => {
+    setPendingRoutineToStart(null);
+  };
 
   // 8. Progression System
   const [progressionSystem, setProgressionSystem] = useState<ProgressionSystem>(() => {
@@ -327,7 +411,7 @@ export default function App() {
       }
       newHistory.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       localStorage.setItem('plnexc_weight_history', JSON.stringify(newHistory));
-      
+
       const currentUser = auth.currentUser;
       if (currentUser) {
         uploadUserData(currentUser.uid, { weightHistory: newHistory }).catch(err => {
@@ -342,7 +426,7 @@ export default function App() {
     setWeightHistory(prev => {
       const newHistory = prev.filter(r => r.date !== dateStr);
       localStorage.setItem('plnexc_weight_history', JSON.stringify(newHistory));
-      
+
       const currentUser = auth.currentUser;
       if (currentUser) {
         uploadUserData(currentUser.uid, { weightHistory: newHistory }).catch(err => {
@@ -351,6 +435,52 @@ export default function App() {
       }
       return newHistory;
     });
+  };
+
+  const handleLogoutClear = () => {
+    // Clear localStorage
+    localStorage.removeItem('milo_user_sessions');
+    localStorage.removeItem('milo_active_injury');
+    localStorage.removeItem('plnexc_custom_routines');
+    localStorage.setItem('plnexc_body_weight', '75');
+    localStorage.setItem('plnexc_height', '175');
+    localStorage.setItem('plnexc_gender', 'Masculino');
+    localStorage.setItem('plnexc_body_fat', '15');
+    localStorage.removeItem('plnexc_weight_history');
+    localStorage.removeItem('plnexc_deleted_routines');
+    localStorage.setItem('plnexc_cardio_goal_type', 'daily');
+    localStorage.setItem('plnexc_cardio_target_minutes', '150');
+    localStorage.removeItem('plnexc_cardio_history');
+    localStorage.removeItem('plnexc_profile_picture');
+    localStorage.removeItem('plnexc_progress_photos');
+    localStorage.removeItem('plnexc_username');
+    localStorage.removeItem('plnexc_display_name');
+    localStorage.removeItem('plnexc_bio');
+    localStorage.removeItem('plnexc_followers');
+    localStorage.removeItem('plnexc_following');
+    localStorage.setItem('plnexc_progression_system', 'double_progression');
+
+    // Reset React state values to guest defaults
+    setLocalHistory([]);
+    setActiveInjury(null);
+    setCustomRoutines([]);
+    setBodyWeight(75);
+    setHeight(175);
+    setGender('Masculino');
+    setBodyFat(15);
+    setWeightHistory([]);
+    setDeletedRoutines([]);
+    setCardioGoalType('daily');
+    setCardioTargetMinutes(150);
+    setCardioHistory([]);
+    setProfilePicture('');
+    setProgressPhotos([]);
+    setUsername('');
+    setDisplayName('');
+    setBio('');
+    setFollowers([]);
+    setFollowing([]);
+    setProgressionSystem('double_progression');
   };
 
 
@@ -376,7 +506,7 @@ export default function App() {
   const handleSaveWorkout = (newSession: any) => {
     const savedUserSessions = localStorage.getItem('milo_user_sessions');
     const parsedUserSessions = savedUserSessions ? JSON.parse(savedUserSessions) : [];
-    
+
     const updatedUserSessions = [newSession, ...parsedUserSessions];
     localStorage.setItem('milo_user_sessions', JSON.stringify(updatedUserSessions));
 
@@ -384,7 +514,7 @@ export default function App() {
     const fullMergedHistory = [newSession, ...localHistory];
     fullMergedHistory.sort((a, b) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
     setLocalHistory(fullMergedHistory);
-    
+
     // Auto toggle to dashboard to see progression charts updated
     handleTabChange('dashboard');
 
@@ -402,7 +532,7 @@ export default function App() {
 
     const savedUserSessions = localStorage.getItem('milo_user_sessions');
     const parsedUserSessions = savedUserSessions ? JSON.parse(savedUserSessions) : [];
-    
+
     const updatedUserSessions = parsedUserSessions.filter((session: any) => session.parsedDate !== parsedDate);
     localStorage.setItem('milo_user_sessions', JSON.stringify(updatedUserSessions));
 
@@ -419,13 +549,13 @@ export default function App() {
   const handleUpdateWorkout = (updatedSession: any) => {
     const savedUserSessions = localStorage.getItem('milo_user_sessions');
     const parsedUserSessions = savedUserSessions ? JSON.parse(savedUserSessions) : [];
-    
-    const updatedUserSessions = parsedUserSessions.map((session: any) => 
+
+    const updatedUserSessions = parsedUserSessions.map((session: any) =>
       session.parsedDate === updatedSession.parsedDate ? updatedSession : session
     );
     localStorage.setItem('milo_user_sessions', JSON.stringify(updatedUserSessions));
 
-    const fullMergedHistory = localHistory.map((session: any) => 
+    const fullMergedHistory = localHistory.map((session: any) =>
       session.parsedDate === updatedSession.parsedDate ? updatedSession : session
     );
     fullMergedHistory.sort((a: any, b: any) => new Date(b.parsedDate).getTime() - new Date(a.parsedDate).getTime());
@@ -520,9 +650,9 @@ export default function App() {
 
       const currentUser = auth.currentUser;
       if (currentUser) {
-        uploadUserData(currentUser.uid, { 
+        uploadUserData(currentUser.uid, {
           customRoutines: updatedCustom,
-          deletedRoutines: updatedDeleted 
+          deletedRoutines: updatedDeleted
         }).catch(err => {
           console.error('Error auto-syncing routine delete:', err);
         });
@@ -531,28 +661,36 @@ export default function App() {
     });
   };
 
+  const prevIndex = TABS_ORDER.indexOf(prevTab);
+  const activeIndex = TABS_ORDER.indexOf(activeTab);
+  const direction = activeIndex > prevIndex ? 'right' : activeIndex < prevIndex ? 'left' : 'none';
+
   return (
     <div className="app-container">
-      
+      {/* Floating Ambient Blobs */}
+      <div className="ambient-blob blob-1" />
+      <div className="ambient-blob blob-2" />
+      <div className="ambient-blob blob-3" />
+
       {/* Premium Header */}
       <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="logo">
           <Zap size={26} fill="hsl(var(--primary))" color="hsl(var(--primary))" />
           PLN<span>EXC</span>
         </div>
-        
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           {/* Desktop Tab bar */}
           <nav className="nav-tabs desktop-nav">
-            <button 
+            <button
               className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
               onClick={() => handleTabChange('dashboard')}
             >
               <TrendingUp size={18} />
               {t.progreso}
             </button>
-            
-            <button 
+
+            <button
               className={`nav-tab ${activeTab === 'workout' ? 'active' : ''}`}
               onClick={() => handleTabChange('workout')}
             >
@@ -560,18 +698,18 @@ export default function App() {
               {t.entrenar}
             </button>
 
-            <button 
+            <button
               className={`nav-tab ${activeTab === 'cardio' ? 'active' : ''}`}
               onClick={() => handleTabChange('cardio')}
             >
               <Flame size={18} />
               {t.cardio}
             </button>
-            
-            <button 
+
+            <button
               className={`nav-tab ${activeTab === 'rehab' ? 'active' : ''}`}
               onClick={() => handleTabChange('rehab')}
-              style={{ 
+              style={{
                 borderColor: activeInjury ? 'hsl(var(--warning))' : 'transparent',
                 color: activeInjury ? 'hsl(var(--warning))' : undefined
               }}
@@ -580,17 +718,25 @@ export default function App() {
               {activeInjury ? (language === 'es' ? 'PLNEXC Rehab (Activo)' : 'PLNEXC Rehab (Active)') : (language === 'es' ? 'Rehab PLNEXC' : 'PLNEXC Rehab')}
             </button>
 
-            <button 
+            <button
               className={`nav-tab ${activeTab === 'profile' ? 'active' : ''}`}
               onClick={() => handleTabChange('profile')}
             >
               <User size={18} />
               {t.perfil}
             </button>
+
+            <button
+              className={`nav-tab ${activeTab === 'community' ? 'active' : ''}`}
+              onClick={() => handleTabChange('community')}
+            >
+              <Users size={18} />
+              {language === 'es' ? 'Comunidad' : 'Community'}
+            </button>
           </nav>
 
           {/* Cloud Synchronization Panel */}
-          <SyncPanel 
+          <SyncPanel
             customRoutines={customRoutines}
             setCustomRoutines={setCustomRoutines}
             setLocalHistory={setLocalHistory}
@@ -622,17 +768,28 @@ export default function App() {
             setLanguage={setLanguage}
             progressionSystem={progressionSystem}
             setProgressionSystem={handleSetProgressionSystem}
+            username={username}
+            setUsername={handleSetUsername}
+            displayName={displayName}
+            setDisplayName={handleSetDisplayName}
+            bio={bio}
+            setBio={handleSetBio}
+            followers={followers}
+            setFollowers={handleSetFollowers}
+            following={following}
+            setFollowing={handleSetFollowing}
+            onLogout={handleLogoutClear}
           />
         </div>
       </header>
 
       {/* Main Tab Render Slots */}
       <main style={{ minHeight: 'calc(100vh - 180px)', position: 'relative' }}>
-        <div 
-          className="tab-transition" 
+        <div
+          className="tab-transition"
           style={activeTab === 'dashboard' ? { width: '100%' } : { display: 'none' }}
         >
-          <DashboardTab 
+          <DashboardTab
             localHistory={localHistory}
             activeInjury={activeInjury}
             weightHistory={weightHistory}
@@ -644,15 +801,16 @@ export default function App() {
             bodyWeight={bodyWeight}
             language={language}
             progressionSystem={progressionSystem}
+            onTabChange={handleTabChange}
           />
         </div>
-        
-        <div 
-          className="tab-transition" 
+
+        <div
+          className="tab-transition"
           style={activeTab === 'workout' ? { width: '100%' } : { display: 'none' }}
         >
-          <WorkoutTab 
-            activeInjury={activeInjury} 
+          <WorkoutTab
+            activeInjury={activeInjury}
             onSaveWorkout={handleSaveWorkout}
             onDeleteWorkout={handleDeleteWorkout}
             onUpdateWorkout={handleUpdateWorkout}
@@ -667,25 +825,32 @@ export default function App() {
             bodyFat={bodyFat}
             language={language}
             progressionSystem={progressionSystem}
+            progressPhotos={progressPhotos}
+            profilePicture={profilePicture}
+            username={username}
+            displayName={displayName}
+            onAddProgressPhoto={handleAddProgressPhoto}
+            pendingRoutineToStart={pendingRoutineToStart}
+            onClearPendingRoutine={handleClearPendingRoutine}
           />
         </div>
-        
-        <div 
-          className="tab-transition" 
+
+        <div
+          className="tab-transition"
           style={activeTab === 'rehab' ? { width: '100%' } : { display: 'none' }}
         >
-          <RehabTab 
-            activeInjury={activeInjury} 
-            setActiveInjury={handleSetInjury} 
+          <RehabTab
+            activeInjury={activeInjury}
+            setActiveInjury={handleSetInjury}
             language={language}
           />
         </div>
 
-        <div 
-          className="tab-transition" 
+        <div
+          className="tab-transition"
           style={activeTab === 'profile' ? { width: '100%' } : { display: 'none' }}
         >
-          <ProfileTab 
+          <ProfileTab
             bodyWeight={bodyWeight}
             setBodyWeight={handleSetBodyWeight}
             height={height}
@@ -708,14 +873,22 @@ export default function App() {
             onToggleLanguage={handleToggleLanguage}
             progressionSystem={progressionSystem}
             onSetProgressionSystem={handleSetProgressionSystem}
+            username={username}
+            setUsername={handleSetUsername}
+            displayName={displayName}
+            setDisplayName={handleSetDisplayName}
+            bio={bio}
+            setBio={handleSetBio}
+            followers={followers}
+            following={following}
           />
         </div>
 
-        <div 
-          className="tab-transition" 
+        <div
+          className="tab-transition"
           style={activeTab === 'cardio' ? { width: '100%' } : { display: 'none' }}
         >
-          <CardioTab 
+          <CardioTab
             cardioGoalType={cardioGoalType}
             setCardioGoalType={handleSetCardioGoalType}
             cardioTargetMinutes={cardioTargetMinutes}
@@ -728,19 +901,60 @@ export default function App() {
             language={language}
           />
         </div>
+
+        <div
+          className="tab-transition"
+          style={activeTab === 'community' ? { width: '100%' } : { display: 'none' }}
+        >
+          <CommunityTab
+            customRoutines={customRoutines}
+            setCustomRoutines={setCustomRoutines}
+            onStartTraining={(workoutData) => {
+              const title = workoutData.routineTitle || 'Entrenamiento Copiado';
+              const exists = customRoutines.some(cr => cr.title === title);
+              const exercisesList = workoutData.workoutData.exercises.map((e: any) => e.title);
+              if (!exists) {
+                handleSaveCustomRoutine(title, exercisesList);
+              }
+              setPendingRoutineToStart({
+                title,
+                exercises: exercisesList
+              });
+              handleTabChange('workout');
+            }}
+            following={following}
+            setFollowing={handleSetFollowing}
+            language={language}
+          />
+        </div>
       </main>
 
       {/* Mobile Bottom Tabbar Navigation */}
-      <nav className="mobile-nav">
-        <button 
+      <nav className={`mobile-nav ${!isNavbarVisible ? 'nav-hidden' : ''}`}>
+        {/* Sliding liquid glass indicator wrapper */}
+        <div
+          className="mobile-nav-indicator-wrapper"
+          style={{
+            transform: `translateX(${activeTab === 'dashboard' ? 0 :
+                activeTab === 'workout' ? 100 :
+                  activeTab === 'cardio' ? 200 :
+                    activeTab === 'rehab' ? 300 :
+                      activeTab === 'profile' ? 400 : 500
+              }%)`
+          }}
+        >
+          <div className={`mobile-nav-indicator direction-${direction}`} key={activeTab} />
+        </div>
+
+        <button
           className={`mobile-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
           onClick={() => handleTabChange('dashboard')}
         >
           <TrendingUp size={22} />
           <span>{t.progreso}</span>
         </button>
-        
-        <button 
+
+        <button
           className={`mobile-tab ${activeTab === 'workout' ? 'active' : ''}`}
           onClick={() => handleTabChange('workout')}
         >
@@ -748,31 +962,39 @@ export default function App() {
           <span>{t.entrenar}</span>
         </button>
 
-        <button 
+        <button
           className={`mobile-tab ${activeTab === 'cardio' ? 'active' : ''}`}
           onClick={() => handleTabChange('cardio')}
         >
           <Flame size={22} />
           <span>{t.cardio}</span>
         </button>
-        
-        <button 
+
+        <button
           className={`mobile-tab ${activeTab === 'rehab' ? 'active' : ''}`}
           onClick={() => handleTabChange('rehab')}
-          style={{ 
-            color: activeInjury && activeTab !== 'rehab' ? 'hsl(var(--warning))' : undefined 
+          style={{
+            color: activeInjury && activeTab !== 'rehab' ? 'hsl(var(--warning))' : undefined
           }}
         >
           <HeartPulse size={22} />
-          <span>{activeInjury ? 'PLNEXC Rehab' : t.rehab}</span>
+          <span>{activeInjury ? 'Rehab' : t.rehab}</span>
         </button>
 
-        <button 
+        <button
           className={`mobile-tab ${activeTab === 'profile' ? 'active' : ''}`}
           onClick={() => handleTabChange('profile')}
         >
           <User size={22} />
           <span>{t.perfil}</span>
+        </button>
+
+        <button
+          className={`mobile-tab ${activeTab === 'community' ? 'active' : ''}`}
+          onClick={() => handleTabChange('community')}
+        >
+          <Users size={22} />
+          <span>{language === 'es' ? 'Comunidad' : 'Community'}</span>
         </button>
       </nav>
 

@@ -20,13 +20,17 @@ import {
   VolumeX,
   TrendingUp,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
-import { proposeNextSet, calculatePBProfiles, getBodyweightPercentage, projectFutureSessions } from '../utils/ProgressionEngine';
+import { proposeNextSet, calculatePBProfiles, getBodyweightPercentage, projectFutureSessions, compressAndResizeImage } from '../utils/ProgressionEngine';
 import type { SetData, ProgressionTarget, ProgressionSystem } from '../utils/ProgressionEngine';
 import { getSubstitutedExercise, MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import type { SubstitutionRule } from '../utils/MiloRehabEngine';
 import RoutineBuilder from './RoutineBuilder';
+import { publishWorkoutToFeed } from '../utils/firebaseSync';
+import { auth } from '../utils/firebase';
 import { DEFAULT_PRESETS } from '../data/default_routines';
 import { EXERCISES_DB } from '../data/exercises_db';
 import { getStrengthStandards } from '../utils/StrengthStandards';
@@ -53,6 +57,13 @@ interface WorkoutTabProps {
   bodyFat: number;
   language: 'es' | 'en';
   progressionSystem: ProgressionSystem;
+  progressPhotos: any[];
+  profilePicture: string;
+  username: string;
+  displayName: string;
+  onAddProgressPhoto: (photo: any) => void;
+  pendingRoutineToStart?: any;
+  onClearPendingRoutine?: () => void;
 }
 
 // Dynamically generate a beep sound as a WAV Data URI/Blob to bypass iOS Web Audio API mute/silent-switch limitations
@@ -214,7 +225,14 @@ export default function WorkoutTab({
   gender,
   bodyFat,
   language,
-  progressionSystem
+  progressionSystem,
+  progressPhotos,
+  profilePicture,
+  username,
+  displayName,
+  onAddProgressPhoto,
+  pendingRoutineToStart,
+  onClearPendingRoutine
 }: WorkoutTabProps) {
   const t = TRANSLATIONS[language];
 
@@ -370,6 +388,10 @@ export default function WorkoutTab({
   const [brokenPBs, setBrokenPBs] = useState<any[]>([]);
   const [pendingSessionToSave, setPendingSessionToSave] = useState<any | null>(null);
   const [showCelebrationModal, setShowCelebrationModal] = useState<boolean>(false);
+  const [shareComment, setShareComment] = useState('');
+  const [sharePublicly, setSharePublicly] = useState(true);
+  const [selectedProgressPhoto, setSelectedProgressPhoto] = useState<string | null>(null);
+  const [publishingToFeed, setPublishingToFeed] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState<boolean>(false);
 
   // Strength Road Map States
@@ -532,6 +554,19 @@ export default function WorkoutTab({
       }
     }
   };
+
+  useEffect(() => {
+    if (pendingRoutineToStart) {
+      setSelectedRoutine(pendingRoutineToStart.title);
+      const timer = setTimeout(() => {
+        handleStartWorkout(8);
+        if (onClearPendingRoutine) {
+          onClearPendingRoutine();
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingRoutineToStart]);
 
   useEffect(() => {
     const container = routineGridRef.current;
@@ -989,17 +1024,105 @@ export default function WorkoutTab({
       }
     });
 
-    if (sessionBrokenPBs.length > 0) {
-      setBrokenPBs(sessionBrokenPBs);
-      setPendingSessionToSave(newSession);
-      setShowCelebrationModal(true);
-    } else {
-      // Complete directly if no records were broken
-      onSaveWorkout(newSession);
+    setBrokenPBs(sessionBrokenPBs);
+    setPendingSessionToSave(newSession);
+    setShareComment('');
+    setSharePublicly(!!username);
+    setSelectedProgressPhoto(null);
+    setShowCelebrationModal(true);
+  };
+
+  const handleSaveAndShareWorkout = async () => {
+    if (!pendingSessionToSave) return;
+    
+    setPublishingToFeed(true);
+    try {
+      let photoUrl = selectedProgressPhoto || undefined;
+      
+      if (selectedProgressPhoto && selectedProgressPhoto.startsWith('data:image')) {
+        const photoId = Date.now().toString();
+        onAddProgressPhoto({
+          id: photoId,
+          date: new Date().toISOString().split('T')[0],
+          weight: bodyWeight,
+          photoUrl: selectedProgressPhoto,
+          note: `Entrenamiento: ${pendingSessionToSave.title}`
+        });
+      }
+      
+      if (sharePublicly && username) {
+        let totalVolume = 0;
+        pendingSessionToSave.exercises.forEach((ex: any) => {
+          totalVolume += ex.totalVolume || 0;
+        });
+        
+        const recordsBrokenText: string[] = [];
+        brokenPBs.forEach((pb: any) => {
+          pb.details.forEach((det: string) => {
+            recordsBrokenText.push(`${pb.exercise}: ${det}`);
+          });
+        });
+        
+        let durationMinutes = 60;
+        if (pendingSessionToSave.startTime && pendingSessionToSave.endTime) {
+          try {
+            const [startH, startM] = pendingSessionToSave.startTime.split(':').map(Number);
+            const [endH, endM] = pendingSessionToSave.endTime.split(':').map(Number);
+            const startTotal = startH * 60 + startM;
+            const endTotal = endH * 60 + endM;
+            if (endTotal > startTotal) {
+              durationMinutes = endTotal - startTotal;
+            }
+          } catch {
+            durationMinutes = 60;
+          }
+        }
+        
+        await publishWorkoutToFeed({
+          userId: auth.currentUser?.uid || '',
+          username: username,
+          userDisplayName: displayName || username,
+          userProfilePicture: profilePicture || '',
+          routineTitle: pendingSessionToSave.title,
+          durationMinutes,
+          totalVolumeKg: totalVolume,
+          recordsBroken: recordsBrokenText,
+          comment: shareComment,
+          photoUrl,
+          workoutData: pendingSessionToSave
+        });
+      }
+      
+      onSaveWorkout(pendingSessionToSave);
+      
       setActiveSession(null);
       setTimerActive(false);
       setRestTimerActive(false);
       setRestTimeRemaining(0);
+      setBrokenPBs([]);
+      setPendingSessionToSave(null);
+      setShowCelebrationModal(false);
+      
+      setShareComment('');
+      setSelectedProgressPhoto(null);
+    } catch (err: any) {
+      console.error('Error sharing workout:', err);
+      alert('Error al guardar el entrenamiento: ' + (err.message || err));
+    } finally {
+      setPublishingToFeed(false);
+    }
+  };
+
+  const handleSharePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const base64 = await compressAndResizeImage(file, 600, 600);
+        setSelectedProgressPhoto(base64);
+      } catch (err) {
+        console.error('Error processing photo:', err);
+        alert(language === 'es' ? 'Error al procesar la foto.' : 'Error processing the photo.');
+      }
     }
   };
 
@@ -2440,8 +2563,9 @@ export default function WorkoutTab({
           left: 0,
           width: '100%',
           height: '100%',
-          background: 'rgba(0, 0, 0, 0.75)',
+          background: 'rgba(5, 7, 12, 0.85)',
           backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -2449,101 +2573,275 @@ export default function WorkoutTab({
           padding: '20px'
         }}>
           <div className="glass-panel fade-in" style={{
-            maxWidth: '500px',
+            maxWidth: '520px',
             width: '100%',
-            padding: '30px',
-            textAlign: 'center',
-            border: '1px solid hsla(45, 100%, 50%, 0.3)',
-            boxShadow: '0 0 30px hsla(45, 100%, 50%, 0.25)',
+            padding: '24px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
-            gap: '20px'
+            gap: '18px',
+            border: brokenPBs.length > 0 ? '1px solid hsla(45, 100%, 50%, 0.3)' : '1px solid hsl(var(--border))',
+            boxShadow: brokenPBs.length > 0 ? '0 0 30px hsla(45, 100%, 50%, 0.15)' : 'none'
           }}>
-            <div>
+            {/* Header */}
+            <div style={{ textAlign: 'center' }}>
               <div style={{
-                fontSize: '3.5rem',
+                fontSize: '3rem',
                 animation: 'pulseScale 1s infinite alternate',
                 display: 'inline-block',
-                marginBottom: '10px'
+                marginBottom: '8px'
               }}>
-                🏆
+                {brokenPBs.length > 0 ? '🏆' : '🎉'}
               </div>
               <h2 style={{
-                fontSize: '1.8rem',
+                fontSize: '1.6rem',
                 fontWeight: 900,
-                color: '#fbbf24',
-                textShadow: '0 0 15px rgba(251, 191, 36, 0.4)',
+                color: brokenPBs.length > 0 ? '#fbbf24' : '#fff',
+                textShadow: brokenPBs.length > 0 ? '0 0 15px rgba(251, 191, 36, 0.3)' : 'none',
                 margin: 0
               }}>
-                {t.pbCelebrationTitle}
+                {brokenPBs.length > 0 
+                  ? (language === 'es' ? '¡Nuevos Récords Superados!' : 'New Records Broken!')
+                  : (language === 'es' ? '¡Sesión Completada!' : 'Workout Completed!')}
               </h2>
               <p style={{
                 color: 'hsl(var(--muted))',
-                fontSize: '0.9rem',
+                fontSize: '0.85rem',
                 marginTop: '6px'
               }}>
-                {t.pbCelebrationSubtitle}
+                {language === 'es' 
+                  ? 'Buen trabajo. Registra los detalles finales de tu entrenamiento a continuación.'
+                  : 'Great job. Log the final details of your workout below.'}
               </p>
             </div>
 
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              textAlign: 'left',
-              background: 'rgba(255, 255, 255, 0.02)',
-              border: '1px solid hsl(var(--border))',
-              borderRadius: 'var(--border-radius-md)',
-              padding: '16px',
-              maxHeight: '200px',
-              overflowY: 'auto'
-            }}>
-              {brokenPBs.map((pb, idx) => (
-                <div key={idx} style={{
-                  borderBottom: idx < brokenPBs.length - 1 ? '1px dashed rgba(255, 255, 255, 0.05)' : 'none',
-                  paddingBottom: idx < brokenPBs.length - 1 ? '10px' : 0,
-                  marginBottom: idx < brokenPBs.length - 1 ? '10px' : 0
-                }}>
-                  <strong style={{ fontSize: '0.95rem', color: '#ffffff', display: 'block', marginBottom: '4px' }}>
-                    💪 {resolveExerciseDisplayName(pb.exercise)}
-                  </strong>
-                  <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.825rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.4' }}>
-                    {pb.details.map((detail: string, dIdx: number) => (
-                      <li key={dIdx}>{detail}</li>
-                    ))}
-                  </ul>
+            {/* PB Cards (if any) */}
+            {brokenPBs.length > 0 && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                textAlign: 'left',
+                background: 'rgba(251, 191, 36, 0.05)',
+                border: '1px solid rgba(251, 191, 36, 0.2)',
+                borderRadius: 'var(--border-radius-md)',
+                padding: '14px',
+                maxHeight: '160px',
+                overflowY: 'auto'
+              }}>
+                {brokenPBs.map((pb, idx) => (
+                  <div key={idx} className="shimmer-card" style={{
+                    borderBottom: idx < brokenPBs.length - 1 ? '1px dashed rgba(251, 191, 36, 0.1)' : 'none',
+                    paddingBottom: idx < brokenPBs.length - 1 ? '8px' : 0,
+                    marginBottom: idx < brokenPBs.length - 1 ? '8px' : 0,
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    <strong style={{ fontSize: '0.9rem', color: '#fbbf24', display: 'block', marginBottom: '2px' }}>
+                      💪 {resolveExerciseDisplayName(pb.exercise)}
+                    </strong>
+                    <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.8)', lineHeight: '1.4' }}>
+                      {pb.details.map((detail: string, dIdx: number) => (
+                        <li key={dIdx}>{detail}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Social Sharing Setup */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'left' }}>
+              
+              {/* Toggle sharing */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <input
+                  type="checkbox"
+                  id="shareWorkoutCheck"
+                  checked={sharePublicly && !!username}
+                  disabled={!username}
+                  onChange={(e) => setSharePublicly(e.target.checked)}
+                  style={{ marginTop: '4px', cursor: username ? 'pointer' : 'not-allowed' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <label htmlFor="shareWorkoutCheck" style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff', cursor: username ? 'pointer' : 'not-allowed' }}>
+                    {language === 'es' ? 'Compartir en la comunidad' : 'Share in the community'}
+                  </label>
+                  {!username ? (
+                    <span style={{ fontSize: '0.75rem', color: 'hsl(var(--warning))', marginTop: '2px' }}>
+                      ⚠️ {language === 'es' ? 'Configura un @username en tu Perfil para compartir.' : 'Set up a @username in your Profile to share.'}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', marginTop: '2px' }}>
+                      {language === 'es' ? 'Publica este entrenamiento en el feed público.' : 'Publish this workout on the public feed.'}
+                    </span>
+                  )}
                 </div>
-              ))}
+              </div>
+
+              {sharePublicly && !!username && (
+                <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Personal Comment */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
+                      {language === 'es' ? 'Comentario (opcional)' : 'Comment (optional)'}
+                    </label>
+                    <textarea
+                      value={shareComment}
+                      onChange={(e) => setShareComment(e.target.value)}
+                      placeholder={language === 'es' ? '¿Qué tal se sintió la rutina de hoy? Escribe un comentario...' : 'How did today\'s routine feel? Write a comment...'}
+                      rows={2}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        fontSize: '0.85rem',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '6px',
+                        color: '#fff',
+                        outline: 'none',
+                        resize: 'none'
+                      }}
+                    />
+                  </div>
+
+                  {/* Progress Photo upload or select */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
+                      {language === 'es' ? 'Foto de progreso (opcional)' : 'Progress photo (optional)'}
+                    </label>
+                    
+                    {/* Gallery photos selection scroll */}
+                    {progressPhotos.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
+                          {language === 'es' ? 'Selecciona una foto existente:' : 'Select an existing photo:'}
+                        </span>
+                        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '6px' }}>
+                          {progressPhotos.map((photo) => (
+                            <img
+                              key={photo.id}
+                              src={photo.photoUrl}
+                              alt="Progreso"
+                              onClick={() => setSelectedProgressPhoto(photo.photoUrl)}
+                              style={{
+                                width: '50px',
+                                height: '50px',
+                                objectFit: 'cover',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                border: selectedProgressPhoto === photo.photoUrl ? '2px solid hsl(var(--primary))' : '1px solid rgba(255,255,255,0.1)',
+                                opacity: selectedProgressPhoto === photo.photoUrl ? 1 : 0.6,
+                                transition: 'all 0.2s'
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      {/* Upload new photo button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const el = document.getElementById('share-photo-file-input');
+                          el?.click();
+                        }}
+                        className="btn btn-secondary"
+                        style={{ padding: '8px 12px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <ImageIcon size={14} />
+                        {language === 'es' ? 'Subir nueva foto' : 'Upload new photo'}
+                      </button>
+                      <input
+                        id="share-photo-file-input"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleSharePhotoUpload}
+                        style={{ display: 'none' }}
+                      />
+                    </div>
+
+                    {/* Photo preview */}
+                    {selectedProgressPhoto && (
+                      <div style={{ position: 'relative', width: '100px', height: '100px', marginTop: '6px', borderRadius: '6px', overflow: 'hidden', border: '1px solid hsl(var(--border))' }}>
+                        <img src={selectedProgressPhoto} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button
+                          type="button"
+                          onClick={() => setSelectedProgressPhoto(null)}
+                          style={{
+                            position: 'absolute',
+                            top: '4px',
+                            right: '4px',
+                            background: 'rgba(0,0,0,0.6)',
+                            border: 'none',
+                            color: '#fff',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <button
-              onClick={() => {
-                if (pendingSessionToSave) {
-                  onSaveWorkout(pendingSessionToSave);
-                }
-                setActiveSession(null);
-                setTimerActive(false);
-                setRestTimerActive(false);
-                setRestTimeRemaining(0);
-                setBrokenPBs([]);
-                setPendingSessionToSave(null);
-                setShowCelebrationModal(false);
-              }}
-              className="btn btn-primary"
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '1rem',
-                fontWeight: 700,
-                background: 'linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%)',
-                borderColor: '#fbbf24',
-                color: '#000000',
-                boxShadow: '0 4px 15px rgba(251, 191, 36, 0.3)',
-                cursor: 'pointer'
-              }}
-            >
-              {t.pbCelebrationSaveBtn}
-            </button>
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCelebrationModal(false);
+                  setPendingSessionToSave(null);
+                }}
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: '12px', fontSize: '0.9rem' }}
+                disabled={publishingToFeed}
+              >
+                {language === 'es' ? 'Cancelar' : 'Cancel'}
+              </button>
+              
+              <button
+                type="button"
+                onClick={handleSaveAndShareWorkout}
+                className="btn btn-primary"
+                style={{
+                  flex: 2,
+                  padding: '12px',
+                  fontSize: '0.9rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+                disabled={publishingToFeed}
+              >
+                {publishingToFeed ? (
+                  <>
+                    <Loader2 size={16} className="spin" />
+                    {language === 'es' ? 'Publicando...' : 'Publishing...'}
+                  </>
+                ) : (
+                  <>
+                    <Check size={16} />
+                    {sharePublicly && !!username 
+                      ? (language === 'es' ? 'Publicar y Finalizar' : 'Publish & Finish')
+                      : (language === 'es' ? 'Finalizar sin Publicar' : 'Finish without sharing')}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>,
         document.body
@@ -3610,7 +3908,10 @@ export default function WorkoutTab({
                             proj.focusKey === 'focusPeaking' ? '#fbbf24' :
                             proj.focusKey === 'focusStrength' ? '#a78bfa' :
                             '#34d399',
-                          fontWeight: 700
+                          fontWeight: 700,
+                          display: 'inline-block',
+                          textAlign: 'center',
+                          whiteSpace: 'nowrap'
                         }}>
                           {focusName}
                         </span>
