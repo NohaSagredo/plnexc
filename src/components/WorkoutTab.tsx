@@ -3106,7 +3106,6 @@ export default function WorkoutTab({
               maxWidth: '500px',
               width: '100%',
               maxHeight: '80vh',
-              overflowY: 'auto',
               padding: '20px', 
               display: 'flex', 
               flexDirection: 'column', 
@@ -3114,7 +3113,8 @@ export default function WorkoutTab({
               border: '1px solid hsla(var(--primary) / 0.3)',
               borderRadius: 'var(--border-radius-md)',
               boxShadow: '0 10px 40px rgba(0, 0, 0, 0.6)',
-              background: '#0a0e17'
+              background: '#0a0e17',
+              overflow: 'hidden'
             }}
           >
             {/* Header of the unified details card */}
@@ -3152,7 +3152,7 @@ export default function WorkoutTab({
             </div>
 
             {/* Vertical list of exercises */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', flex: 1, paddingRight: '4px' }}>
               {previewExercises.map((ex, index) => {
                 let willBeSubstituted = false;
                 let substitutionTitle = '';
