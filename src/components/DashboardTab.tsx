@@ -1077,7 +1077,7 @@ export default function DashboardTab({
             {t.loadDistributionDesc || 'Volumen acumulado por grupo muscular (kg totales en tu historial)'}
           </p>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
             {Object.entries(stats.muscleVolume)
               .filter(([_, vol]) => vol > 0)
               .map(([muscle, vol]) => {
@@ -1168,7 +1168,8 @@ export default function DashboardTab({
                         border: '1px solid hsl(var(--border))',
                         cursor: 'pointer',
                         position: 'relative',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        flexShrink: 0
                       }}
                       className="hover-card-highlight shimmer-card"
                     >
@@ -1212,7 +1213,8 @@ export default function DashboardTab({
                         border: '1px solid hsl(var(--border))',
                         cursor: 'pointer',
                         position: 'relative',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        flexShrink: 0
                       }}
                       className="hover-card-highlight shimmer-card"
                     >
@@ -1256,7 +1258,8 @@ export default function DashboardTab({
                         border: '1px solid hsl(var(--border))',
                         cursor: 'pointer',
                         position: 'relative',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        flexShrink: 0
                       }}
                       className="hover-card-highlight shimmer-card"
                     >
@@ -1280,7 +1283,7 @@ export default function DashboardTab({
               uniqueExerciseNames.length === 0 ? (
                 <div style={{ textAlign: 'center', color: 'hsl(var(--muted))', fontSize: '0.8rem', padding: '20px' }}>{t.pbHistoryNoExercises || 'No hay ejercicios registrados.'}</div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flexShrink: 0 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', fontWeight: 700 }}>{t.pbSelectExercise || 'Selecciona Ejercicio:'}</label>
                     <select
