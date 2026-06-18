@@ -1,21 +1,9 @@
-import { db } from './firebase';
 import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  collection, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
   arrayUnion, 
   arrayRemove, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  addDoc, 
   increment 
 } from 'firebase/firestore';
+import { FirestoreModel } from './FirestoreORM';
 
 export interface WeightRecord {
   date: string;
@@ -78,14 +66,18 @@ export interface SyncedData {
 /**
  * Downloads data for a given user from Firestore
  */
+// Model instances representing DB Collections (ORM)
+export const UserModel = new FirestoreModel<SyncedData>('users');
+export const UsernameModel = new FirestoreModel<{ userId: string }>('usernames');
+export const PublicWorkoutModel = new FirestoreModel<FeedPost>('public_workouts');
+export const CommentModel = new FirestoreModel<PostComment>('public_workouts/:postId/comments');
+
+/**
+ * Downloads data for a given user from Firestore
+ */
 export async function downloadUserData(userId: string): Promise<SyncedData | null> {
   try {
-    const userDocRef = doc(db, 'users', userId);
-    const docSnap = await getDoc(userDocRef);
-    if (docSnap.exists()) {
-      return docSnap.data() as SyncedData;
-    }
-    return null;
+    return await UserModel.findById(userId);
   } catch (error: any) {
     console.error('Error fetching data from Firestore:', error);
     // Propagate error if Firestore is not initialized or database is not created
@@ -98,14 +90,11 @@ export async function downloadUserData(userId: string): Promise<SyncedData | nul
  */
 export async function uploadUserData(userId: string, data: Partial<SyncedData>): Promise<void> {
   try {
-    const userDocRef = doc(db, 'users', userId);
-    
     const updatePayload: any = {
       ...data,
       updatedAt: new Date().toISOString(),
     };
-
-    await setDoc(userDocRef, updatePayload, { merge: true });
+    await UserModel.set(userId, updatePayload, { merge: true });
   } catch (error: any) {
     console.error('Error saving data to Firestore:', error);
     throw error;
@@ -450,14 +439,10 @@ export async function isUsernameAvailable(username: string, currentUserId: strin
   const cleaned = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
   if (!cleaned || cleaned.length < 3) return false;
   
-  const usernameRef = doc(db, 'usernames', cleaned);
-  const usernameSnap = await getDoc(usernameRef);
-  
-  if (!usernameSnap.exists()) {
+  const data = await UsernameModel.findById(cleaned);
+  if (!data) {
     return true;
   }
-  
-  const data = usernameSnap.data();
   return data.userId === currentUserId;
 }
 
@@ -465,13 +450,9 @@ export async function isUsernameAvailable(username: string, currentUserId: strin
  * Verifies if user has a username, autogenerating one from email prefix if missing
  */
 export async function checkAndGenerateUsername(userId: string, email: string): Promise<string> {
-  const userDocRef = doc(db, 'users', userId);
-  const userSnap = await getDoc(userDocRef);
-  if (userSnap.exists()) {
-    const data = userSnap.data();
-    if (data.username) {
-      return data.username;
-    }
+  const userData = await UserModel.findById(userId);
+  if (userData && userData.username) {
+    return userData.username;
   }
 
   let baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
@@ -487,20 +468,18 @@ export async function checkAndGenerateUsername(userId: string, email: string): P
     if (attempts > 0) {
       username = `${baseUsername}${Math.floor(100 + Math.random() * 900)}`;
     }
-    const usernameRef = doc(db, 'usernames', username);
-    const usernameSnap = await getDoc(usernameRef);
-    if (!usernameSnap.exists()) {
+    const usernameSnap = await UsernameModel.findById(username);
+    if (!usernameSnap) {
       isAvailable = true;
     }
     attempts++;
   }
   
   // Reserve the username
-  const usernameRef = doc(db, 'usernames', username);
-  await setDoc(usernameRef, { userId });
+  await UsernameModel.create({ userId }, username);
   
   // Save to user profile
-  await setDoc(userDocRef, { username, displayName: username }, { merge: true });
+  await UserModel.set(userId, { username, displayName: username }, { merge: true });
   return username;
 }
 
@@ -511,10 +490,8 @@ export async function updateUserProfile(
   userId: string,
   data: { username?: string; displayName?: string; bio?: string; profilePicture?: string }
 ): Promise<void> {
-  const userDocRef = doc(db, 'users', userId);
-  const userSnap = await getDoc(userDocRef);
-  const currentProfile = userSnap.exists() ? userSnap.data() : {};
-  const oldUsername = currentProfile.username;
+  const currentProfile = await UserModel.findById(userId);
+  const oldUsername = currentProfile?.username;
   
   const updatePayload: any = { ...data };
 
@@ -526,17 +503,17 @@ export async function updateUserProfile(
     }
     
     // Register new username mapping
-    await setDoc(doc(db, 'usernames', cleanedNew), { userId });
+    await UsernameModel.create({ userId }, cleanedNew);
     
     // Delete old username mapping
     if (oldUsername) {
-      await deleteDoc(doc(db, 'usernames', oldUsername.toLowerCase()));
+      await UsernameModel.delete(oldUsername.toLowerCase());
     }
     
     updatePayload.username = cleanedNew;
   }
   
-  await setDoc(userDocRef, updatePayload, { merge: true });
+  await UserModel.set(userId, updatePayload, { merge: true });
 }
 
 /**
@@ -547,21 +524,18 @@ export async function toggleFollowUser(
   targetUserId: string,
   isFollowing: boolean
 ): Promise<void> {
-  const currentUserRef = doc(db, 'users', currentUserId);
-  const targetUserRef = doc(db, 'users', targetUserId);
-  
   if (isFollowing) {
-    await updateDoc(currentUserRef, {
+    await UserModel.update(currentUserId, {
       following: arrayRemove(targetUserId)
     });
-    await updateDoc(targetUserRef, {
+    await UserModel.update(targetUserId, {
       followers: arrayRemove(currentUserId)
     });
   } else {
-    await updateDoc(currentUserRef, {
+    await UserModel.update(currentUserId, {
       following: arrayUnion(targetUserId)
     });
-    await updateDoc(targetUserRef, {
+    await UserModel.update(targetUserId, {
       followers: arrayUnion(currentUserId)
     });
   }
@@ -573,35 +547,32 @@ export async function toggleFollowUser(
 export async function publishWorkoutToFeed(
   postPayload: Omit<FeedPost, 'id' | 'likes' | 'commentsCount' | 'createdAt'>
 ): Promise<string> {
-  const feedCollection = collection(db, 'public_workouts');
-  const docRef = await addDoc(feedCollection, {
+  const newPostId = await PublicWorkoutModel.create({
     ...postPayload,
     likes: [],
     commentsCount: 0,
     createdAt: new Date().toISOString()
   });
-  return docRef.id;
+  return newPostId;
 }
 
 /**
  * Toggles a like on a post, returning true if liked, false if unliked
  */
 export async function toggleLikePost(postId: string, userId: string): Promise<boolean> {
-  const postRef = doc(db, 'public_workouts', postId);
-  const postSnap = await getDoc(postRef);
-  if (!postSnap.exists()) return false;
+  const postData = await PublicWorkoutModel.findById(postId);
+  if (!postData) return false;
   
-  const data = postSnap.data();
-  const likes: string[] = data.likes || [];
+  const likes: string[] = postData.likes || [];
   const hasLiked = likes.includes(userId);
   
   if (hasLiked) {
-    await updateDoc(postRef, {
+    await PublicWorkoutModel.update(postId, {
       likes: arrayRemove(userId)
     });
     return false;
   } else {
-    await updateDoc(postRef, {
+    await PublicWorkoutModel.update(postId, {
       likes: arrayUnion(userId)
     });
     return true;
@@ -615,14 +586,12 @@ export async function addCommentToPost(
   postId: string,
   commentPayload: Omit<PostComment, 'id' | 'createdAt'>
 ): Promise<void> {
-  const commentsCollection = collection(db, 'public_workouts', postId, 'comments');
-  await addDoc(commentsCollection, {
+  await CommentModel.create({
     ...commentPayload,
     createdAt: new Date().toISOString()
-  });
+  }, undefined, { postId });
   
-  const postRef = doc(db, 'public_workouts', postId);
-  await updateDoc(postRef, {
+  await PublicWorkoutModel.update(postId, {
     commentsCount: increment(1)
   });
 }
@@ -631,63 +600,38 @@ export async function addCommentToPost(
  * Fetches comments for a public workout post
  */
 export async function getPostComments(postId: string): Promise<PostComment[]> {
-  const commentsRef = collection(db, 'public_workouts', postId, 'comments');
-  const q = query(commentsRef, orderBy('createdAt', 'asc'));
-  const querySnapshot = await getDocs(q);
-  const comments: PostComment[] = [];
-  querySnapshot.forEach((docSnap) => {
-    comments.push({
-      id: docSnap.id,
-      ...docSnap.data()
-    } as PostComment);
-  });
-  return comments;
+  return await CommentModel.find({
+    orderBy: [['createdAt', 'asc']]
+  }, { postId });
 }
 
 /**
  * Retrieves public workouts feed: either global "Discover" or "Following"
  */
 export async function getPublicWorkoutsFeed(followingUserIds?: string[]): Promise<FeedPost[]> {
-  const postsCollection = collection(db, 'public_workouts');
-  let q;
-  
   if (followingUserIds && followingUserIds.length > 0) {
     const limitedFollows = followingUserIds.slice(0, 30);
-    q = query(
-      postsCollection,
-      where('userId', 'in', limitedFollows),
-      orderBy('createdAt', 'desc'),
-      limit(50)
-    );
+    return await PublicWorkoutModel.find({
+      where: [['userId', 'in', limitedFollows]],
+      orderBy: [['createdAt', 'desc']],
+      limit: 50
+    });
   } else if (followingUserIds) {
     return [];
   } else {
-    q = query(
-      postsCollection,
-      orderBy('createdAt', 'desc'),
-      limit(50)
-    );
+    return await PublicWorkoutModel.find({
+      orderBy: [['createdAt', 'desc']],
+      limit: 50
+    });
   }
-  
-  const querySnapshot = await getDocs(q);
-  const posts: FeedPost[] = [];
-  querySnapshot.forEach((docSnap) => {
-    posts.push({
-      id: docSnap.id,
-      ...docSnap.data()
-    } as FeedPost);
-  });
-  return posts;
 }
 
 /**
  * Retrieves an athlete's public profile and public stats
  */
 export async function getAthleteProfile(userId: string): Promise<any | null> {
-  const userDocRef = doc(db, 'users', userId);
-  const docSnap = await getDoc(userDocRef);
-  if (docSnap.exists()) {
-    const data = docSnap.data();
+  const data = await UserModel.findById(userId);
+  if (data) {
     return {
       userId,
       username: data.username || '',

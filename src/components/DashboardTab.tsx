@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import { auth } from '../utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { EXERCISES_DB } from '../data/exercises_db';
+import { EXERCISES_DB, isTimeBasedExercise } from '../data/exercises_db';
 import { TRANSLATIONS, getExerciseName } from '../utils/translations';
 import { 
   ResponsiveContainer, 
@@ -1166,7 +1166,9 @@ export default function DashboardTab({
                         background: 'rgba(255,255,255,0.01)',
                         borderRadius: '8px',
                         border: '1px solid hsl(var(--border))',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        position: 'relative',
+                        overflow: 'hidden'
                       }}
                       className="hover-card-highlight shimmer-card"
                     >
@@ -1175,9 +1177,11 @@ export default function DashboardTab({
                           {resolveExerciseDisplayName(exercise)}
                         </span>
                         <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
-                          {t.pbEst1RMWithReps 
-                            ? t.pbEst1RMWithReps.replace('{weight}', profile.maxEst1RM.weight.toString()).replace('{reps}', profile.maxEst1RM.reps.toString())
-                            : `Logrado: ${profile.maxEst1RM.weight}kg x ${profile.maxEst1RM.reps} reps`}
+                          {isTimeBasedExercise(exercise)
+                            ? (language === 'es' ? `Logrado: ${profile.maxEst1RM.weight}kg x ${profile.maxEst1RM.reps} s` : `Achieved: ${profile.maxEst1RM.weight}kg x ${profile.maxEst1RM.reps} s`)
+                            : (t.pbEst1RMWithReps 
+                                ? t.pbEst1RMWithReps.replace('{weight}', profile.maxEst1RM.weight.toString()).replace('{reps}', profile.maxEst1RM.reps.toString())
+                                : `Logrado: ${profile.maxEst1RM.weight}kg x ${profile.maxEst1RM.reps} reps`)}
                         </span>
                       </div>
                       <span className="badge badge-primary" style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>
@@ -1206,7 +1210,9 @@ export default function DashboardTab({
                         background: 'rgba(255,255,255,0.01)',
                         borderRadius: '8px',
                         border: '1px solid hsl(var(--border))',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        position: 'relative',
+                        overflow: 'hidden'
                       }}
                       className="hover-card-highlight shimmer-card"
                     >
@@ -1215,9 +1221,11 @@ export default function DashboardTab({
                           {resolveExerciseDisplayName(exercise)}
                         </span>
                         <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>
-                          {t.pbMaxWeightWithReps 
-                            ? t.pbMaxWeightWithReps.replace('{reps}', profile.maxWeight.reps.toString())
-                            : `Realizado con ${profile.maxWeight.reps} reps`}
+                          {isTimeBasedExercise(exercise)
+                            ? (language === 'es' ? `Sostenido por ${profile.maxWeight.reps} s` : `Held for ${profile.maxWeight.reps} s`)
+                            : (t.pbMaxWeightWithReps 
+                                ? t.pbMaxWeightWithReps.replace('{reps}', profile.maxWeight.reps.toString())
+                                : `Realizado con ${profile.maxWeight.reps} reps`)}
                         </span>
                       </div>
                       <span className="badge badge-secondary" style={{ fontSize: '0.8rem', fontWeight: 'bold', background: 'hsla(var(--secondary) / 0.1)', color: 'hsl(var(--secondary))', border: '1px solid hsla(var(--secondary) / 0.2)' }}>
@@ -1246,7 +1254,9 @@ export default function DashboardTab({
                         background: 'rgba(255,255,255,0.01)',
                         borderRadius: '8px',
                         border: '1px solid hsl(var(--border))',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        position: 'relative',
+                        overflow: 'hidden'
                       }}
                       className="hover-card-highlight shimmer-card"
                     >
@@ -1325,7 +1335,7 @@ export default function DashboardTab({
                               }}
                               title={record ? (t.pbLogDate ? t.pbLogDate.replace('{date}', dateLocaleStr) : `Logrado el ${dateLocaleStr}`) : (t.pbNoData || 'Sin datos')}
                             >
-                              <span style={{ fontSize: '0.6rem', color: 'hsl(var(--muted))', fontWeight: 700 }}>{r} {t.pbRepsSuffix || 'Reps'}</span>
+                              <span style={{ fontSize: '0.6rem', color: 'hsl(var(--muted))', fontWeight: 700 }}>{r} {selectedExerciseForRepsTab && isTimeBasedExercise(selectedExerciseForRepsTab) ? 's' : (t.pbRepsSuffix || 'Reps')}</span>
                               <strong style={{ fontSize: '0.75rem', color: record ? '#fbbf24' : 'rgba(255,255,255,0.1)' }}>
                                 {record ? `${record.weight}${t.pbWeightSuffix || 'kg'}` : '---'}
                               </strong>
@@ -1839,7 +1849,8 @@ export default function DashboardTab({
                       stepData.focus === 'focusDeload' ? t.focusDeload :
                       stepData.focus === 'focusPower' ? t.focusPower : stepData.focus
                     ) : '';
-                    const setsReps = stepData ? `${stepData.sets}x${stepData.reps}` : '';
+                    const repsSuffix = projectionsExercise && isTimeBasedExercise(projectionsExercise) ? 's' : '';
+                    const setsReps = stepData ? `${stepData.sets}x${stepData.reps}${repsSuffix}` : '';
                     return `${label} (${focusTranslated}) - ${setsReps}`;
                   }}
                 />
@@ -1904,7 +1915,7 @@ export default function DashboardTab({
                     {proj.weightKg} kg
                   </strong>
                   <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.7)' }}>
-                    {proj.sets}x{proj.reps} reps
+                    {proj.sets}x{proj.reps} {projectionsExercise && isTimeBasedExercise(projectionsExercise) ? 's' : 'reps'}
                   </span>
                   <span 
                     style={{ 
@@ -2775,7 +2786,7 @@ export default function DashboardTab({
                     </strong>
                     <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginTop: '2px' }}>
                       Logrado el {formatDateStr(profile.maxEst1RM.date)} <br />
-                      con {profile.maxEst1RM.weight} kg x {profile.maxEst1RM.reps} reps
+                      con {profile.maxEst1RM.weight} kg x {profile.maxEst1RM.reps} {selectedExerciseForChart && isTimeBasedExercise(selectedExerciseForChart) ? 's' : 'reps'}
                     </span>
                   </div>
 
@@ -2786,7 +2797,7 @@ export default function DashboardTab({
                     </strong>
                     <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginTop: '2px' }}>
                       Logrado el {formatDateStr(profile.maxWeight.date)} <br />
-                      con {profile.maxWeight.reps} reps
+                      con {profile.maxWeight.reps} {selectedExerciseForChart && isTimeBasedExercise(selectedExerciseForChart) ? 's' : 'reps'}
                     </span>
                   </div>
 

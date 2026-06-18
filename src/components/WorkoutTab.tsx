@@ -22,7 +22,10 @@ import {
   ChevronDown,
   ChevronUp,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  ArrowUp,
+  ArrowDown,
+  Search
 } from 'lucide-react';
 import { proposeNextSet, calculatePBProfiles, getBodyweightPercentage, projectFutureSessions, compressAndResizeImage } from '../utils/ProgressionEngine';
 import type { SetData, ProgressionTarget, ProgressionSystem } from '../utils/ProgressionEngine';
@@ -32,7 +35,7 @@ import RoutineBuilder from './RoutineBuilder';
 import { publishWorkoutToFeed } from '../utils/firebaseSync';
 import { auth } from '../utils/firebase';
 import { DEFAULT_PRESETS } from '../data/default_routines';
-import { EXERCISES_DB } from '../data/exercises_db';
+import { EXERCISES_DB, isTimeBasedExercise } from '../data/exercises_db';
 import { getStrengthStandards } from '../utils/StrengthStandards';
 import { TRANSLATIONS, getExerciseName, translateEngineText } from '../utils/translations';
 
@@ -393,6 +396,23 @@ export default function WorkoutTab({
   const [selectedProgressPhoto, setSelectedProgressPhoto] = useState<string | null>(null);
   const [publishingToFeed, setPublishingToFeed] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState<boolean>(false);
+
+  // Add Exercise & Reorder States
+  const [showAddExerciseModal, setShowAddExerciseModal] = useState<boolean>(false);
+  const [exerciseSearchText, setExerciseSearchText] = useState<string>('');
+  const [selectedAddExerciseMuscle, setSelectedAddExerciseMuscle] = useState<string>('Todos');
+  const [updateRoutineOnFinish, setUpdateRoutineOnFinish] = useState<boolean>(false);
+
+  const filteredExercisesForAdd = useMemo(() => {
+    return EXERCISES_DB.filter(ex => {
+      const matchSearch = ex.title.toLowerCase().includes(exerciseSearchText.toLowerCase()) || 
+                          getExerciseName(ex.id, ex.title, language).toLowerCase().includes(exerciseSearchText.toLowerCase());
+      
+      const matchMuscle = selectedAddExerciseMuscle === 'Todos' || ex.muscleGroup === selectedAddExerciseMuscle;
+      
+      return matchSearch && matchMuscle;
+    });
+  }, [exerciseSearchText, selectedAddExerciseMuscle, language]);
 
   // Strength Road Map States
   const [projectionExercise, setProjectionExercise] = useState<string | null>(null);
@@ -890,6 +910,117 @@ export default function WorkoutTab({
     });
   };
 
+  const handleMoveExerciseUp = (exIdx: number) => {
+    if (exIdx === 0) return;
+    setActiveSession((prev: any) => {
+      if (!prev) return prev;
+      const newExercises = [...prev.exercises];
+      const temp = newExercises[exIdx];
+      newExercises[exIdx] = newExercises[exIdx - 1];
+      newExercises[exIdx - 1] = temp;
+      return {
+        ...prev,
+        exercises: newExercises
+      };
+    });
+  };
+
+  const handleMoveExerciseDown = (exIdx: number) => {
+    setActiveSession((prev: any) => {
+      if (!prev) return prev;
+      if (exIdx >= prev.exercises.length - 1) return prev;
+      const newExercises = [...prev.exercises];
+      const temp = newExercises[exIdx];
+      newExercises[exIdx] = newExercises[exIdx + 1];
+      newExercises[exIdx + 1] = temp;
+      return {
+        ...prev,
+        exercises: newExercises
+      };
+    });
+  };
+
+  const handleRemoveExercise = (exIdx: number) => {
+    if (window.confirm(language === 'es' ? '¿Estás seguro de que deseas quitar este ejercicio del entrenamiento?' : 'Are you sure you want to remove this exercise from the workout?')) {
+      setActiveSession((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          exercises: prev.exercises.filter((_: any, idx: number) => idx !== exIdx)
+        };
+      });
+    }
+  };
+
+  const handleAddExerciseToActiveSession = (exTitle: string) => {
+    const exerciseHistory: any[] = [];
+    localHistory.forEach(session => {
+      const found = session.exercises.find((e: any) => e.title === exTitle);
+      if (found) {
+        exerciseHistory.push({
+          date: new Date(session.parsedDate),
+          sets: found.sets
+        });
+      }
+    });
+    
+    exerciseHistory.sort((a, b) => a.date.getTime() - b.date.getTime());
+    const latestSession = exerciseHistory[exerciseHistory.length - 1];
+    
+    const dbEx = EXERCISES_DB.find(db => db.title.toLowerCase() === exTitle.toLowerCase() || db.id === exTitle);
+    const isBodyweight = dbEx?.equipment === 'Peso Corporal';
+
+    let target: ProgressionTarget = {
+      suggestedWeight: isBodyweight ? Math.round(bodyWeight * getBodyweightPercentage(exTitle) * 2) / 2 : 10,
+      suggestedReps: 10,
+      message: isBodyweight 
+        ? `Carga sugerida inteligente de ${Math.round(bodyWeight * getBodyweightPercentage(exTitle) * 2) / 2}kg basado en el peso corporal.`
+        : 'Comienza con una carga moderada.',
+      isDeload: false
+    };
+
+    if (latestSession && latestSession.sets) {
+      const lastSetsMapped: SetData[] = latestSession.sets.map((s: any) => ({
+        setIndex: s.setIndex,
+        setType: s.setType || 'normal',
+        weightKg: s.weightKg,
+        reps: s.reps,
+        rpe: s.rpe
+      }));
+      target = proposeNextSet(exTitle, lastSetsMapped, 10, false, undefined, bodyWeight, progressionSystem);
+    }
+
+    const initialSets = Array.from({ length: 3 }).map((_, i) => ({
+      setIndex: i,
+      setType: (i === 0 && target.suggestedWeight > 20 && !isBodyweight) ? 'warmup' : 'normal',
+      weightKg: (i === 0 && target.suggestedWeight > 20 && !isBodyweight) ? Math.round((target.suggestedWeight * 0.6) / 2.5) * 2.5 : target.suggestedWeight,
+      reps: target.suggestedReps,
+      rpe: null as number | null,
+      completed: false,
+      hasPain: false
+    }));
+
+    const newExercise = {
+      originalTitle: exTitle,
+      title: exTitle,
+      isSubstituted: false,
+      suggestion: target,
+      sets: initialSets
+    };
+
+    setActiveSession((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        exercises: [...prev.exercises, newExercise]
+      };
+    });
+
+    setShowAddExerciseModal(false);
+    setExerciseSearchText('');
+    setSelectedAddExerciseMuscle('Todos');
+  };
+
   const handleFinishWorkout = () => {
     if (!activeSession) return;
     
@@ -985,11 +1116,16 @@ export default function WorkoutTab({
         const details: string[] = [];
 
         if (maxWeightInSession > oldMaxWeight) {
-          details.push(t.pbCelebrationDetailMaxWeight
+          let msg = t.pbCelebrationDetailMaxWeight
             .replace('{old}', oldMaxWeight.toString())
-            .replace('{new}', maxWeightInSession.toString())
-            .replace('{reps}', sessionMaxWeightReps.toString())
-          );
+            .replace('{new}', maxWeightInSession.toString());
+          if (isTimeBasedExercise(ex.title)) {
+            const isEs = language === 'es';
+            msg = msg.replace('(x {reps} reps)', isEs ? `(sostenido por ${sessionMaxWeightReps} s)` : `(held for ${sessionMaxWeightReps} s)`);
+          } else {
+            msg = msg.replace('{reps}', sessionMaxWeightReps.toString());
+          }
+          details.push(msg);
           exerciseBroken = true;
         }
 
@@ -1006,11 +1142,15 @@ export default function WorkoutTab({
           const reps = parseInt(repsStr, 10);
           const oldRepPR = profile.repPRs[reps]?.weight || 0;
           if (oldRepPR > 0 && weight > oldRepPR) {
-            details.push(t.pbCelebrationDetailRepPR
-              .replace('{reps}', reps.toString())
+            let msg = t.pbCelebrationDetailRepPR
               .replace('{old}', oldRepPR.toString())
-              .replace('{new}', weight.toString())
-            );
+              .replace('{new}', weight.toString());
+            if (isTimeBasedExercise(ex.title)) {
+              msg = msg.replace('{reps} reps', `${reps} s`);
+            } else {
+              msg = msg.replace('{reps}', reps.toString());
+            }
+            details.push(msg);
             exerciseBroken = true;
           }
         });
@@ -1037,6 +1177,12 @@ export default function WorkoutTab({
     
     setPublishingToFeed(true);
     try {
+      // If user chose to update/save the routine template
+      if (updateRoutineOnFinish && onSaveCustomRoutine) {
+        const exerciseTitles = pendingSessionToSave.exercises.map((ex: any) => ex.title);
+        onSaveCustomRoutine(pendingSessionToSave.title, exerciseTitles);
+      }
+
       let photoUrl = selectedProgressPhoto || undefined;
       
       if (selectedProgressPhoto && selectedProgressPhoto.startsWith('data:image')) {
@@ -1105,6 +1251,7 @@ export default function WorkoutTab({
       
       setShareComment('');
       setSelectedProgressPhoto(null);
+      setUpdateRoutineOnFinish(false);
     } catch (err: any) {
       console.error('Error sharing workout:', err);
       alert('Error al guardar el entrenamiento: ' + (err.message || err));
@@ -2034,6 +2181,9 @@ export default function WorkoutTab({
               </div>
               
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn btn-secondary" onClick={() => setShowAddExerciseModal(true)} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }} title={language === 'es' ? 'Agregar Ejercicio' : 'Add Exercise'}>
+                  <Plus size={18} /> {language === 'es' ? 'Agregar' : 'Add'}
+                </button>
                 <button className="btn btn-danger" onClick={handleCancelWorkout} style={{ padding: '8px 16px' }} title="Cancelar entrenamiento">
                   <X size={18} /> Cancelar
                 </button>
@@ -2138,15 +2288,35 @@ export default function WorkoutTab({
 
           {/* Exercises Loop */}
           {activeSession.exercises.map((ex: any, exIdx: number) => (
-            <div key={ex.originalTitle} className="glass-panel" style={{ padding: '20px', position: 'relative' }}>
+            <div key={`${ex.title}_${exIdx}`} className="glass-panel" style={{ padding: '20px', position: 'relative' }}>
               
               {/* Exercise Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '12px', marginBottom: '16px' }}>
-                <div>
-                  <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Dumbbell size={18} color="hsl(var(--primary))" />
-                    {ex.title}
-                  </h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Reordering buttons */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginRight: '6px' }}>
+                    <button 
+                      onClick={() => handleMoveExerciseUp(exIdx)}
+                      disabled={exIdx === 0}
+                      style={{ background: 'none', border: 'none', color: exIdx === 0 ? 'rgba(255,255,255,0.05)' : 'hsl(var(--muted))', cursor: exIdx === 0 ? 'default' : 'pointer', padding: '1px', display: 'flex', alignItems: 'center' }}
+                      title={language === 'es' ? 'Mover arriba' : 'Move up'}
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+                    <button 
+                      onClick={() => handleMoveExerciseDown(exIdx)}
+                      disabled={exIdx === activeSession.exercises.length - 1}
+                      style={{ background: 'none', border: 'none', color: exIdx === activeSession.exercises.length - 1 ? 'rgba(255,255,255,0.05)' : 'hsl(var(--muted))', cursor: exIdx === activeSession.exercises.length - 1 ? 'default' : 'pointer', padding: '1px', display: 'flex', alignItems: 'center' }}
+                      title={language === 'es' ? 'Mover abajo' : 'Move down'}
+                    >
+                      <ArrowDown size={14} />
+                    </button>
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                      <Dumbbell size={18} color="hsl(var(--primary))" />
+                      {ex.title}
+                    </h3>
                   {(() => {
                     const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
                     if (!dbEx) return null;
@@ -2172,9 +2342,21 @@ export default function WorkoutTab({
                     </span>
                   )}
                 </div>
+              </div>
 
-                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                  <span><strong>Objetivo:</strong> {ex.suggestion.suggestedWeight}kg x {ex.suggestion.suggestedReps} reps</span>
+                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span><strong>Objetivo:</strong> {ex.suggestion.suggestedWeight}kg x {ex.suggestion.suggestedReps}{isTimeBasedExercise(ex.title) ? 's' : ' reps'}</span>
+                    <button 
+                      onClick={() => handleRemoveExercise(exIdx)}
+                      style={{ background: 'none', border: 'none', color: 'hsl(var(--danger))', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', opacity: 0.7 }}
+                      onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                      onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                      title={language === 'es' ? 'Quitar ejercicio de la rutina' : 'Remove exercise from routine'}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                   {(() => {
                     const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
                     if (!standards) return null;
@@ -2272,7 +2454,7 @@ export default function WorkoutTab({
                   }}>
                     <span>🏆</span>
                     <div>
-                      <strong>Récord de Fuerza:</strong> {profile.maxWeight.weight} kg x {profile.maxWeight.reps} reps
+                      <strong>Récord de Fuerza:</strong> {profile.maxWeight.weight} kg x {profile.maxWeight.reps} {isTimeBasedExercise(ex.title) ? 's' : 'reps'}
                       <span style={{ opacity: 0.7, marginLeft: '8px' }}>
                         (1RM Estimado: {Math.round(profile.maxEst1RM.value)} kg)
                       </span>
@@ -2392,7 +2574,11 @@ export default function WorkoutTab({
                       <th style={{ padding: '8px' }}>{t.tableSet}</th>
                       <th style={{ padding: '8px' }}>{t.tableType}</th>
                       <th style={{ padding: '8px' }}>{t.tableWeight}</th>
-                      <th style={{ padding: '8px' }}>{language === 'es' ? 'Reps' : 'Reps'}</th>
+                      <th style={{ padding: '8px' }}>
+                        {isTimeBasedExercise(ex.title)
+                          ? (language === 'es' ? 'Tiempo (seg)' : 'Time (sec)')
+                          : (t.repsLabel || 'Reps')}
+                      </th>
                       <th style={{ padding: '8px' }}>RPE / {t.tablePain}</th>
                       <th style={{ padding: '8px', textAlign: 'center' }}>{t.tableCompleted}</th>
                     </tr>
@@ -2433,7 +2619,7 @@ export default function WorkoutTab({
                           <input 
                             type="number" 
                             value={set.reps === null ? '' : set.reps} 
-                            placeholder="0"
+                            placeholder={isTimeBasedExercise(ex.title) ? "60s" : "0"}
                             onChange={(e) => handleSetChange(exIdx, setIdx, 'reps', e.target.value ? parseInt(e.target.value, 10) : null)}
                             style={{ padding: '6px', fontSize: '0.85rem', width: '60px', textAlign: 'center' }}
                           />
@@ -2493,7 +2679,11 @@ export default function WorkoutTab({
                                   } else if (isNewMaxEst1RM) {
                                     pbReason = "🏆 ¡Nuevo Récord de 1RM Estimado!";
                                   } else if (isNewRepPR) {
-                                    pbReason = `🏆 ¡Nuevo Récord para ${reps} Repeticiones!`;
+                                    if (isTimeBasedExercise(ex.title)) {
+                                      pbReason = language === 'es' ? `🏆 ¡Nuevo Récord para ${reps} segundos!` : `🏆 New Record for ${reps} seconds!`;
+                                    } else {
+                                      pbReason = language === 'es' ? `🏆 ¡Nuevo Récord para ${reps} Repeticiones!` : `🏆 New Record for ${reps} Repetitions!`;
+                                    }
                                   }
                                 }
                               }
@@ -2551,6 +2741,28 @@ export default function WorkoutTab({
 
             </div>
           ))}
+
+          {/* Add Exercise button at the bottom */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px', marginBottom: '24px' }}>
+            <button 
+              className="btn btn-secondary hover-card-highlight" 
+              onClick={() => setShowAddExerciseModal(true)} 
+              style={{ 
+                padding: '12px 24px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                borderRadius: '24px', 
+                fontSize: '0.9rem', 
+                border: '1px dashed hsl(var(--primary))', 
+                color: 'hsl(var(--primary))', 
+                background: 'rgba(0,0,0,0.15)',
+                transition: 'all 0.2s'
+              }}
+            >
+              <Plus size={18} /> {language === 'es' ? 'Agregar Ejercicio a este entrenamiento' : 'Add Exercise to this workout'}
+            </button>
+          </div>
 
         </div>
       )}
@@ -2651,9 +2863,30 @@ export default function WorkoutTab({
               </div>
             )}
 
-            {/* Social Sharing Setup */}
+            {/* Social Sharing & Routine Update Setup */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'left' }}>
               
+              {/* Update Routine Option */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', paddingBottom: '12px', borderBottom: '1px solid hsla(var(--border) / 0.3)' }}>
+                <input
+                  type="checkbox"
+                  id="updateRoutineCheck"
+                  checked={updateRoutineOnFinish}
+                  onChange={(e) => setUpdateRoutineOnFinish(e.target.checked)}
+                  style={{ marginTop: '4px', cursor: 'pointer' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <label htmlFor="updateRoutineCheck" style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
+                    {language === 'es' ? 'Actualizar plantilla de rutina' : 'Update routine template'}
+                  </label>
+                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', marginTop: '2px' }}>
+                    {language === 'es' 
+                      ? `Guarda los cambios de este entrenamiento (ejercicios agregados, eliminados u ordenados) en tu rutina "${pendingSessionToSave?.title}".`
+                      : `Save the changes from this workout (added, removed, or reordered exercises) to your routine "${pendingSessionToSave?.title}".`}
+                  </span>
+                </div>
+              </div>
+
               {/* Toggle sharing */}
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                 <input
@@ -3480,7 +3713,11 @@ export default function WorkoutTab({
                               <tr style={{ borderBottom: '1px solid hsla(var(--border) / 0.3)', textAlign: 'left' }}>
                                 <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))', width: '40px' }}>#</th>
                                 <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.weightLabel || 'Peso'} (kg)</th>
-                                <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>{t.repsLabel || 'Reps'}</th>
+                                <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
+                                  {isTimeBasedExercise(ex.title)
+                                    ? (language === 'es' ? 'Tiempo (seg)' : 'Time (sec)')
+                                    : (t.repsLabel || 'Reps')}
+                                </th>
                                 <th style={{ padding: '6px 4px', fontSize: '0.75rem', color: 'hsl(var(--muted))', width: '110px', textAlign: 'center' }}>{t.pain || 'Molestia'}</th>
                                 {isEditingHistorySession && <th style={{ padding: '6px 4px', width: '40px' }}></th>}
                               </tr>
@@ -3533,7 +3770,9 @@ export default function WorkoutTab({
                                           }}
                                         />
                                       ) : (
-                                        <span style={{ fontSize: '0.85rem', color: '#ffffff' }}>{set.reps}</span>
+                                        <span style={{ fontSize: '0.85rem', color: '#ffffff' }}>
+                                          {set.reps} {isTimeBasedExercise(ex.title) ? 's' : ''}
+                                        </span>
                                       )}
                                     </td>
                                     <td style={{ padding: '8px 4px', textAlign: 'center' }}>
@@ -3892,7 +4131,7 @@ export default function WorkoutTab({
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#ffffff' }}>
-                          {proj.weightKg} kg x {proj.reps} {t.reps}
+                          {proj.weightKg} kg x {proj.reps} {projectionExercise && isTimeBasedExercise(projectionExercise) ? 's' : t.reps}
                         </span>
                         <span style={{ 
                           fontSize: '0.7rem', 
@@ -3943,6 +4182,139 @@ export default function WorkoutTab({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Add Exercise Modal */}
+      {showAddExerciseModal && createPortal(
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(5, 7, 12, 0.85)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass-panel fade-in" style={{
+            maxWidth: '600px',
+            width: '100%',
+            padding: '24px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            border: '1px solid hsl(var(--border))'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Dumbbell size={20} color="hsl(var(--primary))" />
+                {language === 'es' ? 'Agregar Ejercicio al Entrenamiento' : 'Add Exercise to Workout'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowAddExerciseModal(false);
+                  setExerciseSearchText('');
+                  setSelectedAddExerciseMuscle('Todos');
+                }}
+                style={{ background: 'none', border: 'none', color: 'hsl(var(--muted))', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Search Box */}
+            <div style={{ position: 'relative' }}>
+              <Search size={16} color="hsl(var(--muted))" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                value={exerciseSearchText}
+                onChange={(e) => setExerciseSearchText(e.target.value)}
+                placeholder={language === 'es' ? 'Buscar ejercicio...' : 'Search exercise...'}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 36px',
+                  fontSize: '0.85rem',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            {/* Muscle Filter Pills */}
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+              {['Todos', 'Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Cuádriceps', 'Femorales', 'Glúteos', 'Core'].map(muscle => (
+                <button
+                  key={muscle}
+                  onClick={() => setSelectedAddExerciseMuscle(muscle)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '20px',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    background: selectedAddExerciseMuscle === muscle ? 'hsl(var(--primary))' : 'rgba(255,255,255,0.03)',
+                    color: selectedAddExerciseMuscle === muscle ? '#000' : 'hsl(var(--muted))',
+                    border: '1px solid ' + (selectedAddExerciseMuscle === muscle ? 'hsl(var(--primary))' : 'hsla(var(--border) / 0.5)'),
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {translateMuscleGroup(muscle)}
+                </button>
+              ))}
+            </div>
+
+            {/* Exercises List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', maxHeight: '45vh', paddingRight: '4px' }}>
+              {filteredExercisesForAdd.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px', color: 'hsl(var(--muted))', fontSize: '0.85rem' }}>
+                  {language === 'es' ? 'No se encontraron ejercicios.' : 'No exercises found.'}
+                </div>
+              ) : (
+                filteredExercisesForAdd.map(ex => (
+                  <div
+                    key={ex.id}
+                    onClick={() => handleAddExerciseToActiveSession(ex.title)}
+                    className="hover-card-highlight"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '12px 16px',
+                      background: 'rgba(255, 255, 255, 0.01)',
+                      border: '1px solid hsla(var(--border) / 0.3)',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <strong style={{ fontSize: '0.875rem', color: '#fff' }}>
+                        {resolveExerciseDisplayName(ex.title)}
+                      </strong>
+                      <span style={{ fontSize: '0.72rem', color: 'hsl(var(--muted))' }}>
+                        {translateEquipment(ex.equipment)} • {translateMuscleGroup(ex.muscleGroup)}
+                      </span>
+                    </div>
+                    <Plus size={16} color="hsl(var(--primary))" />
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>,

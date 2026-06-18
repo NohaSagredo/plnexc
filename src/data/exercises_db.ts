@@ -12,6 +12,25 @@ export interface Exercise {
   secondaryMuscleGroups?: ('Pecho' | 'Espalda' | 'Hombros' | 'Bíceps' | 'Tríceps' | 'Cuádriceps' | 'Femorales' | 'Glúteos' | 'Pantorrillas' | 'Core')[];
 }
 
+export function isTimeBasedExercise(title: string): boolean {
+  const t = title.toLowerCase();
+  return (
+    t.includes('plank') ||
+    t.includes('plancha') ||
+    t.includes('side bridge') ||
+    t.includes('dead hang') ||
+    t.includes('hollow hold') ||
+    t.includes('hollow body hold') ||
+    t.includes('l-sit') ||
+    t.includes('wall sit') ||
+    t.includes('lsit') ||
+    t.includes('front lever') ||
+    t.includes('back lever') ||
+    t.includes('planche') ||
+    t.includes('handstand hold')
+  );
+}
+
 export const EXERCISES_DB: Exercise[] = [
   // === 47 HISTORICAL CSV EXERCISES ===
   {
