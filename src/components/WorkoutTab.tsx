@@ -2291,14 +2291,32 @@ export default function WorkoutTab({
             <div key={`${ex.title}_${exIdx}`} className="glass-panel" style={{ padding: '20px', position: 'relative' }}>
               
               {/* Exercise Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '12px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {/* Reordering buttons */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginRight: '6px' }}>
+              {/* Exercise Header */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '12px', marginBottom: '16px' }}>
+                {/* Title & List Management Controls Row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '12px' }}>
+                  <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontWeight: 800 }}>
+                    <Dumbbell size={18} color="hsl(var(--primary))" />
+                    {ex.title}
+                  </h3>
+
+                  {/* Reordering & Deleting buttons group */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <button 
                       onClick={() => handleMoveExerciseUp(exIdx)}
                       disabled={exIdx === 0}
-                      style={{ background: 'none', border: 'none', color: exIdx === 0 ? 'rgba(255,255,255,0.05)' : 'hsl(var(--muted))', cursor: exIdx === 0 ? 'default' : 'pointer', padding: '1px', display: 'flex', alignItems: 'center' }}
+                      style={{ 
+                        background: 'rgba(255,255,255,0.03)', 
+                        border: '1px solid hsla(var(--border) / 0.5)', 
+                        color: exIdx === 0 ? 'rgba(255,255,255,0.05)' : 'hsl(var(--muted))', 
+                        cursor: exIdx === 0 ? 'default' : 'pointer', 
+                        padding: '6px', 
+                        borderRadius: '6px',
+                        display: 'flex', 
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all var(--transition-fast)'
+                      }}
                       title={language === 'es' ? 'Mover arriba' : 'Move up'}
                     >
                       <ArrowUp size={14} />
@@ -2306,22 +2324,50 @@ export default function WorkoutTab({
                     <button 
                       onClick={() => handleMoveExerciseDown(exIdx)}
                       disabled={exIdx === activeSession.exercises.length - 1}
-                      style={{ background: 'none', border: 'none', color: exIdx === activeSession.exercises.length - 1 ? 'rgba(255,255,255,0.05)' : 'hsl(var(--muted))', cursor: exIdx === activeSession.exercises.length - 1 ? 'default' : 'pointer', padding: '1px', display: 'flex', alignItems: 'center' }}
+                      style={{ 
+                        background: 'rgba(255,255,255,0.03)', 
+                        border: '1px solid hsla(var(--border) / 0.5)', 
+                        color: exIdx === activeSession.exercises.length - 1 ? 'rgba(255,255,255,0.05)' : 'hsl(var(--muted))', 
+                        cursor: exIdx === activeSession.exercises.length - 1 ? 'default' : 'pointer', 
+                        padding: '6px', 
+                        borderRadius: '6px',
+                        display: 'flex', 
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all var(--transition-fast)'
+                      }}
                       title={language === 'es' ? 'Mover abajo' : 'Move down'}
                     >
                       <ArrowDown size={14} />
                     </button>
+                    <button 
+                      onClick={() => handleRemoveExercise(exIdx)}
+                      style={{ 
+                        background: 'rgba(239, 68, 68, 0.08)', 
+                        border: '1px solid rgba(239, 68, 68, 0.2)', 
+                        color: 'hsl(var(--danger))', 
+                        cursor: 'pointer', 
+                        padding: '6px', 
+                        borderRadius: '6px',
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        transition: 'all var(--transition-fast)'
+                      }}
+                      title={language === 'es' ? 'Quitar ejercicio de la rutina' : 'Remove exercise from routine'}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
-                  <div>
-                    <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                      <Dumbbell size={18} color="hsl(var(--primary))" />
-                      {ex.title}
-                    </h3>
+                </div>
+
+                {/* Badges Row */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {(() => {
                     const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
                     if (!dbEx) return null;
                     return (
-                      <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 5px', textTransform: 'capitalize' }}>
                           {translateMuscleGroup(dbEx.muscleGroup)}
                         </span>
@@ -2337,86 +2383,83 @@ export default function WorkoutTab({
                     );
                   })()}
                   {ex.isSubstituted && (
-                    <span className="badge badge-warning" style={{ marginTop: '8px', display: 'inline-block' }}>
+                    <span className="badge badge-warning" style={{ alignSelf: 'flex-start', display: 'inline-block' }}>
                       {language === 'es' ? '⚠️ Variante PLNEXC por dolor en' : '⚠️ PLNEXC variation due to pain in'} {activeInjury ? (translateEngineText(MILO_REHAB_PROTOCOLS[activeInjury.joint]?.displayName || '', language) || activeInjury.joint) : ''}
                     </span>
                   )}
                 </div>
-              </div>
 
-                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--muted))', textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {/* Objective and Secondary Action Buttons Row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '4px', fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ffffff' }}>
                     <span><strong>Objetivo:</strong> {ex.suggestion.suggestedWeight}kg x {ex.suggestion.suggestedReps}{isTimeBasedExercise(ex.title) ? 's' : ' reps'}</span>
-                    <button 
-                      onClick={() => handleRemoveExercise(exIdx)}
-                      style={{ background: 'none', border: 'none', color: 'hsl(var(--danger))', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', opacity: 0.7 }}
-                      onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                      onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
-                      title={language === 'es' ? 'Quitar ejercicio de la rutina' : 'Remove exercise from routine'}
-                    >
-                      <Trash2 size={15} />
-                    </button>
                   </div>
-                  {(() => {
-                    const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
-                    if (!standards) return null;
-                    const isExpanded = !!expandedStandards[ex.title];
-                    return (
-                      <button 
-                        onClick={() => setExpandedStandards(prev => ({ ...prev, [ex.title]: !isExpanded }))}
-                        className={`btn-standards ${isExpanded ? 'active' : ''}`}
-                      >
-                        <Target size={12} style={{ opacity: isExpanded ? 1 : 0.6 }} />
-                        <span>{isExpanded ? 'Ocultar estándares' : 'Estándares de fuerza'}</span>
-                      </button>
-                    );
-                  })()}
-                  <button 
-                    type="button"
-                    onClick={() => setProjectionExercise(ex.title)}
-                    className="btn-standards"
-                    style={{ marginTop: '4px', background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', color: '#60a5fa' }}
-                  >
-                    <TrendingUp size={12} />
-                    <span>{t.viewProjection || 'Ver Proyección'}</span>
-                  </button>
-                  {(() => {
-                    let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
-                    if (!foundEx && ex.originalTitle) {
-                      foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.originalTitle.toLowerCase());
-                    }
-                    if (!foundEx) {
-                      const cleanTitle = ex.title.toLowerCase();
-                      if (cleanTitle.includes('squat')) {
-                        foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
-                      } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
-                        foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
-                      } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
-                        foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
-                      } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
-                        foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
-                      } else if (cleanTitle.includes('row')) {
-                        foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
-                      } else if (cleanTitle.includes('curl')) {
-                        foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
-                      } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
-                        foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
-                      }
-                    }
 
-                    if (!foundEx || !foundEx.instructions) return null;
-                    const isExExpanded = !!expandedInstructions[ex.title];
-                    return (
-                      <button 
-                        onClick={() => setExpandedInstructions(prev => ({ ...prev, [ex.title]: !isExExpanded }))}
-                        className={`btn-standards ${isExExpanded ? 'active' : ''}`}
-                        style={{ marginTop: '4px' }}
-                      >
-                        <BookOpen size={12} style={{ opacity: isExExpanded ? 1 : 0.6 }} />
-                        <span>{isExExpanded ? 'Ocultar técnica' : 'Ver técnica / guía'}</span>
-                      </button>
-                    );
-                  })()}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {(() => {
+                      const standards = getStrengthStandards(ex.title, bodyWeight, gender, height, bodyFat);
+                      if (!standards) return null;
+                      const isExpanded = !!expandedStandards[ex.title];
+                      return (
+                        <button 
+                          onClick={() => setExpandedStandards(prev => ({ ...prev, [ex.title]: !isExpanded }))}
+                          className={`btn-standards ${isExpanded ? 'active' : ''}`}
+                          style={{ margin: 0 }}
+                        >
+                          <Target size={12} style={{ opacity: isExpanded ? 1 : 0.6 }} />
+                          <span>{isExpanded ? 'Ocultar estándares' : 'Estándares de fuerza'}</span>
+                        </button>
+                      );
+                    })()}
+                    
+                    <button 
+                      type="button"
+                      onClick={() => setProjectionExercise(ex.title)}
+                      className="btn-standards"
+                      style={{ margin: 0, background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '2px 8px', borderRadius: '4px' }}
+                    >
+                      <TrendingUp size={12} />
+                      <span>{t.viewProjection || 'Ver Proyección'}</span>
+                    </button>
+
+                    {(() => {
+                      let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                      if (!foundEx && ex.originalTitle) {
+                        foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.originalTitle.toLowerCase());
+                      }
+                      if (!foundEx) {
+                        const cleanTitle = ex.title.toLowerCase();
+                        if (cleanTitle.includes('squat')) {
+                          foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                        } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
+                          foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                        } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
+                          foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                        } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
+                          foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                        } else if (cleanTitle.includes('row')) {
+                          foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                        } else if (cleanTitle.includes('curl')) {
+                          foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                        } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
+                          foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                        }
+                      }
+
+                      if (!foundEx || !foundEx.instructions) return null;
+                      const isExExpanded = !!expandedInstructions[ex.title];
+                      return (
+                        <button 
+                          onClick={() => setExpandedInstructions(prev => ({ ...prev, [ex.title]: !isExExpanded }))}
+                          className={`btn-standards ${isExExpanded ? 'active' : ''}`}
+                          style={{ margin: 0 }}
+                        >
+                          <BookOpen size={12} style={{ opacity: isExExpanded ? 1 : 0.6 }} />
+                          <span>{isExExpanded ? 'Ocultar técnica' : 'Ver técnica / guía'}</span>
+                        </button>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
 
