@@ -472,6 +472,9 @@ export default function DashboardTab({
 
   // Telemetry state
   const [telemetryWeek, setTelemetryWeek] = useState<number>(3);
+  const [telemetryMode, setTelemetryMode] = useState<'simulation' | 'real'>('simulation');
+  const [telemetryTarget, setTelemetryTarget] = useState<string>('total_volume');
+  const [telemetryWeekReal, setTelemetryWeekReal] = useState<number>(0);
 
   const cardioChartData = useMemo(() => {
     const numDays = parseInt(cardioTimeRange, 10);
@@ -1951,23 +1954,100 @@ export default function DashboardTab({
   };
 
   const renderTelemetryWidget = () => {
-    // Generate data points for 0 to 10 weeks
-    const dataPoints = [];
-    const t0 = telemetryWeek;
-    
-    // F'(t0) and F(t0)
-    const F_t0 = -0.6 * Math.pow(t0, 3) + 6 * Math.pow(t0, 2) + 20 * t0 + 100;
-    const Fd_t0 = -1.8 * Math.pow(t0, 2) + 12 * t0 + 20;
-    const Fdd_t0 = -3.6 * t0 + 12;
+    // 1. Selector of mode: Teórico / Real
+    let realDataAvailable = false;
+    let realDataError = false;
+    let points: { x: number; y: number; date: Date }[] = [];
+    let coefs: [number, number, number, number] | null = null;
+    let maxWeek = 10;
 
-    for (let w = 0; w <= 10; w += 0.5) {
-      const F = -0.6 * Math.pow(w, 3) + 6 * Math.pow(w, 2) + 20 * w + 100;
-      // Tangent line: y = Fd(t0)*(w - t0) + F(t0)
-      const tangent = Fd_t0 * (w - t0) + F_t0;
-      dataPoints.push({
-        week: w,
-        'Fuerza F(t)': Math.round(F * 10) / 10,
-        'Recta Tangente': Math.round(tangent * 10) / 10,
+    if (telemetryMode === 'real') {
+      const sortedSessions = [...localHistory].sort((a, b) => new Date(a.parsedDate).getTime() - new Date(b.parsedDate).getTime());
+      
+      const rawPoints = sortedSessions.map(s => {
+        let volume = 0;
+        if (telemetryTarget === 'total_volume') {
+          volume = s.exercises.reduce((sum: number, ex: any) => sum + (ex.totalVolume || 0), 0);
+        } else {
+          const exObj = s.exercises.find((e: any) => e.title === telemetryTarget);
+          volume = exObj ? (exObj.totalVolume || 0) : 0;
+        }
+        return {
+          date: new Date(s.parsedDate),
+          volume
+        };
+      }).filter(p => p.volume > 0);
+
+      if (rawPoints.length >= 4) {
+        realDataAvailable = true;
+        const firstTime = rawPoints[0].date.getTime();
+        points = rawPoints.map(p => {
+          const diffMs = p.date.getTime() - firstTime;
+          const weeks = diffMs / (7 * 24 * 60 * 60 * 1000);
+          return { x: weeks, y: p.volume, date: p.date };
+        });
+
+        // Sort by week
+        points.sort((a, b) => a.x - b.x);
+        maxWeek = points[points.length - 1].x;
+        if (maxWeek <= 0) {
+          maxWeek = 1;
+        }
+
+        coefs = solveCubicRegression(points.map(p => ({ x: p.x, y: p.y })));
+        if (!coefs) {
+          realDataError = true;
+        }
+      }
+    }
+
+    // Parameters depending on mode
+    let t0 = telemetryWeek;
+    let F_t0 = 0;
+    let Fd_t0 = 0;
+    let Fdd_t0 = 0;
+    const dataPoints: any[] = [];
+
+    if (telemetryMode === 'simulation') {
+      t0 = telemetryWeek;
+      F_t0 = -0.6 * Math.pow(t0, 3) + 6 * Math.pow(t0, 2) + 20 * t0 + 100;
+      Fd_t0 = -1.8 * Math.pow(t0, 2) + 12 * t0 + 20;
+      Fdd_t0 = -3.6 * t0 + 12;
+
+      for (let w = 0; w <= 10; w += 0.5) {
+        const F = -0.6 * Math.pow(w, 3) + 6 * Math.pow(w, 2) + 20 * w + 100;
+        const tangent = Fd_t0 * (w - t0) + F_t0;
+        dataPoints.push({
+          week: w,
+          'Fuerza F(t)': Math.round(F * 10) / 10,
+          'Recta Tangente': Math.round(tangent * 10) / 10,
+        });
+      }
+    } else if (telemetryMode === 'real' && realDataAvailable && coefs) {
+      t0 = Math.min(Math.max(0, telemetryWeekReal), maxWeek);
+      const [a, b, c, d] = coefs;
+
+      F_t0 = a * Math.pow(t0, 3) + b * Math.pow(t0, 2) + c * t0 + d;
+      Fd_t0 = 3 * a * Math.pow(t0, 2) + 2 * b * t0 + c;
+      Fdd_t0 = 6 * a * t0 + 2 * b;
+
+      const step = maxWeek / 20;
+      for (let i = 0; i <= 20; i++) {
+        const w = i * step;
+        const F = a * Math.pow(w, 3) + b * Math.pow(w, 2) + c * w + d;
+        const tangent = Fd_t0 * (w - t0) + F_t0;
+        dataPoints.push({
+          week: Math.round(w * 100) / 100,
+          'Tendencia F(t)': Math.round(F * 10) / 10,
+          'Recta Tangente': Math.round(tangent * 10) / 10,
+        });
+      }
+
+      points.forEach(p => {
+        dataPoints.push({
+          week: Math.round(p.x * 100) / 100,
+          'Volumen Real': Math.round(p.y * 10) / 10
+        });
       });
     }
 
@@ -1978,188 +2058,310 @@ export default function DashboardTab({
     let stateBg = '';
     let stateBorder = '';
 
-    if (Fdd_t0 >= 0) {
-      stateTitle = language === 'es' ? 'Supercompensación' : 'Supercompensation';
-      stateDesc = language === 'es' 
-        ? 'Zona Activa: Adaptación Positiva Acelerada. El cuerpo asimila bien el volumen.' 
-        : 'Active Zone: Accelerated Positive Adaptation. The body absorbs volume well.';
-      stateColor = '#10b981'; // Green
-      stateBg = 'rgba(16, 185, 129, 0.08)';
-      stateBorder = 'rgba(16, 185, 129, 0.2)';
-    } else if (Fdd_t0 < 0 && Fd_t0 >= 0) {
-      stateTitle = language === 'es' ? 'Desaceleración' : 'Deceleration';
-      stateDesc = language === 'es' 
-        ? 'Alerta: Velocidad de ganancia disminuyendo. Punto de inflexión detectado.' 
-        : 'Alert: Gain velocity decreasing. Inflection point detected.';
-      stateColor = '#fbbf24'; // Yellow
-      stateBg = 'rgba(251, 191, 36, 0.08)';
-      stateBorder = 'rgba(251, 191, 36, 0.2)';
+    if (telemetryMode === 'real' && (!realDataAvailable || realDataError)) {
+      // No state
     } else {
-      stateTitle = language === 'es' ? 'Alerta de Estancamiento' : 'Plateau Alert';
-      stateDesc = language === 'es' 
-        ? '¡Peligro!: Estancamiento por sobrecarga. Se requiere semana de descarga (Deload).' 
-        : 'Danger!: Overload plateau. Deload week required.';
-      stateColor = '#ef4444'; // Red
-      stateBg = 'rgba(239, 68, 68, 0.08)';
-      stateBorder = 'rgba(239, 68, 68, 0.2)';
+      if (Fdd_t0 >= 0) {
+        stateTitle = language === 'es' ? 'Supercompensación' : 'Supercompensation';
+        stateDesc = language === 'es' 
+          ? 'Zona Activa: Adaptación Positiva Acelerada. El cuerpo asimila bien el volumen.' 
+          : 'Active Zone: Accelerated Positive Adaptation. The body absorbs volume well.';
+        stateColor = '#10b981'; // Green
+        stateBg = 'rgba(16, 185, 129, 0.08)';
+        stateBorder = 'rgba(16, 185, 129, 0.2)';
+      } else if (Fdd_t0 < 0 && Fd_t0 >= 0) {
+        stateTitle = language === 'es' ? 'Desaceleración' : 'Deceleration';
+        stateDesc = language === 'es' 
+          ? 'Alerta: Velocidad de ganancia disminuyendo. Punto de inflexión detectado.' 
+          : 'Alert: Gain velocity decreasing. Inflection point detected.';
+        stateColor = '#fbbf24'; // Yellow
+        stateBg = 'rgba(251, 191, 36, 0.08)';
+        stateBorder = 'rgba(251, 191, 36, 0.2)';
+      } else {
+        stateTitle = language === 'es' ? 'Alerta de Estancamiento' : 'Plateau Alert';
+        stateDesc = language === 'es' 
+          ? '¡Peligro!: Estancamiento por sobrecarga. Se requiere semana de descarga (Deload).' 
+          : 'Danger!: Overload plateau. Deload week required.';
+        stateColor = '#ef4444'; // Red
+        stateBg = 'rgba(239, 68, 68, 0.08)';
+        stateBorder = 'rgba(239, 68, 68, 0.2)';
+      }
     }
 
     return (
       <div className="glass-panel animate-fade-in" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+        
+        {/* Header with Title & Mode Selector */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Zap size={22} color="hsl(var(--primary))" />
               {language === 'es' 
                 ? 'Telemetría Neuromuscular e Inflexión de Fuerza' 
                 : 'Neuromuscular Telemetry & Strength Inflection'}
             </h3>
-            <span style={{ 
-              fontSize: '0.75rem', 
-              color: 'hsl(var(--muted))',
-              background: 'rgba(255,255,255,0.05)',
-              padding: '2px 8px',
-              borderRadius: '4px',
-              fontWeight: 'bold'
-            }}>
-              Edge Computing (Local)
-            </span>
+            <p style={{ color: 'hsl(var(--muted))', fontSize: '0.82rem', marginTop: '4px', lineHeight: '1.4', maxWidth: '480px' }}>
+              {language === 'es' 
+                ? 'Análisis del Criterio de la Segunda Derivada sobre curvas de adaptación física para la detección de estancamiento neuromuscular.' 
+                : 'Analysis of the Second Derivative Criterion over physical adaptation curves for neuromuscular plateau detection.'}
+            </p>
           </div>
-          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.82rem', marginTop: '4px', lineHeight: '1.4' }}>
-            {language === 'es' 
-              ? 'Simulación del Criterio de la Segunda Derivada para la predicción temprana de estancamiento neuromuscular.' 
-              : 'Simulation of the Second Derivative Criterion for early neuromuscular plateau prediction.'}
-          </p>
+          
+          {/* Mode Switcher */}
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.03)', border: '1px solid hsla(var(--border) / 0.5)', padding: '2px', borderRadius: '8px' }}>
+            <button
+              onClick={() => setTelemetryMode('simulation')}
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.75rem',
+                fontWeight: 'bold',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: telemetryMode === 'simulation' ? 'hsl(var(--primary))' : 'transparent',
+                color: telemetryMode === 'simulation' ? '#000' : 'hsl(var(--muted))',
+                transition: 'all 0.2s'
+              }}
+            >
+              {language === 'es' ? 'Simulador' : 'Simulator'}
+            </button>
+            <button
+              onClick={() => setTelemetryMode('real')}
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.75rem',
+                fontWeight: 'bold',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                background: telemetryMode === 'real' ? 'hsl(var(--primary))' : 'transparent',
+                color: telemetryMode === 'real' ? '#000' : 'hsl(var(--muted))',
+                transition: 'all 0.2s'
+              }}
+            >
+              {language === 'es' ? 'Mi Telemetría' : 'My Telemetry'}
+            </button>
+          </div>
         </div>
 
-        {/* Status Indicator */}
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: '8px', 
-          padding: '16px', 
-          background: stateBg, 
-          border: `1px solid ${stateBorder}`, 
-          borderRadius: '12px',
-          transition: 'all 0.3s ease'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {language === 'es' ? 'Estado Neuromuscular' : 'Neuromuscular State'}
+        {/* Real Mode Target Selectors */}
+        {telemetryMode === 'real' && (
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', background: 'rgba(255,255,255,0.01)', border: '1px solid hsla(var(--border) / 0.3)', padding: '10px 14px', borderRadius: '8px' }}>
+            <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontWeight: 600 }}>
+              {language === 'es' ? 'Analizar rendimiento de:' : 'Analyze performance of:'}
             </span>
-            <span style={{ 
-              fontSize: '0.8rem', 
-              fontWeight: 800, 
-              color: stateColor, 
+            <select
+              value={telemetryTarget}
+              onChange={(e) => {
+                setTelemetryTarget(e.target.value);
+                setTelemetryWeekReal(0); // Reset slider
+              }}
+              style={{
+                padding: '4px 8px',
+                fontSize: '0.8rem',
+                borderRadius: '6px',
+                background: 'rgba(0,0,0,0.2)',
+                border: '1px solid hsla(var(--border) / 0.5)',
+                color: '#fff',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="total_volume">
+                {language === 'es' ? '🏋️ Volumen Total de Entrenamiento' : '🏋️ Total Workout Volume'}
+              </option>
+              {uniqueExerciseNames.map(exName => (
+                <option key={exName} value={exName}>
+                  💪 {getExerciseName('', exName, language)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Conditional rendering based on Mode & Data availability */}
+        {telemetryMode === 'real' && (!realDataAvailable || realDataError) ? (
+          <div style={{ 
+            padding: '30px 20px', 
+            textAlign: 'center', 
+            background: 'rgba(255, 255, 255, 0.01)', 
+            border: '1px dashed hsla(var(--border) / 0.5)', 
+            borderRadius: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <span style={{ fontSize: '2.5rem' }}>📊</span>
+            <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#ffffff', fontWeight: 700 }}>
+              {language === 'es' ? 'Datos Históricos Insuficientes' : 'Insufficient Historical Data'}
+            </h4>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'hsl(var(--muted))', lineHeight: '1.5', maxWidth: '380px' }}>
+              {language === 'es'
+                ? `Para ajustar el modelo neuromuscular cúbico de forma estable, requieres al menos 4 entrenamientos registrados de este ejercicio/volumen en tu historial. Actualmente tienes ${points.length} entrenamientos.`
+                : `To stably fit the cubic neuromuscular model, you need at least 4 logged workouts of this exercise/volume in your history. Currently you have ${points.length} workouts.`}
+            </p>
+            <button
+              onClick={() => setTelemetryMode('simulation')}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.75rem', padding: '6px 12px', marginTop: '4px' }}
+            >
+              {language === 'es' ? 'Volver al Simulador Teórico' : 'Back to Theoretical Simulator'}
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Status Indicator */}
+            <div style={{ 
               display: 'flex', 
-              alignItems: 'center', 
-              gap: '4px' 
+              flexDirection: 'column', 
+              gap: '8px', 
+              padding: '16px', 
+              background: stateBg, 
+              border: `1px solid ${stateBorder}`, 
+              borderRadius: '12px',
+              transition: 'all 0.3s ease'
             }}>
-              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: stateColor, boxShadow: `0 0 8px ${stateColor}` }} />
-              {stateTitle}
-            </span>
-          </div>
-          <p style={{ margin: 0, fontSize: '0.85rem', color: '#ffffff', fontWeight: 500, lineHeight: '1.4' }}>
-            {stateDesc}
-          </p>
-        </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {language === 'es' ? 'Estado Neuromuscular' : 'Neuromuscular State'}
+                </span>
+                <span style={{ 
+                  fontSize: '0.8rem', 
+                  fontWeight: 800, 
+                  color: stateColor, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px' 
+                }}>
+                  <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: stateColor, boxShadow: `0 0 8px ${stateColor}` }} />
+                  {stateTitle}
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#ffffff', fontWeight: 500, lineHeight: '1.4' }}>
+                {stateDesc}
+              </p>
+            </div>
 
-        {/* Live Metrics Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
-          <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', borderRadius: '8px', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '2px' }}>F(t) (Fuerza)</span>
-            <strong style={{ fontSize: '1.2rem', color: '#ffffff' }}>{Math.round(F_t0 * 10) / 10} kg</strong>
-          </div>
-          <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', borderRadius: '8px', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '2px' }}>F\'(t) (Velocidad)</span>
-            <strong style={{ fontSize: '1.2rem', color: Fd_t0 >= 0 ? 'hsl(var(--primary))' : '#ef4444' }}>
-              {Fd_t0 > 0 ? '+' : ''}{Math.round(Fd_t0 * 10) / 10} kg/sem
-            </strong>
-          </div>
-          <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', borderRadius: '8px', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '2px' }}>F\'\'(t) (Aceleración)</span>
-            <strong style={{ fontSize: '1.2rem', color: Fdd_t0 >= 0 ? '#10b981' : '#fbbf24' }}>
-              {Fdd_t0 > 0 ? '+' : ''}{Math.round(Fdd_t0 * 10) / 10} kg/sem²
-            </strong>
-          </div>
-        </div>
+            {/* Live Metrics Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', borderRadius: '8px', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '2px' }}>F(t) ({language === 'es' ? 'Fuerza/Volumen' : 'Force/Volume'})</span>
+                <strong style={{ fontSize: '1.2rem', color: '#ffffff' }}>{Math.round(F_t0 * 10) / 10} kg</strong>
+              </div>
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', borderRadius: '8px', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '2px' }}>F'(t) (Velocidad)</span>
+                <strong style={{ fontSize: '1.2rem', color: Fd_t0 >= 0 ? 'hsl(var(--primary))' : '#ef4444' }}>
+                  {Fd_t0 > 0 ? '+' : ''}{Math.round(Fd_t0 * 10) / 10} kg/sem
+                </strong>
+              </div>
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', borderRadius: '8px', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '2px' }}>F''(t) (Aceleración)</span>
+                <strong style={{ fontSize: '1.2rem', color: Fdd_t0 >= 0 ? '#10b981' : '#fbbf24' }}>
+                  {Fdd_t0 > 0 ? '+' : ''}{Math.round(Fdd_t0 * 10) / 10} kg/sem²
+                </strong>
+              </div>
+            </div>
 
-        {/* Week Interactive Slider */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(255,255,255,0.01)', border: '1px solid hsla(var(--border) / 0.3)', padding: '12px 16px', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', color: '#ffffff', fontWeight: 600 }}>
-              {language === 'es' ? 'Semana del Ciclo (t)' : 'Cycle Week (t)'}
-            </span>
-            <strong style={{ fontSize: '1rem', color: 'hsl(var(--primary))' }}>
-              {telemetryWeek} {language === 'es' ? 'semanas' : 'weeks'}
-            </strong>
-          </div>
-          <input 
-            type="range"
-            min="0"
-            max="10"
-            step="0.5"
-            value={telemetryWeek}
-            onChange={(e) => setTelemetryWeek(parseFloat(e.target.value))}
-            style={{ 
-              width: '100%', 
-              accentColor: 'hsl(var(--primary))', 
-              cursor: 'pointer',
-              marginTop: '4px'
-            }}
-          />
-        </div>
+            {/* Week Interactive Slider */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(255,255,255,0.01)', border: '1px solid hsla(var(--border) / 0.3)', padding: '12px 16px', borderRadius: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', color: '#ffffff', fontWeight: 600 }}>
+                  {language === 'es' ? 'Semana del Ciclo (t)' : 'Cycle Week (t)'}
+                </span>
+                <strong style={{ fontSize: '1rem', color: 'hsl(var(--primary))' }}>
+                  {Math.round(t0 * 10) / 10} / {Math.round(maxWeek * 10) / 10} {language === 'es' ? 'semanas' : 'weeks'}
+                </strong>
+              </div>
+              <input 
+                type="range"
+                min="0"
+                max={maxWeek}
+                step={maxWeek / 20}
+                value={t0}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (telemetryMode === 'simulation') {
+                    setTelemetryWeek(val);
+                  } else {
+                    setTelemetryWeekReal(val);
+                  }
+                }}
+                style={{ 
+                  width: '100%', 
+                  accentColor: 'hsl(var(--primary))', 
+                  cursor: 'pointer',
+                  marginTop: '4px'
+                }}
+              />
+            </div>
 
-        {/* Simulator Chart */}
-        <div style={{ width: '100%', height: '240px', marginTop: '10px' }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-              <XAxis 
-                dataKey="week" 
-                stroke="hsl(var(--muted))" 
-                fontSize={11}
-                tickLine={false}
-                type="number"
-                domain={[0, 10]}
-                ticks={[0, 2, 4, 6, 8, 10]}
-              />
-              <YAxis 
-                stroke="hsl(var(--muted))" 
-                fontSize={11} 
-                domain={[50, 250]}
-                tickLine={false}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  background: 'hsl(var(--bg-surface))', 
-                  borderColor: 'hsl(var(--border))',
-                  borderRadius: '8px',
-                  color: '#ffffff',
-                  fontFamily: 'inherit'
-                }} 
-              />
-              <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '0.75rem' }} />
-              
-              <Line 
-                type="monotone" 
-                dataKey="Fuerza F(t)" 
-                stroke="hsl(var(--primary))" 
-                strokeWidth={3}
-                dot={false}
-                activeDot={{ r: 6 }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="Recta Tangente" 
-                stroke={telemetryWeek <= 6.5 ? 'hsl(var(--secondary))' : '#ef4444'} 
-                strokeWidth={1.5}
-                strokeDasharray="4 4"
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+            {/* Simulator Chart */}
+            <div style={{ width: '100%', height: '240px', marginTop: '10px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+                  <XAxis 
+                    dataKey="week" 
+                    stroke="hsl(var(--muted))" 
+                    fontSize={11}
+                    tickLine={false}
+                    type="number"
+                    domain={[0, maxWeek]}
+                    ticks={Array.from({ length: 6 }, (_, i) => Math.round((i * (maxWeek / 5)) * 10) / 10)}
+                  />
+                  <YAxis 
+                    stroke="hsl(var(--muted))" 
+                    fontSize={11} 
+                    domain={['auto', 'auto']}
+                    tickLine={false}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      background: 'hsl(var(--bg-surface))', 
+                      borderColor: 'hsl(var(--border))',
+                      borderRadius: '8px',
+                      color: '#ffffff',
+                      fontFamily: 'inherit'
+                    }} 
+                  />
+                  <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '0.75rem' }} />
+                  
+                  {/* Regression curve */}
+                  <Line 
+                    type="monotone" 
+                    name={telemetryMode === 'simulation' ? "Fuerza F(t)" : (language === 'es' ? "Tendencia Polinómica" : "Polynomial Trend")}
+                    dataKey={telemetryMode === 'simulation' ? "Fuerza F(t)" : "Tendencia F(t)"} 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={3}
+                    dot={false}
+                    activeDot={{ r: 6 }}
+                  />
+                  {/* Tangent line */}
+                  <Line 
+                    type="monotone" 
+                    dataKey="Recta Tangente" 
+                    stroke={Fd_t0 >= 0 ? 'hsl(var(--secondary))' : '#ef4444'} 
+                    strokeWidth={1.5}
+                    strokeDasharray="4 4"
+                    dot={false}
+                  />
+                  {/* Scatter dots for actual volume */}
+                  {telemetryMode === 'real' && (
+                    <Line 
+                      type="linear"
+                      name={language === 'es' ? "Volumen Real Registrado" : "Actual Logged Volume"}
+                      dataKey="Volumen Real"
+                      stroke="none"
+                      fill="hsl(var(--secondary))"
+                      dot={{ r: 5, fill: 'hsl(var(--secondary))', stroke: '#fff', strokeWidth: 1 }}
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
       </div>
     );
   };
@@ -3287,4 +3489,86 @@ export default function DashboardTab({
 
     </div>
   );
+}
+
+function solveCubicRegression(points: { x: number; y: number }[]): [number, number, number, number] | null {
+  const n = points.length;
+  if (n < 4) return null;
+
+  let sx = 0, sx2 = 0, sx3 = 0, sx4 = 0, sx5 = 0, sx6 = 0;
+  let sy = 0, sxy = 0, sx2y = 0, sx3y = 0;
+
+  for (const p of points) {
+    const x = p.x;
+    const y = p.y;
+    const x2 = x * x;
+    const x3 = x2 * x;
+    const x4 = x3 * x;
+    const x5 = x4 * x;
+    const x6 = x5 * x;
+
+    sx += x;
+    sx2 += x2;
+    sx3 += x3;
+    sx4 += x4;
+    sx5 += x5;
+    sx6 += x6;
+
+    sy += y;
+    sxy += x * y;
+    sx2y += x2 * y;
+    sx3y += x3 * y;
+  }
+
+  const A = [
+    [n, sx, sx2, sx3],
+    [sx, sx2, sx3, sx4],
+    [sx2, sx3, sx4, sx5],
+    [sx3, sx4, sx5, sx6]
+  ];
+
+  const B = [sy, sxy, sx2y, sx3y];
+
+  const mat = A.map((row, i) => [...row, B[i]]);
+  const size = 4;
+
+  for (let i = 0; i < size; i++) {
+    let maxRow = i;
+    for (let k = i + 1; k < size; k++) {
+      if (Math.abs(mat[k][i]) > Math.abs(mat[maxRow][i])) {
+        maxRow = k;
+      }
+    }
+
+    const temp = mat[i];
+    mat[i] = mat[maxRow];
+    mat[maxRow] = temp;
+
+    if (Math.abs(mat[i][i]) < 1e-12) {
+      return null;
+    }
+
+    for (let k = i + 1; k < size; k++) {
+      const factor = mat[k][i] / mat[i][i];
+      for (let j = i; j <= size; j++) {
+        mat[k][j] -= factor * mat[i][j];
+      }
+    }
+  }
+
+  const beta = new Array(size).fill(0);
+  for (let i = size - 1; i >= 0; i--) {
+    let sum = mat[i][size];
+    for (let j = i + 1; j < size; j++) {
+      sum -= mat[i][j] * beta[j];
+    }
+    beta[i] = sum / mat[i][i];
+  }
+
+  const d = beta[0];
+  const c = beta[1];
+  const b = beta[2];
+  const a = beta[3];
+
+  return [a, b, c, d];
 }
