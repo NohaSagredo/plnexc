@@ -35,7 +35,7 @@ import RoutineBuilder from './RoutineBuilder';
 import { publishWorkoutToFeed } from '../utils/firebaseSync';
 import { auth } from '../utils/firebase';
 import { DEFAULT_PRESETS } from '../data/default_routines';
-import { EXERCISES_DB, isTimeBasedExercise } from '../data/exercises_db';
+import { EXERCISES_DB, isTimeBasedExercise, getExerciseImage } from '../data/exercises_db';
 import { getStrengthStandards } from '../utils/StrengthStandards';
 import { TRANSLATIONS, getExerciseName, translateEngineText } from '../utils/translations';
 
@@ -51,7 +51,7 @@ interface WorkoutTabProps {
   onUpdateWorkout: (updatedSession: any) => void;
   localHistory: any[];
   customRoutines: any[];
-  onSaveCustomRoutine: (name: string, exercises: string[], originalName?: string) => void;
+  onSaveCustomRoutine: (name: string, exercises: (string | { title: string; restTime?: number })[], originalName?: string) => void;
   onDeleteRoutine: (name: string) => void;
   deletedRoutines: string[];
   bodyWeight: number;
@@ -299,7 +299,7 @@ export default function WorkoutTab({
 
   // 1. Group exercises into routines from historical logs and custom creations
   const routines = useMemo(() => {
-    const map = new Map<string, string[]>(); // Title -> Exercise List
+    const map = new Map<string, (string | { title: string; restTime?: number })[]>(); // Title -> Exercise List
     
     // 1. Load default presets
     DEFAULT_PRESETS.forEach(r => {
@@ -314,8 +314,16 @@ export default function WorkoutTab({
       }
       const list = map.get(session.title)!;
       session.exercises.forEach((ex: any) => {
-        if (!list.includes(ex.title)) {
-          list.push(ex.title);
+        const titleExists = list.some(el => {
+          const t = typeof el === 'string' ? el : el.title;
+          return t === ex.title;
+        });
+        if (!titleExists) {
+          if (ex.restTime !== undefined && ex.restTime !== null) {
+            list.push({ title: ex.title, restTime: ex.restTime });
+          } else {
+            list.push(ex.title);
+          }
         }
       });
     });
@@ -327,11 +335,17 @@ export default function WorkoutTab({
     
     const list = Array.from(map.entries())
       .map(([title, exercises]) => {
+        const normalizedExercises = exercises.map(ex => {
+          if (typeof ex === 'string') {
+            return { title: ex };
+          }
+          return ex;
+        });
         const isCustom = customRoutines.some(cr => cr.title === title);
         const isPreset = DEFAULT_PRESETS.some(dp => dp.title === title);
         return {
           title,
-          exercises,
+          exercises: normalizedExercises,
           isCustom,
           isPreset,
           highlight: (isCustom && isPreset) ? 'modified' : (isCustom && !isPreset) ? 'created' : 'preset'
@@ -385,7 +399,7 @@ export default function WorkoutTab({
   const [timerActive, setTimerActive] = useState<boolean>(false);
   const [recoveryScore, setRecoveryScore] = useState<number>(8);
   const [isBuildingRoutine, setIsBuildingRoutine] = useState<boolean>(false);
-  const [editingRoutine, setEditingRoutine] = useState<{ title: string; exercises: string[] } | null>(null);
+  const [editingRoutine, setEditingRoutine] = useState<{ title: string; exercises: (string | { title: string; restTime?: number })[] } | null>(null);
   const [expandedStandards, setExpandedStandards] = useState<{[key: string]: boolean}>({});
   const [expandedInstructions, setExpandedInstructions] = useState<{[key: string]: boolean}>({});
   const [brokenPBs, setBrokenPBs] = useState<any[]>([]);
@@ -623,15 +637,20 @@ export default function WorkoutTab({
 
   const previewExercises = useMemo(() => {
     if (!selectedRoutineObj) return [];
-    return selectedRoutineObj.exercises.map(title => {
+    return selectedRoutineObj.exercises.map(exObj => {
+      const title = exObj.title;
       const found = EXERCISES_DB.find(ex => ex.title === title);
-      return found || {
+      const exerciseBase = found || {
         id: `custom_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
         title,
         muscleGroup: 'Pecho',
         equipment: 'Mancuerna',
         difficulty: 'Intermedio',
         description: 'Ejercicio personalizado'
+      };
+      return {
+        ...exerciseBase,
+        restTime: exObj.restTime
       };
     });
   }, [selectedRoutineObj]);
@@ -727,7 +746,9 @@ export default function WorkoutTab({
     const scoreToUse = finalRecoveryScore !== undefined ? finalRecoveryScore : recoveryScore;
 
     // Load exercises and calculate recommendations
-    const exercisesForSession = routine.exercises.map(exTitle => {
+    const exercisesForSession = routine.exercises.map(exItem => {
+      const exTitle = exItem.title;
+      const customRestTime = exItem.restTime;
       // Find history of this specific exercise
       const exerciseHistory: any[] = [];
       localHistory.forEach(session => {
@@ -803,7 +824,8 @@ export default function WorkoutTab({
         isSubstituted: !!activeSub,
         subRule: activeSub,
         suggestion: target,
-        sets: initialSets
+        sets: initialSets,
+        restTime: customRestTime
       };
     });
 
@@ -1179,8 +1201,13 @@ export default function WorkoutTab({
     try {
       // If user chose to update/save the routine template
       if (updateRoutineOnFinish && onSaveCustomRoutine) {
-        const exerciseTitles = pendingSessionToSave.exercises.map((ex: any) => ex.title);
-        onSaveCustomRoutine(pendingSessionToSave.title, exerciseTitles);
+        const exercisesData = pendingSessionToSave.exercises.map((ex: any) => {
+          if (ex.restTime !== undefined && ex.restTime !== null && ex.restTime > 0) {
+            return { title: ex.title, restTime: ex.restTime };
+          }
+          return ex.title;
+        });
+        onSaveCustomRoutine(pendingSessionToSave.title, exercisesData);
       }
 
       let photoUrl = selectedProgressPhoto || undefined;
@@ -1320,12 +1347,15 @@ export default function WorkoutTab({
     if (triggeredRest) {
       const isTimerEnabled = localStorage.getItem('plnexc_rest_timer_enabled') !== 'false';
       if (isTimerEnabled) {
-        const savedCompound = localStorage.getItem('plnexc_rest_time_compound');
-        const savedAccessory = localStorage.getItem('plnexc_rest_time_accessory');
-        const defaultCompound = savedCompound ? parseInt(savedCompound, 10) : 120;
-        const defaultAccessory = savedAccessory ? parseInt(savedAccessory, 10) : 90;
+        let seconds = targetExercise.restTime;
+        if (seconds === undefined || seconds === null || seconds <= 0) {
+          const savedCompound = localStorage.getItem('plnexc_rest_time_compound');
+          const savedAccessory = localStorage.getItem('plnexc_rest_time_accessory');
+          const defaultCompound = savedCompound ? parseInt(savedCompound, 10) : 120;
+          const defaultAccessory = savedAccessory ? parseInt(savedAccessory, 10) : 90;
+          seconds = isCompound ? defaultCompound : defaultAccessory;
+        }
 
-        const seconds = isCompound ? defaultCompound : defaultAccessory;
         setRestTimeTotal(seconds);
         setRestTimeRemaining(seconds);
         setRestTimerActive(true);
@@ -1960,7 +1990,7 @@ export default function WorkoutTab({
                         </h4>
                         <p style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '32px', lineHeight: '1.4' }}>
                           {r.exercises.length > 0 
-                            ? r.exercises.map(resolveExerciseDisplayName).join(', ') 
+                            ? r.exercises.map((ex: any) => resolveExerciseDisplayName(ex.title)).join(', ') 
                             : (language === 'es' ? 'Sin ejercicios registrados' : 'No exercises registered')}
                         </p>
                       </div>
@@ -2295,8 +2325,19 @@ export default function WorkoutTab({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '12px', marginBottom: '16px' }}>
                 {/* Title & List Management Controls Row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '12px' }}>
-                  <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, fontWeight: 800 }}>
-                    <Dumbbell size={18} color="hsl(var(--primary))" />
+                  <h3 style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '10px', margin: 0, fontWeight: 800 }}>
+                    <img 
+                      src={getExerciseImage(ex)} 
+                      alt={ex.title} 
+                      style={{ 
+                        width: '28px', 
+                        height: '28px', 
+                        borderRadius: '50%', 
+                        objectFit: 'cover', 
+                        border: '1.5px solid hsl(var(--primary))',
+                        flexShrink: 0
+                      }} 
+                    />
                     {ex.title}
                   </h3>
 
@@ -2391,8 +2432,62 @@ export default function WorkoutTab({
 
                 {/* Objective and Secondary Action Buttons Row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '4px', fontSize: '0.8rem', color: 'hsl(var(--muted))' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ffffff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', color: '#ffffff' }}>
                     <span><strong>Objetivo:</strong> {ex.suggestion.suggestedWeight}kg x {ex.suggestion.suggestedReps}{isTimeBasedExercise(ex.title) ? 's' : ' reps'}</span>
+
+                    {(() => {
+                      const titleLower = ex.title.toLowerCase();
+                      const isCompound = titleLower.includes('squat') || 
+                                         titleLower.includes('deadlift') || 
+                                         titleLower.includes('bench press') || 
+                                         titleLower.includes('overhead press');
+                      const savedCompound = localStorage.getItem('plnexc_rest_time_compound');
+                      const savedAccessory = localStorage.getItem('plnexc_rest_time_accessory');
+                      const defaultCompound = savedCompound ? parseInt(savedCompound, 10) : 120;
+                      const defaultAccessory = savedAccessory ? parseInt(savedAccessory, 10) : 90;
+                      const defaultVal = isCompound ? defaultCompound : defaultAccessory;
+
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid hsla(var(--border) / 0.5)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.8rem', color: '#ffffff' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'hsl(var(--primary))' }} title={language === 'es' ? 'Temporizador de descanso' : 'Rest timer'}>⏱️</span>
+                          <span>{language === 'es' ? 'Descanso:' : 'Rest:'}</span>
+                          <input 
+                            type="number" 
+                            placeholder={String(defaultVal)}
+                            value={ex.restTime !== undefined && ex.restTime !== null ? ex.restTime : ''}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              const newRest = isNaN(val) ? undefined : val;
+                              setActiveSession((prev: any) => {
+                                if (!prev) return prev;
+                                return {
+                                  ...prev,
+                                  exercises: prev.exercises.map((el: any, i: number) => {
+                                    if (i !== exIdx) return el;
+                                    return {
+                                      ...el,
+                                      restTime: newRest
+                                    };
+                                  })
+                                };
+                              });
+                            }}
+                            style={{
+                              width: '45px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#ffffff',
+                              textAlign: 'center',
+                              fontSize: '0.8rem',
+                              padding: 0,
+                              outline: 'none',
+                              borderBottom: '1px solid hsla(var(--border) / 0.8)'
+                            }}
+                          />
+                          <span>s</span>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2918,11 +3013,11 @@ export default function WorkoutTab({
                   onChange={(e) => setUpdateRoutineOnFinish(e.target.checked)}
                   style={{ marginTop: '4px', cursor: 'pointer' }}
                 />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                   <label htmlFor="updateRoutineCheck" style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
                     {language === 'es' ? 'Actualizar plantilla de rutina' : 'Update routine template'}
                   </label>
-                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', marginTop: '2px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', marginTop: '2px', wordBreak: 'break-word' }}>
                     {language === 'es' 
                       ? `Guarda los cambios de este entrenamiento (ejercicios agregados, eliminados u ordenados) en tu rutina "${pendingSessionToSave?.title}".`
                       : `Save the changes from this workout (added, removed, or reordered exercises) to your routine "${pendingSessionToSave?.title}".`}
@@ -2940,7 +3035,7 @@ export default function WorkoutTab({
                   onChange={(e) => setSharePublicly(e.target.checked)}
                   style={{ marginTop: '4px', cursor: username ? 'pointer' : 'not-allowed' }}
                 />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                   <label htmlFor="shareWorkoutCheck" style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff', cursor: username ? 'pointer' : 'not-allowed' }}>
                     {language === 'es' ? 'Compartir en la comunidad' : 'Share in the community'}
                   </label>
@@ -3241,6 +3336,18 @@ export default function WorkoutTab({
                             flexShrink: 0
                           }} 
                         />
+                        <img 
+                          src={getExerciseImage(ex)} 
+                          alt={ex.title} 
+                          style={{ 
+                            width: '28px', 
+                            height: '28px', 
+                            borderRadius: '50%', 
+                            objectFit: 'cover', 
+                            border: '1.5px solid hsl(var(--primary))',
+                            flexShrink: 0
+                          }} 
+                        />
                         
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <strong style={{ fontSize: '0.85rem', color: '#ffffff' }}>
@@ -3273,6 +3380,23 @@ export default function WorkoutTab({
                           <span className="badge badge-success" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize' }}>
                             {translateEquipment(ex.equipment)}
                           </span>
+                          {ex.restTime !== undefined && ex.restTime !== null && ex.restTime > 0 && (
+                            <span 
+                              className="badge badge-secondary" 
+                              style={{ 
+                                fontSize: '0.625rem', 
+                                padding: '2px 6px', 
+                                background: 'rgba(59, 130, 246, 0.08)', 
+                                color: '#60a5fa', 
+                                border: '1px solid rgba(59, 130, 246, 0.2)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                            >
+                              ⏱️ {ex.restTime}s
+                            </span>
+                          )}
                         </div>
 
                         {/* Action Quick Access Toggles */}
@@ -4346,13 +4470,27 @@ export default function WorkoutTab({
                       transition: 'all var(--transition-fast)'
                     }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <strong style={{ fontSize: '0.875rem', color: '#fff' }}>
-                        {resolveExerciseDisplayName(ex.title)}
-                      </strong>
-                      <span style={{ fontSize: '0.72rem', color: 'hsl(var(--muted))' }}>
-                        {translateEquipment(ex.equipment)} • {translateMuscleGroup(ex.muscleGroup)}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <img 
+                        src={getExerciseImage(ex)} 
+                        alt={ex.title} 
+                        style={{ 
+                          width: '32px', 
+                          height: '32px', 
+                          borderRadius: '50%', 
+                          objectFit: 'cover', 
+                          border: '1.5px solid hsl(var(--primary))',
+                          flexShrink: 0
+                        }} 
+                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <strong style={{ fontSize: '0.875rem', color: '#fff' }}>
+                          {resolveExerciseDisplayName(ex.title)}
+                        </strong>
+                        <span style={{ fontSize: '0.72rem', color: 'hsl(var(--muted))' }}>
+                          {translateEquipment(ex.equipment)} • {translateMuscleGroup(ex.muscleGroup)}
+                        </span>
+                      </div>
                     </div>
                     <Plus size={16} color="hsl(var(--primary))" />
                   </div>

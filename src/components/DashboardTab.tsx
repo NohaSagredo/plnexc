@@ -272,12 +272,12 @@ export default function DashboardTab({
   }, [sessions, selectedExercise]);
 
   // Widget ID Type & Layout States
-  type WidgetId = 'stats' | 'coach' | 'strength' | 'weight' | 'cardio' | 'splits_prs' | 'progress_photo' | 'weekly_sets' | 'projections';
+  type WidgetId = 'stats' | 'coach' | 'strength' | 'weight' | 'cardio' | 'splits_prs' | 'progress_photo' | 'weekly_sets' | 'projections' | 'telemetry';
 
   const [isEditingLayout, setIsEditingLayout] = useState<boolean>(false);
   const [layoutOrder, setLayoutOrder] = useState<WidgetId[]>(() => {
     const saved = localStorage.getItem('plnexc_dashboard_layout');
-    const required: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo', 'weekly_sets', 'projections'];
+    const required: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo', 'weekly_sets', 'projections', 'telemetry'];
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -469,6 +469,9 @@ export default function DashboardTab({
   // Cardio states and helper
   const [cardioTimeRange, setCardioTimeRange] = useState<'7' | '30'>('7');
   const [cardioMetric, setCardioMetric] = useState<'minutes' | 'calories'>('minutes');
+
+  // Telemetry state
+  const [telemetryWeek, setTelemetryWeek] = useState<number>(3);
 
   const cardioChartData = useMemo(() => {
     const numDays = parseInt(cardioTimeRange, 10);
@@ -1947,6 +1950,220 @@ export default function DashboardTab({
     );
   };
 
+  const renderTelemetryWidget = () => {
+    // Generate data points for 0 to 10 weeks
+    const dataPoints = [];
+    const t0 = telemetryWeek;
+    
+    // F'(t0) and F(t0)
+    const F_t0 = -0.6 * Math.pow(t0, 3) + 6 * Math.pow(t0, 2) + 20 * t0 + 100;
+    const Fd_t0 = -1.8 * Math.pow(t0, 2) + 12 * t0 + 20;
+    const Fdd_t0 = -3.6 * t0 + 12;
+
+    for (let w = 0; w <= 10; w += 0.5) {
+      const F = -0.6 * Math.pow(w, 3) + 6 * Math.pow(w, 2) + 20 * w + 100;
+      // Tangent line: y = Fd(t0)*(w - t0) + F(t0)
+      const tangent = Fd_t0 * (w - t0) + F_t0;
+      dataPoints.push({
+        week: w,
+        'Fuerza F(t)': Math.round(F * 10) / 10,
+        'Recta Tangente': Math.round(tangent * 10) / 10,
+      });
+    }
+
+    // Determine state
+    let stateTitle = '';
+    let stateDesc = '';
+    let stateColor = '';
+    let stateBg = '';
+    let stateBorder = '';
+
+    if (Fdd_t0 >= 0) {
+      stateTitle = language === 'es' ? 'Supercompensación' : 'Supercompensation';
+      stateDesc = language === 'es' 
+        ? 'Zona Activa: Adaptación Positiva Acelerada. El cuerpo asimila bien el volumen.' 
+        : 'Active Zone: Accelerated Positive Adaptation. The body absorbs volume well.';
+      stateColor = '#10b981'; // Green
+      stateBg = 'rgba(16, 185, 129, 0.08)';
+      stateBorder = 'rgba(16, 185, 129, 0.2)';
+    } else if (Fdd_t0 < 0 && Fd_t0 >= 0) {
+      stateTitle = language === 'es' ? 'Desaceleración' : 'Deceleration';
+      stateDesc = language === 'es' 
+        ? 'Alerta: Velocidad de ganancia disminuyendo. Punto de inflexión detectado.' 
+        : 'Alert: Gain velocity decreasing. Inflection point detected.';
+      stateColor = '#fbbf24'; // Yellow
+      stateBg = 'rgba(251, 191, 36, 0.08)';
+      stateBorder = 'rgba(251, 191, 36, 0.2)';
+    } else {
+      stateTitle = language === 'es' ? 'Alerta de Estancamiento' : 'Plateau Alert';
+      stateDesc = language === 'es' 
+        ? '¡Peligro!: Estancamiento por sobrecarga. Se requiere semana de descarga (Deload).' 
+        : 'Danger!: Overload plateau. Deload week required.';
+      stateColor = '#ef4444'; // Red
+      stateBg = 'rgba(239, 68, 68, 0.08)';
+      stateBorder = 'rgba(239, 68, 68, 0.2)';
+    }
+
+    return (
+      <div className="glass-panel animate-fade-in" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Zap size={22} color="hsl(var(--primary))" />
+              {language === 'es' 
+                ? 'Telemetría Neuromuscular e Inflexión de Fuerza' 
+                : 'Neuromuscular Telemetry & Strength Inflection'}
+            </h3>
+            <span style={{ 
+              fontSize: '0.75rem', 
+              color: 'hsl(var(--muted))',
+              background: 'rgba(255,255,255,0.05)',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              fontWeight: 'bold'
+            }}>
+              Edge Computing (Local)
+            </span>
+          </div>
+          <p style={{ color: 'hsl(var(--muted))', fontSize: '0.82rem', marginTop: '4px', lineHeight: '1.4' }}>
+            {language === 'es' 
+              ? 'Simulación del Criterio de la Segunda Derivada para la predicción temprana de estancamiento neuromuscular.' 
+              : 'Simulation of the Second Derivative Criterion for early neuromuscular plateau prediction.'}
+          </p>
+        </div>
+
+        {/* Status Indicator */}
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '8px', 
+          padding: '16px', 
+          background: stateBg, 
+          border: `1px solid ${stateBorder}`, 
+          borderRadius: '12px',
+          transition: 'all 0.3s ease'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {language === 'es' ? 'Estado Neuromuscular' : 'Neuromuscular State'}
+            </span>
+            <span style={{ 
+              fontSize: '0.8rem', 
+              fontWeight: 800, 
+              color: stateColor, 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '4px' 
+            }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: stateColor, boxShadow: `0 0 8px ${stateColor}` }} />
+              {stateTitle}
+            </span>
+          </div>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: '#ffffff', fontWeight: 500, lineHeight: '1.4' }}>
+            {stateDesc}
+          </p>
+        </div>
+
+        {/* Live Metrics Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
+          <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', borderRadius: '8px', textAlign: 'center' }}>
+            <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '2px' }}>F(t) (Fuerza)</span>
+            <strong style={{ fontSize: '1.2rem', color: '#ffffff' }}>{Math.round(F_t0 * 10) / 10} kg</strong>
+          </div>
+          <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', borderRadius: '8px', textAlign: 'center' }}>
+            <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '2px' }}>F\'(t) (Velocidad)</span>
+            <strong style={{ fontSize: '1.2rem', color: Fd_t0 >= 0 ? 'hsl(var(--primary))' : '#ef4444' }}>
+              {Fd_t0 > 0 ? '+' : ''}{Math.round(Fd_t0 * 10) / 10} kg/sem
+            </strong>
+          </div>
+          <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', borderRadius: '8px', textAlign: 'center' }}>
+            <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))', display: 'block', marginBottom: '2px' }}>F\'\'(t) (Aceleración)</span>
+            <strong style={{ fontSize: '1.2rem', color: Fdd_t0 >= 0 ? '#10b981' : '#fbbf24' }}>
+              {Fdd_t0 > 0 ? '+' : ''}{Math.round(Fdd_t0 * 10) / 10} kg/sem²
+            </strong>
+          </div>
+        </div>
+
+        {/* Week Interactive Slider */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(255,255,255,0.01)', border: '1px solid hsla(var(--border) / 0.3)', padding: '12px 16px', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.8rem', color: '#ffffff', fontWeight: 600 }}>
+              {language === 'es' ? 'Semana del Ciclo (t)' : 'Cycle Week (t)'}
+            </span>
+            <strong style={{ fontSize: '1rem', color: 'hsl(var(--primary))' }}>
+              {telemetryWeek} {language === 'es' ? 'semanas' : 'weeks'}
+            </strong>
+          </div>
+          <input 
+            type="range"
+            min="0"
+            max="10"
+            step="0.5"
+            value={telemetryWeek}
+            onChange={(e) => setTelemetryWeek(parseFloat(e.target.value))}
+            style={{ 
+              width: '100%', 
+              accentColor: 'hsl(var(--primary))', 
+              cursor: 'pointer',
+              marginTop: '4px'
+            }}
+          />
+        </div>
+
+        {/* Simulator Chart */}
+        <div style={{ width: '100%', height: '240px', marginTop: '10px' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+              <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+              <XAxis 
+                dataKey="week" 
+                stroke="hsl(var(--muted))" 
+                fontSize={11}
+                tickLine={false}
+                type="number"
+                domain={[0, 10]}
+                ticks={[0, 2, 4, 6, 8, 10]}
+              />
+              <YAxis 
+                stroke="hsl(var(--muted))" 
+                fontSize={11} 
+                domain={[50, 250]}
+                tickLine={false}
+              />
+              <Tooltip 
+                contentStyle={{ 
+                  background: 'hsl(var(--bg-surface))', 
+                  borderColor: 'hsl(var(--border))',
+                  borderRadius: '8px',
+                  color: '#ffffff',
+                  fontFamily: 'inherit'
+                }} 
+              />
+              <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '0.75rem' }} />
+              
+              <Line 
+                type="monotone" 
+                dataKey="Fuerza F(t)" 
+                stroke="hsl(var(--primary))" 
+                strokeWidth={3}
+                dot={false}
+                activeDot={{ r: 6 }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="Recta Tangente" 
+                stroke={telemetryWeek <= 6.5 ? 'hsl(var(--secondary))' : '#ef4444'} 
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    );
+  };
+
   const renderWidget = (id: WidgetId) => {
     switch (id) {
       case 'stats':
@@ -1967,6 +2184,8 @@ export default function DashboardTab({
         return renderWeeklySets();
       case 'projections':
         return renderProjectionsChart();
+      case 'telemetry':
+        return renderTelemetryWidget();
       default:
         return null;
     }

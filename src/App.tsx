@@ -610,7 +610,7 @@ export default function App() {
 
 
   // Save new custom routine (or update existing)
-  const handleSaveCustomRoutine = (name: string, exercises: string[], originalName?: string) => {
+  const handleSaveCustomRoutine = (name: string, exercises: (string | { title: string; restTime?: number })[], originalName?: string) => {
     let updated;
     if (originalName) {
       updated = customRoutines.map(r => r.title === originalName ? { title: name, exercises } : r);
@@ -912,7 +912,12 @@ export default function App() {
             onStartTraining={(workoutData) => {
               const title = workoutData.routineTitle || 'Entrenamiento Copiado';
               const exists = customRoutines.some(cr => cr.title === title);
-              const exercisesList = workoutData.workoutData.exercises.map((e: any) => e.title);
+              const exercisesList = workoutData.workoutData.exercises.map((e: any) => {
+                if (e.restTime !== undefined && e.restTime !== null && e.restTime > 0) {
+                  return { title: e.title, restTime: e.restTime };
+                }
+                return e.title;
+              });
               if (!exists) {
                 handleSaveCustomRoutine(title, exercisesList);
               }

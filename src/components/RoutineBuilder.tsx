@@ -8,15 +8,15 @@ import {
   ArrowDown, 
   Bookmark
 } from 'lucide-react';
-import { EXERCISES_DB } from '../data/exercises_db';
+import { EXERCISES_DB, getExerciseImage } from '../data/exercises_db';
 import type { Exercise } from '../data/exercises_db';
 import { getExerciseName } from '../utils/translations';
 
 interface RoutineBuilderProps {
-  onSave: (name: string, exercises: string[], originalName?: string) => void;
+  onSave: (name: string, exercises: (string | { title: string; restTime?: number })[], originalName?: string) => void;
   onCancel: () => void;
   editRoutineName?: string;
-  editExercises?: string[];
+  editExercises?: (string | { title: string; restTime?: number })[];
   isEditing?: boolean;
   language?: 'es' | 'en';
 }
@@ -30,19 +30,24 @@ export default function RoutineBuilder({
   language = 'es'
 }: RoutineBuilderProps) {
   const [routineName, setRoutineName] = useState(editRoutineName);
-  const [selectedExercises, setSelectedExercises] = useState<Exercise[]>(() => {
+  const [selectedExercises, setSelectedExercises] = useState<(Exercise & { restTime?: number })[]>(() => {
     if (editExercises.length > 0) {
-      return editExercises.map(title => {
+      return editExercises.map(exItem => {
+        const title = typeof exItem === 'string' ? exItem : exItem.title;
+        const restTime = typeof exItem === 'string' ? undefined : exItem.restTime;
         const found = EXERCISES_DB.find(ex => ex.title === title);
-        if (found) return found;
+        if (found) {
+          return { ...found, restTime };
+        }
         return {
           id: `custom_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
           title: title,
           muscleGroup: 'Pecho',
           equipment: 'Mancuerna',
           difficulty: 'Intermedio',
-          description: 'Ejercicio cargado'
-        } as Exercise;
+          description: 'Ejercicio cargado',
+          restTime
+        } as Exercise & { restTime?: number };
       });
     }
     return [];
@@ -201,6 +206,15 @@ export default function RoutineBuilder({
     });
   };
 
+  const handleUpdateExerciseRest = (exerciseId: string, restTime: number | undefined) => {
+    setSelectedExercises(prev => prev.map(ex => {
+      if (ex.id === exerciseId) {
+        return { ...ex, restTime };
+      }
+      return ex;
+    }));
+  };
+
   // Save Custom Routine
   const handleSaveRoutine = () => {
     const trimmedName = routineName.trim();
@@ -213,9 +227,14 @@ export default function RoutineBuilder({
       return;
     }
     
-    // Save only exercise titles to match core history engine
-    const exerciseTitles = selectedExercises.map(e => e.title);
-    onSave(trimmedName, exerciseTitles, isEditing ? editRoutineName : undefined);
+    // Save exercises with titles and restTime if specified
+    const exercisesData = selectedExercises.map(e => {
+      if (e.restTime !== undefined && e.restTime !== null && e.restTime > 0) {
+        return { title: e.title, restTime: e.restTime };
+      }
+      return e.title;
+    });
+    onSave(trimmedName, exercisesData, isEditing ? editRoutineName : undefined);
   };
 
   return (
@@ -286,11 +305,50 @@ export default function RoutineBuilder({
                       borderRadius: 'var(--border-radius-sm)'
                     }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '65%' }}>
-                      <strong style={{ fontSize: '0.9rem' }}>{getExerciseName(ex.id, ex.title, language)}</strong>
-                      <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
-                        {translateMuscleGroup(ex.muscleGroup)} {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 ? `(+ ${ex.secondaryMuscleGroups.map(m => translateMuscleGroup(m)).join(', ')})` : ''} • {translateEquipment(ex.equipment)}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '50%' }}>
+                      <img 
+                        src={getExerciseImage(ex)} 
+                        alt={ex.title} 
+                        style={{ 
+                          width: '32px', 
+                          height: '32px', 
+                          borderRadius: '50%', 
+                          objectFit: 'cover', 
+                          border: '1.5px solid hsl(var(--primary))',
+                          flexShrink: 0
+                        }} 
+                      />
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <strong style={{ fontSize: '0.9rem' }}>{getExerciseName(ex.id, ex.title, language)}</strong>
+                        <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))' }}>
+                          {translateMuscleGroup(ex.muscleGroup)} {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 ? `(+ ${ex.secondaryMuscleGroups.map(m => translateMuscleGroup(m)).join(', ')})` : ''} • {translateEquipment(ex.equipment)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.02)', border: '1px solid hsla(var(--border) / 0.5)', padding: '2px 6px', borderRadius: '4px' }}>
+                      <span style={{ fontSize: '0.8rem' }} title={language === 'es' ? 'Descanso' : 'Rest'}>⏱️</span>
+                      <input 
+                        type="number"
+                        placeholder="Def"
+                        min="0"
+                        value={ex.restTime !== undefined ? ex.restTime : ''}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          handleUpdateExerciseRest(ex.id, isNaN(val) ? undefined : val);
+                        }}
+                        style={{
+                          width: '40px',
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#ffffff',
+                          textAlign: 'center',
+                          fontSize: '0.75rem',
+                          padding: 0,
+                          outline: 'none'
+                        }}
+                      />
+                      <span style={{ fontSize: '0.7rem', color: 'hsl(var(--muted))' }}>s</span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -414,23 +472,37 @@ export default function RoutineBuilder({
                       transition: 'border-color var(--transition-fast)'
                     }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '75%', gap: '4px' }}>
-                      <strong style={{ fontSize: '0.85rem' }}>{getExerciseName(ex.id, ex.title, language)}</strong>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{translateMuscleGroup(ex.muscleGroup)}</span>
-                        {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 && (
-                          <span className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '1px 4px', background: 'rgba(255, 255, 255, 0.05)', color: 'hsl(var(--muted))', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                            + {ex.secondaryMuscleGroups.map(m => translateMuscleGroup(m)).join(', ')}
-                          </span>
-                        )}
-                        <span className="badge badge-success" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{translateEquipment(ex.equipment)}</span>
-                        <span className="badge badge-warning" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>
-                          {language === 'es' ? ex.difficulty : (
-                            ex.difficulty === 'Principiante' ? 'Beginner' :
-                            ex.difficulty === 'Intermedio' ? 'Intermediate' :
-                            ex.difficulty === 'Avanzado' ? 'Advanced' : ex.difficulty
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '75%' }}>
+                      <img 
+                        src={getExerciseImage(ex)} 
+                        alt={ex.title} 
+                        style={{ 
+                          width: '32px', 
+                          height: '32px', 
+                          borderRadius: '50%', 
+                          objectFit: 'cover', 
+                          border: '1.5px solid hsl(var(--primary))',
+                          flexShrink: 0
+                        }} 
+                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <strong style={{ fontSize: '0.85rem' }}>{getExerciseName(ex.id, ex.title, language)}</strong>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          <span className="badge badge-primary" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{translateMuscleGroup(ex.muscleGroup)}</span>
+                          {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 && (
+                            <span className="badge badge-secondary" style={{ fontSize: '0.65rem', padding: '1px 4px', background: 'rgba(255, 255, 255, 0.05)', color: 'hsl(var(--muted))', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                              + {ex.secondaryMuscleGroups.map(m => translateMuscleGroup(m)).join(', ')}
+                            </span>
                           )}
-                        </span>
+                          <span className="badge badge-success" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>{translateEquipment(ex.equipment)}</span>
+                          <span className="badge badge-warning" style={{ fontSize: '0.65rem', padding: '1px 4px' }}>
+                            {language === 'es' ? ex.difficulty : (
+                              ex.difficulty === 'Principiante' ? 'Beginner' :
+                              ex.difficulty === 'Intermedio' ? 'Intermediate' :
+                              ex.difficulty === 'Avanzado' ? 'Advanced' : ex.difficulty
+                            )}
+                          </span>
+                        </div>
                       </div>
                     </div>
 

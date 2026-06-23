@@ -253,7 +253,12 @@ Volumen total: ${post.totalVolumeKg} kg | Duración: ${post.durationMinutes} min
   // Save routine to custom list
   const handleSaveRoutine = (post: FeedPost) => {
     const title = post.routineTitle || (language === 'es' ? 'Rutina de la Comunidad' : 'Community Routine');
-    const exercisesList = post.workoutData.exercises.map((e: any) => e.title);
+    const exercisesList = post.workoutData.exercises.map((e: any) => {
+      if (e.restTime !== undefined && e.restTime !== null && e.restTime > 0) {
+        return { title: e.title, restTime: e.restTime };
+      }
+      return e.title;
+    });
     
     const exists = customRoutines.some(cr => cr.title === title);
     if (exists) {

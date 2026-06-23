@@ -942,3 +942,27 @@ export const EXERCISES_DB: Exercise[] = [
     secondaryMuscleGroups: ['Glúteos', 'Core']
   }
 ];
+
+export function getExerciseImage(exercise: any): string {
+  if (exercise?.image) return exercise.image;
+  const dbMatch = EXERCISES_DB.find(ex => ex.title.toLowerCase() === (exercise?.title || exercise?.originalTitle || '').toLowerCase() || ex.id === exercise?.id);
+  if (dbMatch?.image) return dbMatch.image;
+
+  const muscle = exercise?.muscleGroup || dbMatch?.muscleGroup || 'Pecho';
+  const fallbackImages: Record<string, string> = {
+    'Pecho': 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=200&auto=format&fit=crop&q=60',
+    'Espalda': 'https://images.unsplash.com/photo-1605296867304-46d5465a25f1?w=200&auto=format&fit=crop&q=60',
+    'Hombros': 'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=200&auto=format&fit=crop&q=60',
+    'Bíceps': 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=200&auto=format&fit=crop&q=60',
+    'Tríceps': 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&auto=format&fit=crop&q=60',
+    'Cuádriceps': 'https://images.unsplash.com/photo-1434608519344-49d77a699e1d?w=200&auto=format&fit=crop&q=60',
+    'Femorales': 'https://images.unsplash.com/photo-1434608519344-49d77a699e1d?w=200&auto=format&fit=crop&q=60',
+    'Glúteos': 'https://images.unsplash.com/photo-1574680096145-d05b474e2155?w=200&auto=format&fit=crop&q=60',
+    'Pantorrillas': 'https://images.unsplash.com/photo-1434608519344-49d77a699e1d?w=200&auto=format&fit=crop&q=60',
+    'Core': 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=200&auto=format&fit=crop&q=60',
+    'Cuello': 'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=200&auto=format&fit=crop&q=60',
+    'Cardio': 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=200&auto=format&fit=crop&q=60'
+  };
+
+  return fallbackImages[muscle] || 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=200&auto=format&fit=crop&q=60';
+}
