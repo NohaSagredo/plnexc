@@ -38,7 +38,8 @@ import {
   ChevronUp,
   ChevronDown,
   ShieldAlert,
-  Zap
+  Zap,
+  Settings
 } from 'lucide-react';
 
 interface SetRecord {
@@ -274,29 +275,75 @@ export default function DashboardTab({
   // Widget ID Type & Layout States
   type WidgetId = 'stats' | 'coach' | 'strength' | 'weight' | 'cardio' | 'splits_prs' | 'progress_photo' | 'weekly_sets' | 'projections' | 'telemetry';
 
+  const ALL_WIDGETS: { id: WidgetId; nameEs: string; nameEn: string; descEs: string; descEn: string; icon: string }[] = [
+    { id: 'stats', nameEs: 'Resumen de Estadísticas', nameEn: 'Stats Summary', descEs: 'Resumen general de sesiones, series totales y 1RM récord.', descEn: 'General summary of sessions, total sets, and all-time 1RM.', icon: 'Activity' },
+    { id: 'coach', nameEs: 'Análisis de Coach IA', nameEn: 'AI Coach Analysis', descEs: 'Recomendaciones y plan de acción inteligente basado en tu progreso y debilidades.', descEn: 'Recommendations and smart action plan based on your progress and weaknesses.', icon: 'Zap' },
+    { id: 'strength', nameEs: 'Progreso de Fuerza (1RM)', nameEn: 'Strength Progress (1RM)', descEs: 'Evolución del 1RM estimado y volumen histórico por ejercicio.', descEn: '1RM estimation progress and historical volume per exercise.', icon: 'TrendingUp' },
+    { id: 'weight', nameEs: 'Historial de Peso', nameEn: 'Weight History', descEs: 'Evolución de tu peso corporal y registro del último peso.', descEn: 'Evolution of your body weight and record of the latest weight.', icon: 'Scale' },
+    { id: 'cardio', nameEs: 'Estadísticas de Cardio', nameEn: 'Cardio Stats', descEs: 'Registro de tiempo, intensidad y gasto calórico en cardio.', descEn: 'Record of duration, intensity, and calorie expenditure in cardio.', icon: 'HeartPulse' },
+    { id: 'splits_prs', nameEs: 'Distribución y Récords', nameEn: 'Distribution & PRs', descEs: 'Resumen de volumen semanal por músculo y mejores marcas por repeticiones.', descEn: 'Summary of weekly volume per muscle and best personal records.', icon: 'Award' },
+    { id: 'progress_photo', nameEs: 'Galería de Progreso', nameEn: 'Progress Gallery', descEs: 'Línea de tiempo de fotos de progreso físico con notas.', descEn: 'Timeline of progress photos with optional notes.', icon: 'Camera' },
+    { id: 'weekly_sets', nameEs: 'Volumen Semanal', nameEn: 'Weekly Volume', descEs: 'Distribución detallada de series de trabajo por grupo muscular en la semana.', descEn: 'Detailed distribution of working sets per muscle group in the week.', icon: 'Dumbbell' },
+    { id: 'projections', nameEs: 'Proyecciones de Carga', nameEn: 'Load Projections', descEs: 'Predicciones inteligentes de tu progresión futura en base a tus series anteriores.', descEn: 'Smart predictions of your future progression based on past sets.', icon: 'Calendar' },
+    { id: 'telemetry', nameEs: 'Telemetría Neuromuscular', nameEn: 'Neuromuscular Telemetry', descEs: 'Cálculo de fatiga y alertas de estancamiento mediante regresión cúbica.', descEn: 'Fatigue calculation and plateau alerts via cubic regression.', icon: 'Activity' },
+  ];
+
+  const getWidgetIcon = (iconName: string, size = 18) => {
+    switch (iconName) {
+      case 'Activity': return <Activity size={size} />;
+      case 'Zap': return <Zap size={size} />;
+      case 'TrendingUp': return <TrendingUp size={size} />;
+      case 'Scale': return <Scale size={size} />;
+      case 'HeartPulse': return <HeartPulse size={size} />;
+      case 'Award': return <Award size={size} />;
+      case 'Camera': return <Camera size={size} />;
+      case 'Dumbbell': return <Dumbbell size={size} />;
+      case 'Calendar': return <Calendar size={size} />;
+      default: return <Activity size={size} />;
+    }
+  };
+
   const [isEditingLayout, setIsEditingLayout] = useState<boolean>(false);
+  const [isWidgetMenuOpen, setIsWidgetMenuOpen] = useState<boolean>(false);
   const [layoutOrder, setLayoutOrder] = useState<WidgetId[]>(() => {
     const saved = localStorage.getItem('plnexc_dashboard_layout');
-    const required: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo', 'weekly_sets', 'projections', 'telemetry'];
+    const allIds: WidgetId[] = ['stats', 'coach', 'strength', 'weight', 'cardio', 'splits_prs', 'progress_photo', 'weekly_sets', 'projections', 'telemetry'];
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const hasAll = required.every(id => parsed.includes(id));
-        if (hasAll && parsed.length === required.length) return parsed;
-
-        const filtered = parsed.filter((id: any) => required.includes(id)) as WidgetId[];
-        required.forEach(id => {
-          if (!filtered.includes(id)) {
-            filtered.push(id);
-          }
-        });
-        return filtered;
+        if (Array.isArray(parsed)) {
+          // Only return valid widget IDs that exist in our system
+          const filtered = parsed.filter((id: any) => allIds.includes(id)) as WidgetId[];
+          return filtered;
+        }
       } catch (e) {
         // Fallback
       }
     }
-    return required;
+    return allIds; // Default is all widgets visible
   });
+
+  const handleAddWidget = (id: WidgetId) => {
+    if (!layoutOrder.includes(id)) {
+      const newOrder = [...layoutOrder, id];
+      setLayoutOrder(newOrder);
+      localStorage.setItem('plnexc_dashboard_layout', JSON.stringify(newOrder));
+    }
+  };
+
+  const handleRemoveWidget = (id: WidgetId) => {
+    const newOrder = layoutOrder.filter(item => item !== id);
+    setLayoutOrder(newOrder);
+    localStorage.setItem('plnexc_dashboard_layout', JSON.stringify(newOrder));
+  };
+
+  const handleToggleWidget = (id: WidgetId) => {
+    if (layoutOrder.includes(id)) {
+      handleRemoveWidget(id);
+    } else {
+      handleAddWidget(id);
+    }
+  };
 
   // Calculate Weekly Sets per Muscle Group (Monday-Sunday local time)
   const weeklySetsByMuscle = useMemo(() => {
@@ -2466,6 +2513,24 @@ export default function DashboardTab({
             >
               <ChevronDown size={14} />
             </button>
+            <button 
+              onClick={() => handleRemoveWidget(id)}
+              style={{ 
+                background: 'rgba(239, 68, 68, 0.15)', 
+                border: 'none', 
+                color: '#ff4d4d', 
+                cursor: 'pointer',
+                borderRadius: '6px',
+                padding: '4px 6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease'
+              }}
+              title={language === 'es' ? 'Quitar Widget' : 'Remove Widget'}
+            >
+              <Trash2 size={14} />
+            </button>
           </div>
         )}
         <div style={{ opacity: isEditingLayout ? 0.75 : 1, transition: 'opacity 0.3s ease' }}>
@@ -3025,6 +3090,28 @@ export default function DashboardTab({
               </div>
             </div>
             
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button 
+              onClick={() => setIsWidgetMenuOpen(true)}
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                color: 'hsl(var(--muted))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '6px',
+                padding: '4px 8px',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              className="hover-opacity"
+            >
+              <Settings size={12} />
+              {language === 'es' ? 'Widgets' : 'Widgets'}
+            </button>
+
             <button 
               onClick={() => {
                 if (isEditingLayout) {
@@ -3048,14 +3135,243 @@ export default function DashboardTab({
               }}
               className="hover-opacity"
             >
-              {isEditingLayout ? '💾 Guardar' : '⚙️ Organizar'}
+              {isEditingLayout ? (language === 'es' ? '💾 Guardar' : '💾 Save') : (language === 'es' ? '⚙️ Organizar' : '⚙️ Organize')}
             </button>
           </div>
+        </div>
 
-          {/* Reorganizable list of widgets */}
+        {/* Reorganizable list of widgets or Empty State */}
+        {activeLayoutOrder.length === 0 ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '60px 20px',
+            background: 'rgba(255, 255, 255, 0.01)',
+            backdropFilter: 'blur(10px)',
+            border: '1px dashed hsl(var(--border))',
+            borderRadius: '16px',
+            textAlign: 'center',
+            gap: '16px',
+            margin: '20px 0'
+          }}>
+            <div style={{
+              color: 'hsl(var(--muted))',
+              background: 'rgba(255, 255, 255, 0.02)',
+              width: '60px',
+              height: '60px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Dumbbell size={28} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                {language === 'es' ? 'Tu panel está vacío' : 'Your dashboard is empty'}
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: 'hsl(var(--muted))', margin: '6px 0 0 0', maxWidth: '360px', lineHeight: 1.4 }}>
+                {language === 'es' 
+                  ? 'No tienes ningún widget activo. Personaliza tu panel para añadir los widgets que mejor se adapten a tu entrenamiento.' 
+                  : 'You do not have any active widgets. Customize your panel to add the widgets that best fit your training.'}
+              </p>
+            </div>
+            <button
+              onClick={() => setIsWidgetMenuOpen(true)}
+              style={{
+                background: 'hsl(var(--primary))',
+                color: 'hsl(var(--primary-foreground))',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 20px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'opacity 0.2s ease'
+              }}
+              className="hover-opacity"
+            >
+              <Plus size={16} />
+              {language === 'es' ? 'Añadir Widgets' : 'Add Widgets'}
+            </button>
+          </div>
+        ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {activeLayoutOrder.map((widgetId, index) => renderWidgetWrapper(widgetId, index, activeLayoutOrder.length))}
           </div>
+        )}
+
+        {/* Widget Selection Modal */}
+        {isWidgetMenuOpen && createPortal(
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}>
+            <div style={{
+              background: 'rgba(20, 20, 30, 0.95)',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '550px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4)'
+            }}>
+              {/* Modal Header */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px 20px',
+                borderBottom: '1px solid hsl(var(--border))'
+              }}>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                  {language === 'es' ? 'Personalizar Dashboard' : 'Customize Dashboard'}
+                </h2>
+                <button 
+                  onClick={() => setIsWidgetMenuOpen(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'hsl(var(--muted))',
+                    cursor: 'pointer',
+                    padding: '4px'
+                  }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body / Widget List */}
+              <div style={{
+                padding: '20px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                {ALL_WIDGETS.map(widget => {
+                  const isActive = layoutOrder.includes(widget.id);
+                  return (
+                    <div 
+                      key={widget.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        background: isActive ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.005)',
+                        border: `1px solid ${isActive ? 'hsla(var(--primary) / 0.2)' : 'hsl(var(--border))'}`,
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, paddingRight: '12px' }}>
+                        <div style={{
+                          color: isActive ? 'hsl(var(--primary))' : 'hsl(var(--muted))',
+                          background: isActive ? 'hsla(var(--primary) / 0.1)' : 'rgba(255,255,255,0.02)',
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          {getWidgetIcon(widget.icon, 20)}
+                        </div>
+                        <div style={{ textAlign: 'left' }}>
+                          <h3 style={{ fontSize: '0.9rem', fontWeight: 600, color: '#ffffff', margin: 0 }}>
+                            {language === 'es' ? widget.nameEs : widget.nameEn}
+                          </h3>
+                          <p style={{ fontSize: '0.75rem', color: 'hsl(var(--muted))', margin: '4px 0 0 0', lineHeight: 1.3 }}>
+                            {language === 'es' ? widget.descEs : widget.descEn}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleToggleWidget(widget.id)}
+                        style={{
+                          background: isActive ? 'rgba(239, 68, 68, 0.1)' : 'hsla(var(--primary) / 0.1)',
+                          color: isActive ? 'hsl(var(--danger))' : 'hsl(var(--primary))',
+                          border: `1px solid ${isActive ? 'rgba(239, 68, 68, 0.2)' : 'hsla(var(--primary) / 0.2)'}`,
+                          borderRadius: '8px',
+                          padding: '6px 12px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.2s ease',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {isActive ? (
+                          <>
+                            <Trash2 size={12} />
+                            {language === 'es' ? 'Quitar' : 'Remove'}
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={12} />
+                            {language === 'es' ? 'Añadir' : 'Add'}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Modal Footer */}
+              <div style={{
+                padding: '16px 20px',
+                borderTop: '1px solid hsl(var(--border))',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                background: 'rgba(15, 15, 25, 0.95)'
+              }}>
+                <button
+                  onClick={() => setIsWidgetMenuOpen(false)}
+                  style={{
+                    background: 'hsl(var(--primary))',
+                    color: 'hsl(var(--primary-foreground))',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'opacity 0.2s ease'
+                  }}
+                  className="hover-opacity"
+                >
+                  {language === 'es' ? 'Aceptar' : 'Done'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
         </>
       )}
 
