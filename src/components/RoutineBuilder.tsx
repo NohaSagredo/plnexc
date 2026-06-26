@@ -11,6 +11,7 @@ import {
 import { EXERCISES_DB, getExerciseImage } from '../data/exercises_db';
 import type { Exercise } from '../data/exercises_db';
 import { getExerciseName } from '../utils/translations';
+import CreateExerciseModal from './CreateExerciseModal';
 
 interface RoutineBuilderProps {
   onSave: (name: string, exercises: (string | { title: string; restTime?: number })[], originalName?: string) => void;
@@ -19,6 +20,8 @@ interface RoutineBuilderProps {
   editExercises?: (string | { title: string; restTime?: number })[];
   isEditing?: boolean;
   language?: 'es' | 'en';
+  customExercises?: Exercise[];
+  onSaveCustomExercise?: (exercise: Omit<Exercise, 'id'> & { id?: string }) => void;
 }
 
 export default function RoutineBuilder({ 
@@ -27,15 +30,23 @@ export default function RoutineBuilder({
   editRoutineName = '',
   editExercises = [],
   isEditing = false,
-  language = 'es'
+  language = 'es',
+  customExercises = [],
+  onSaveCustomExercise
 }: RoutineBuilderProps) {
+  const allExercises = useMemo(() => {
+    return [...EXERCISES_DB, ...customExercises];
+  }, [customExercises]);
+
+  const [showCreateExerciseModal, setShowCreateExerciseModal] = useState<boolean>(false);
+
   const [routineName, setRoutineName] = useState(editRoutineName);
   const [selectedExercises, setSelectedExercises] = useState<(Exercise & { restTime?: number })[]>(() => {
     if (editExercises.length > 0) {
       return editExercises.map(exItem => {
         const title = typeof exItem === 'string' ? exItem : exItem.title;
         const restTime = typeof exItem === 'string' ? undefined : exItem.restTime;
-        const found = EXERCISES_DB.find(ex => ex.title === title);
+        const found = allExercises.find(ex => ex.title === title);
         if (found) {
           return { ...found, restTime };
         }
@@ -133,9 +144,8 @@ export default function RoutineBuilder({
     filterDifficulty: language === 'es' ? 'Filtrar por Dificultad (Ruta de Progreso):' : 'Filter by Difficulty (Progress Route):'
   };
 
-  // Filter exercises based on selections (with bilingual search match)
   const filteredExercises = useMemo(() => {
-    return EXERCISES_DB.filter(ex => {
+    return allExercises.filter(ex => {
       const nameLocal = getExerciseName(ex.id, ex.title, language);
       const matchText = ex.title.toLowerCase().includes(searchText.toLowerCase()) ||
                         nameLocal.toLowerCase().includes(searchText.toLowerCase());
@@ -145,7 +155,7 @@ export default function RoutineBuilder({
       
       return matchText && matchMuscle && matchEquipment && matchDifficulty;
     });
-  }, [searchText, selectedMuscle, selectedEquipment, selectedDifficulty, language]);
+  }, [searchText, selectedMuscle, selectedEquipment, selectedDifficulty, language, allExercises]);
 
   // Unique categories for selectors
   const muscles = ['Todos', 'Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Cuádriceps', 'Femorales', 'Glúteos', 'Pantorrillas', 'Core', 'Cuello', 'Cardio'];
@@ -169,7 +179,7 @@ export default function RoutineBuilder({
 
   // Remove exercise from custom routine
   const handleRemoveExercise = (exerciseId: string) => {
-    const ex = EXERCISES_DB.find(e => e.id === exerciseId);
+    const ex = allExercises.find(e => e.id === exerciseId);
     setSelectedExercises(prev => prev.filter(e => e.id !== exerciseId));
 
     const name = ex ? getExerciseName(ex.id, ex.title, language) : '';
@@ -415,6 +425,31 @@ export default function RoutineBuilder({
             />
           </div>
 
+          {/* Create Custom Exercise Button */}
+          <button
+            onClick={() => setShowCreateExerciseModal(true)}
+            className="btn btn-primary animate-pulse"
+            style={{
+              width: '100%',
+              padding: '10px',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              borderRadius: '8px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsla(var(--primary) / 0.8) 100%)',
+              color: '#000',
+              border: 'none',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Plus size={16} />
+            {language === 'es' ? 'Crear Ejercicio Personalizado' : 'Create Custom Exercise'}
+          </button>
+
           {/* Category Dropdowns */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div>
@@ -589,6 +624,15 @@ export default function RoutineBuilder({
         </div>
       )}
 
+      {onSaveCustomExercise && (
+        <CreateExerciseModal
+          isOpen={showCreateExerciseModal}
+          onClose={() => setShowCreateExerciseModal(false)}
+          onSave={onSaveCustomExercise}
+          language={language}
+          existingExercises={allExercises}
+        />
+      )}
     </div>
   );
 }

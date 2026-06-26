@@ -32,10 +32,12 @@ import type { SetData, ProgressionTarget, ProgressionSystem } from '../utils/Pro
 import { getSubstitutedExercise, MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import type { SubstitutionRule } from '../utils/MiloRehabEngine';
 import RoutineBuilder from './RoutineBuilder';
+import CreateExerciseModal from './CreateExerciseModal';
 import { publishWorkoutToFeed } from '../utils/firebaseSync';
 import { auth } from '../utils/firebase';
 import { DEFAULT_PRESETS } from '../data/default_routines';
 import { EXERCISES_DB, isTimeBasedExercise, getExerciseImage } from '../data/exercises_db';
+import type { Exercise } from '../data/exercises_db';
 import { getStrengthStandards } from '../utils/StrengthStandards';
 import { TRANSLATIONS, getExerciseName, translateEngineText } from '../utils/translations';
 
@@ -67,6 +69,9 @@ interface WorkoutTabProps {
   onAddProgressPhoto: (photo: any) => void;
   pendingRoutineToStart?: any;
   onClearPendingRoutine?: () => void;
+  customExercises: Exercise[];
+  onSaveCustomExercise: (exercise: Omit<Exercise, 'id'> & { id?: string }) => void;
+  onDeleteCustomExercise: (id: string) => void;
 }
 
 // Dynamically generate a beep sound as a WAV Data URI/Blob to bypass iOS Web Audio API mute/silent-switch limitations
@@ -235,9 +240,18 @@ export default function WorkoutTab({
   displayName,
   onAddProgressPhoto,
   pendingRoutineToStart,
-  onClearPendingRoutine
+  onClearPendingRoutine,
+  customExercises,
+  onSaveCustomExercise,
+  onDeleteCustomExercise
 }: WorkoutTabProps) {
   const t = TRANSLATIONS[language];
+
+  const allExercises = useMemo(() => {
+    return [...EXERCISES_DB, ...customExercises];
+  }, [customExercises]);
+
+  const [showCreateExerciseModal, setShowCreateExerciseModal] = useState<boolean>(false);
 
   const getLocalDateString = () => {
     const d = new Date();
@@ -248,7 +262,7 @@ export default function WorkoutTab({
   };
 
   const resolveExerciseDisplayName = (title: string) => {
-    const found = EXERCISES_DB.find(ex => ex.title.toLowerCase() === title.toLowerCase() || ex.id === title);
+    const found = allExercises.find(ex => ex.title.toLowerCase() === title.toLowerCase() || ex.id === title);
     if (found) {
       return getExerciseName(found.id, found.title, language);
     }
@@ -418,7 +432,7 @@ export default function WorkoutTab({
   const [updateRoutineOnFinish, setUpdateRoutineOnFinish] = useState<boolean>(false);
 
   const filteredExercisesForAdd = useMemo(() => {
-    return EXERCISES_DB.filter(ex => {
+    return allExercises.filter(ex => {
       const matchSearch = ex.title.toLowerCase().includes(exerciseSearchText.toLowerCase()) || 
                           getExerciseName(ex.id, ex.title, language).toLowerCase().includes(exerciseSearchText.toLowerCase());
       
@@ -426,7 +440,7 @@ export default function WorkoutTab({
       
       return matchSearch && matchMuscle;
     });
-  }, [exerciseSearchText, selectedAddExerciseMuscle, language]);
+  }, [exerciseSearchText, selectedAddExerciseMuscle, language, allExercises]);
 
   // Strength Road Map States
   const [projectionExercise, setProjectionExercise] = useState<string | null>(null);
@@ -639,7 +653,7 @@ export default function WorkoutTab({
     if (!selectedRoutineObj) return [];
     return selectedRoutineObj.exercises.map(exObj => {
       const title = exObj.title;
-      const found = EXERCISES_DB.find(ex => ex.title === title);
+      const found = allExercises.find(ex => ex.title === title);
       const exerciseBase = found || {
         id: `custom_${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
         title,
@@ -778,7 +792,7 @@ export default function WorkoutTab({
         }
       }
 
-      const dbEx = EXERCISES_DB.find(db => db.title.toLowerCase() === finalTitle.toLowerCase() || db.id === finalTitle);
+      const dbEx = allExercises.find(db => db.title.toLowerCase() === finalTitle.toLowerCase() || db.id === finalTitle);
       const isBodyweight = dbEx?.equipment === 'Peso Corporal';
 
       // Calculate progressive overload suggestions
@@ -989,7 +1003,7 @@ export default function WorkoutTab({
     exerciseHistory.sort((a, b) => a.date.getTime() - b.date.getTime());
     const latestSession = exerciseHistory[exerciseHistory.length - 1];
     
-    const dbEx = EXERCISES_DB.find(db => db.title.toLowerCase() === exTitle.toLowerCase() || db.id === exTitle);
+    const dbEx = allExercises.find(db => db.title.toLowerCase() === exTitle.toLowerCase() || db.id === exTitle);
     const isBodyweight = dbEx?.equipment === 'Peso Corporal';
 
     let target: ProgressionTarget = {
@@ -1402,6 +1416,8 @@ export default function WorkoutTab({
         editExercises={editingRoutine?.exercises}
         isEditing={!!editingRoutine}
         language={language}
+        customExercises={customExercises}
+        onSaveCustomExercise={onSaveCustomExercise}
         onSave={(name, exercises, originalName) => {
           onSaveCustomRoutine(name, exercises, originalName);
           setIsBuildingRoutine(false);
@@ -2405,7 +2421,7 @@ export default function WorkoutTab({
                 {/* Badges Row */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {(() => {
-                    const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
+                    const dbEx = allExercises.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
                     if (!dbEx) return null;
                     return (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -2518,26 +2534,26 @@ export default function WorkoutTab({
                     </button>
 
                     {(() => {
-                      let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                      let foundEx = allExercises.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
                       if (!foundEx && ex.originalTitle) {
-                        foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.originalTitle.toLowerCase());
+                        foundEx = allExercises.find(dbEx => dbEx.title.toLowerCase() === ex.originalTitle.toLowerCase());
                       }
                       if (!foundEx) {
                         const cleanTitle = ex.title.toLowerCase();
                         if (cleanTitle.includes('squat')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                          foundEx = allExercises.find(d => d.id === 'squat_barbell');
                         } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                          foundEx = allExercises.find(d => d.id === 'bench_press_barbell');
                         } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                          foundEx = allExercises.find(d => d.id === 'deadlift_barbell');
                         } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                          foundEx = allExercises.find(d => d.id === 'overhead_press_barbell');
                         } else if (cleanTitle.includes('row')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                          foundEx = allExercises.find(d => d.id === 'bent_over_row_barbell');
                         } else if (cleanTitle.includes('curl')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                          foundEx = allExercises.find(d => d.id === 'bicep_curl_dumbbell');
                         } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                          foundEx = allExercises.find(d => d.id === 'pull_up');
                         }
                       }
 
@@ -2640,26 +2656,26 @@ export default function WorkoutTab({
 
               {/* Técnica e Instrucciones Colapsables con Imagen en la Nube */}
               {(() => {
-                let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                let foundEx = allExercises.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
                 if (!foundEx && ex.originalTitle) {
-                  foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.originalTitle.toLowerCase());
+                  foundEx = allExercises.find(dbEx => dbEx.title.toLowerCase() === ex.originalTitle.toLowerCase());
                 }
                 if (!foundEx) {
                   const cleanTitle = ex.title.toLowerCase();
                   if (cleanTitle.includes('squat')) {
-                    foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                    foundEx = allExercises.find(d => d.id === 'squat_barbell');
                   } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
-                    foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                    foundEx = allExercises.find(d => d.id === 'bench_press_barbell');
                   } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
-                    foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                    foundEx = allExercises.find(d => d.id === 'deadlift_barbell');
                   } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
-                    foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                    foundEx = allExercises.find(d => d.id === 'overhead_press_barbell');
                   } else if (cleanTitle.includes('row')) {
-                    foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                    foundEx = allExercises.find(d => d.id === 'bent_over_row_barbell');
                   } else if (cleanTitle.includes('curl')) {
-                    foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                    foundEx = allExercises.find(d => d.id === 'bicep_curl_dumbbell');
                   } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
-                    foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                    foundEx = allExercises.find(d => d.id === 'pull_up');
                   }
                 }
 
@@ -3367,7 +3383,7 @@ export default function WorkoutTab({
                             {translateMuscleGroup(ex.muscleGroup)}
                           </span>
                           {(() => {
-                            const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
+                            const dbEx = allExercises.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
                             if (dbEx && dbEx.secondaryMuscleGroups && dbEx.secondaryMuscleGroups.length > 0) {
                               return (
                                 <span className="badge badge-secondary" style={{ fontSize: '0.625rem', padding: '2px 6px', textTransform: 'capitalize', background: 'rgba(255, 255, 255, 0.05)', color: 'hsl(var(--muted))', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
@@ -3454,23 +3470,23 @@ export default function WorkoutTab({
 
                           {/* Tech Guide Toggle */}
                           {(() => {
-                            let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                            let foundEx = allExercises.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
                             if (!foundEx) {
                               const cleanTitle = ex.title.toLowerCase();
                               if (cleanTitle.includes('squat')) {
-                                foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                                foundEx = allExercises.find(d => d.id === 'squat_barbell');
                               } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
-                                foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                                foundEx = allExercises.find(d => d.id === 'bench_press_barbell');
                               } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
-                                foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                                foundEx = allExercises.find(d => d.id === 'deadlift_barbell');
                               } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
-                                foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                                foundEx = allExercises.find(d => d.id === 'overhead_press_barbell');
                               } else if (cleanTitle.includes('row')) {
-                                foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                                foundEx = allExercises.find(d => d.id === 'bent_over_row_barbell');
                               } else if (cleanTitle.includes('curl')) {
-                                foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                                foundEx = allExercises.find(d => d.id === 'bicep_curl_dumbbell');
                               } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
-                                foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                                foundEx = allExercises.find(d => d.id === 'pull_up');
                               }
                             }
 
@@ -3542,23 +3558,23 @@ export default function WorkoutTab({
 
                     {/* Collapsible Technical Guide */}
                     {(() => {
-                      let foundEx = EXERCISES_DB.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
+                      let foundEx = allExercises.find(dbEx => dbEx.title.toLowerCase() === ex.title.toLowerCase());
                       if (!foundEx) {
                         const cleanTitle = ex.title.toLowerCase();
                         if (cleanTitle.includes('squat')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'squat_barbell');
+                          foundEx = allExercises.find(d => d.id === 'squat_barbell');
                         } else if (cleanTitle.includes('bench press') || cleanTitle.includes('floor press')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'bench_press_barbell');
+                          foundEx = allExercises.find(d => d.id === 'bench_press_barbell');
                         } else if (cleanTitle.includes('deadlift') || cleanTitle.includes('rack pull')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'deadlift_barbell');
+                          foundEx = allExercises.find(d => d.id === 'deadlift_barbell');
                         } else if (cleanTitle.includes('press') || cleanTitle.includes('push up') || cleanTitle.includes('pushup')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'overhead_press_barbell');
+                          foundEx = allExercises.find(d => d.id === 'overhead_press_barbell');
                         } else if (cleanTitle.includes('row')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'bent_over_row_barbell');
+                          foundEx = allExercises.find(d => d.id === 'bent_over_row_barbell');
                         } else if (cleanTitle.includes('curl')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'bicep_curl_dumbbell');
+                          foundEx = allExercises.find(d => d.id === 'bicep_curl_dumbbell');
                         } else if (cleanTitle.includes('pull up') || cleanTitle.includes('pulldown') || cleanTitle.includes('chin up')) {
-                          foundEx = EXERCISES_DB.find(d => d.id === 'pull_up');
+                          foundEx = allExercises.find(d => d.id === 'pull_up');
                         }
                       }
 
@@ -4422,6 +4438,31 @@ export default function WorkoutTab({
               />
             </div>
 
+            {/* Create Custom Exercise Button */}
+            <button
+              onClick={() => setShowCreateExerciseModal(true)}
+              className="btn btn-primary animate-pulse"
+              style={{
+                width: '100%',
+                padding: '10px',
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsla(var(--primary) / 0.8) 100%)',
+                color: '#000',
+                border: 'none'
+              }}
+            >
+              <Plus size={16} />
+              {language === 'es' ? 'Crear Ejercicio Personalizado' : 'Create Custom Exercise'}
+            </button>
+
             {/* Muscle Filter Pills */}
             <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
               {['Todos', 'Pecho', 'Espalda', 'Hombros', 'Bíceps', 'Tríceps', 'Cuádriceps', 'Femorales', 'Glúteos', 'Core'].map(muscle => (
@@ -4492,7 +4533,33 @@ export default function WorkoutTab({
                         </span>
                       </div>
                     </div>
-                    <Plus size={16} color="hsl(var(--primary))" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      {ex.id.startsWith('custom_') && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(language === 'es' ? `¿Estás seguro de que deseas eliminar "${ex.title}" para siempre?` : `Are you sure you want to delete "${ex.title}" permanently?`)) {
+                              onDeleteCustomExercise(ex.id);
+                            }
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'rgb(239, 68, 68)',
+                            padding: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '4px'
+                          }}
+                          title={language === 'es' ? 'Eliminar ejercicio' : 'Delete exercise'}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                      <Plus size={16} color="hsl(var(--primary))" />
+                    </div>
                   </div>
                 ))
               )}
@@ -4501,6 +4568,14 @@ export default function WorkoutTab({
         </div>,
         document.body
       )}
+
+      <CreateExerciseModal
+        isOpen={showCreateExerciseModal}
+        onClose={() => setShowCreateExerciseModal(false)}
+        onSave={onSaveCustomExercise}
+        language={language}
+        existingExercises={allExercises}
+      />
     </div>
   );
 }

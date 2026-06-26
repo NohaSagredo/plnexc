@@ -4,6 +4,7 @@ import {
   increment 
 } from 'firebase/firestore';
 import { FirestoreModel } from './FirestoreORM';
+import type { Exercise } from '../data/exercises_db';
 
 export interface WeightRecord {
   date: string;
@@ -60,6 +61,7 @@ export interface SyncedData {
   bio?: string;
   followers?: string[];
   following?: string[];
+  customExercises?: Exercise[];
   updatedAt: string;
 }
 
@@ -129,6 +131,7 @@ export function mergeLocalAndCloudData(local: {
   bio?: string;
   followers?: string[];
   following?: string[];
+  customExercises: Exercise[];
 }, cloud: SyncedData): {
   merged: {
     customRoutines: any[];
@@ -152,6 +155,7 @@ export function mergeLocalAndCloudData(local: {
     bio: string;
     followers: string[];
     following: string[];
+    customExercises: Exercise[];
   };
   hasChanges: boolean;
 } {
@@ -178,6 +182,24 @@ export function mergeLocalAndCloudData(local: {
   local.customRoutines.forEach((localRoutine) => {
     const cloudExists = cloud.customRoutines.some(r => r.title === localRoutine.title);
     if (!cloudExists) {
+      hasChanges = true; // Local has something cloud doesn't, so cloud will need an upload
+    }
+  });
+
+  // Merge Custom Exercises by unique id/title
+  const mergedExercises = [...(local.customExercises || [])];
+  const cloudExercises = cloud.customExercises ?? [];
+  cloudExercises.forEach((cloudEx) => {
+    const exists = mergedExercises.some(ex => ex.id === cloudEx.id || ex.title.toLowerCase() === cloudEx.title.toLowerCase());
+    if (!exists) {
+      mergedExercises.push(cloudEx);
+      hasChanges = true;
+    }
+  });
+  const localExArr = local.customExercises || [];
+  localExArr.forEach((localEx) => {
+    const exists = cloudExercises.some(ex => ex.id === localEx.id || ex.title.toLowerCase() === localEx.title.toLowerCase());
+    if (!exists) {
       hasChanges = true; // Local has something cloud doesn't, so cloud will need an upload
     }
   });
@@ -426,7 +448,8 @@ export function mergeLocalAndCloudData(local: {
       displayName: mergedDisplayName,
       bio: mergedBio,
       followers: mergedFollowers,
-      following: mergedFollowing
+      following: mergedFollowing,
+      customExercises: mergedExercises
     },
     hasChanges
   };

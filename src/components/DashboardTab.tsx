@@ -4,6 +4,7 @@ import { MILO_REHAB_PROTOCOLS } from '../utils/MiloRehabEngine';
 import { auth } from '../utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { EXERCISES_DB, isTimeBasedExercise } from '../data/exercises_db';
+import type { Exercise } from '../data/exercises_db';
 import { TRANSLATIONS, getExerciseName } from '../utils/translations';
 import { 
   ResponsiveContainer, 
@@ -93,6 +94,7 @@ interface DashboardTabProps {
   language: 'es' | 'en';
   progressionSystem?: ProgressionSystem;
   onTabChange: (newTab: 'dashboard' | 'workout' | 'rehab' | 'cardio' | 'profile') => void;
+  customExercises?: Exercise[];
 }
 
 export default function DashboardTab({ 
@@ -107,25 +109,25 @@ export default function DashboardTab({
   bodyWeight = 75,
   language,
   progressionSystem = 'double_progression',
-  onTabChange
+  onTabChange,
+  customExercises = []
 }: DashboardTabProps) {
   const t = TRANSLATIONS[language];
   const sessions = localHistory as WorkoutSession[];
 
-  const translateMuscleGroup = (m: string) => {
+  const allExercises = useMemo(() => {
+    return [...EXERCISES_DB, ...customExercises];
+  }, [customExercises]);
+
+  const translateMuscleGroup = (m: string): string => {
     if (language === 'es') return m;
-    const mapping: any = {
-      'Piernas': 'Legs',
-      'Brazos': 'Arms',
-      'Core': 'Core',
-      'Hombros': 'Shoulders',
+    const mapping: Record<string, string> = {
       'Pecho': 'Chest',
       'Espalda': 'Back',
-      'Cuello': 'Neck',
-      'Cardio': 'Cardio',
+      'Hombros': 'Shoulders',
       'Bíceps': 'Biceps',
       'Tríceps': 'Triceps',
-      'Cuádriceps': 'Quadriceps',
+      'Cuádriceps': 'Quads',
       'Femorales': 'Hamstrings',
       'Glúteos': 'Glutes',
       'Pantorrillas': 'Calves'
@@ -134,11 +136,10 @@ export default function DashboardTab({
   };
 
   const resolveExerciseDisplayName = (title: string) => {
-    const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === title.toLowerCase() || e.id === title.toLowerCase());
+    const dbEx = allExercises.find(e => e.title.toLowerCase() === title.toLowerCase() || e.id === title.toLowerCase());
     const id = dbEx ? dbEx.id : title.toLowerCase().replace(/\s+/g, '_');
     return getExerciseName(id, dbEx ? dbEx.title : title, language);
   };
-
 
   const [userName, setUserName] = useState<string>('Atleta');
 
@@ -375,7 +376,7 @@ export default function DashboardTab({
       const sessionDate = new Date(session.parsedDate);
       if (sessionDate >= monday && sessionDate <= sunday) {
         session.exercises.forEach(ex => {
-          const dbEx = EXERCISES_DB.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
+          const dbEx = allExercises.find(e => e.title.toLowerCase() === ex.title.toLowerCase() || e.id === ex.title.toLowerCase());
           if (dbEx) {
             let muscleGroup = dbEx.muscleGroup;
             let completedSets = 0;

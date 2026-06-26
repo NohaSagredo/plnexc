@@ -30,10 +30,13 @@ import {
   checkAndGenerateUsername
 } from '../utils/firebaseSync';
 import { TRANSLATIONS } from '../utils/translations';
+import type { Exercise } from '../data/exercises_db';
 
 interface SyncPanelProps {
   customRoutines: any[];
   setCustomRoutines: (routines: any[]) => void;
+  customExercises: Exercise[];
+  setCustomExercises: React.Dispatch<React.SetStateAction<Exercise[]>>;
   setLocalHistory: (history: any[]) => void;
   activeInjury: any | null;
   setActiveInjury: (injury: any) => void;
@@ -79,6 +82,8 @@ interface SyncPanelProps {
 export default function SyncPanel({
   customRoutines,
   setCustomRoutines,
+  customExercises,
+  setCustomExercises,
   setLocalHistory,
   activeInjury,
   setActiveInjury,
@@ -196,7 +201,8 @@ export default function SyncPanel({
         displayName,
         bio,
         followers,
-        following
+        following,
+        customExercises
       };
 
       // 2. Download from Cloud Firestore
@@ -261,6 +267,7 @@ export default function SyncPanel({
         setBio(merged.bio);
         setFollowers(merged.followers);
         setFollowing(merged.following);
+        setCustomExercises(merged.customExercises);
         
         // Update local user sessions in localStorage
         localStorage.setItem('milo_user_sessions', JSON.stringify(merged.userSessions));
@@ -281,6 +288,7 @@ export default function SyncPanel({
         localStorage.setItem('plnexc_bio', merged.bio);
         localStorage.setItem('plnexc_followers', JSON.stringify(merged.followers));
         localStorage.setItem('plnexc_following', JSON.stringify(merged.following));
+        localStorage.setItem('plnexc_custom_exercises', JSON.stringify(merged.customExercises));
         if (merged.progressionSystem) {
           localStorage.setItem('plnexc_progression_system', merged.progressionSystem);
         }
@@ -318,7 +326,8 @@ export default function SyncPanel({
             displayName: merged.displayName,
             bio: merged.bio,
             followers: merged.followers,
-            following: merged.following
+            following: merged.following,
+            customExercises: merged.customExercises
           });
         }
       } else {
@@ -344,7 +353,8 @@ export default function SyncPanel({
           displayName: localData.displayName,
           bio: localData.bio,
           followers: localData.followers,
-          following: localData.following
+          following: localData.following,
+          customExercises: localData.customExercises
         });
       }
 

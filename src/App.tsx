@@ -20,6 +20,7 @@ import { auth } from './utils/firebase';
 import { useState, useRef, useEffect } from 'react';
 import { TRANSLATIONS } from './utils/translations';
 import type { ProgressionSystem } from './utils/ProgressionEngine';
+import type { Exercise } from './data/exercises_db';
 
 const TABS_ORDER = ['dashboard', 'workout', 'cardio', 'rehab', 'profile', 'community'] as const;
 
@@ -130,6 +131,18 @@ export default function App() {
         return JSON.parse(saved);
       } catch (e) {
         console.error('Failed to parse custom routines:', e);
+      }
+    }
+    return [];
+  });
+
+  const [customExercises, setCustomExercises] = useState<Exercise[]>(() => {
+    const saved = localStorage.getItem('plnexc_custom_exercises');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse custom exercises:', e);
       }
     }
     return [];
@@ -458,12 +471,14 @@ export default function App() {
     localStorage.removeItem('plnexc_bio');
     localStorage.removeItem('plnexc_followers');
     localStorage.removeItem('plnexc_following');
+    localStorage.removeItem('plnexc_custom_exercises');
     localStorage.setItem('plnexc_progression_system', 'double_progression');
 
     // Reset React state values to guest defaults
     setLocalHistory([]);
     setActiveInjury(null);
     setCustomRoutines([]);
+    setCustomExercises([]);
     setBodyWeight(75);
     setHeight(175);
     setGender('Masculino');
@@ -633,6 +648,48 @@ export default function App() {
     }
   };
 
+  const handleSaveCustomExercise = (exercise: Omit<Exercise, 'id'> & { id?: string }) => {
+    setCustomExercises(prev => {
+      let updated: Exercise[];
+      if (exercise.id) {
+        // Update existing
+        updated = prev.map(ex => ex.id === exercise.id ? (exercise as Exercise) : ex);
+      } else {
+        // Create new
+        const newId = `custom_${exercise.title.toLowerCase().replace(/[^a-z0-9_]/g, '_')}_${Date.now()}`;
+        const newEx: Exercise = {
+          ...exercise,
+          id: newId
+        };
+        updated = [...prev, newEx];
+      }
+      localStorage.setItem('plnexc_custom_exercises', JSON.stringify(updated));
+      
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        uploadUserData(currentUser.uid, { customExercises: updated }).catch(err => {
+          console.error('Error auto-syncing custom exercises:', err);
+        });
+      }
+      return updated;
+    });
+  };
+
+  const handleDeleteCustomExercise = (id: string) => {
+    setCustomExercises(prev => {
+      const updated = prev.filter(ex => ex.id !== id);
+      localStorage.setItem('plnexc_custom_exercises', JSON.stringify(updated));
+      
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        uploadUserData(currentUser.uid, { customExercises: updated }).catch(err => {
+          console.error('Error auto-syncing custom exercises deletion:', err);
+        });
+      }
+      return updated;
+    });
+  };
+
   // Delete any routine (Preset, Custom or Historical)
   const handleDeleteRoutine = (name: string) => {
     // 1. If it's a custom routine, remove it from customRoutines state
@@ -739,6 +796,8 @@ export default function App() {
           <SyncPanel
             customRoutines={customRoutines}
             setCustomRoutines={setCustomRoutines}
+            customExercises={customExercises}
+            setCustomExercises={setCustomExercises}
             setLocalHistory={setLocalHistory}
             activeInjury={activeInjury}
             setActiveInjury={handleSetInjury}
@@ -802,6 +861,7 @@ export default function App() {
             language={language}
             progressionSystem={progressionSystem}
             onTabChange={handleTabChange}
+            customExercises={customExercises}
           />
         </div>
 
@@ -832,6 +892,9 @@ export default function App() {
             onAddProgressPhoto={handleAddProgressPhoto}
             pendingRoutineToStart={pendingRoutineToStart}
             onClearPendingRoutine={handleClearPendingRoutine}
+            customExercises={customExercises}
+            onSaveCustomExercise={handleSaveCustomExercise}
+            onDeleteCustomExercise={handleDeleteCustomExercise}
           />
         </div>
 

@@ -10,11 +10,12 @@ export interface Exercise {
   nameEs?: string;
   nameEn?: string;
   secondaryMuscleGroups?: ('Pecho' | 'Espalda' | 'Hombros' | 'Bíceps' | 'Tríceps' | 'Cuádriceps' | 'Femorales' | 'Glúteos' | 'Pantorrillas' | 'Core')[];
+  isTimeBased?: boolean;
 }
 
-export function isTimeBasedExercise(title: string): boolean {
+export function isTimeBasedExercise(title: string, customExercises?: Exercise[]): boolean {
   const t = title.toLowerCase();
-  return (
+  const baseTimeBased = (
     t.includes('plank') ||
     t.includes('plancha') ||
     t.includes('side bridge') ||
@@ -29,6 +30,13 @@ export function isTimeBasedExercise(title: string): boolean {
     t.includes('planche') ||
     t.includes('handstand hold')
   );
+  if (baseTimeBased) return true;
+
+  if (customExercises) {
+    const custom = customExercises.find(ex => ex.title.toLowerCase() === t);
+    if (custom && custom.isTimeBased) return true;
+  }
+  return false;
 }
 
 export const EXERCISES_DB: Exercise[] = [
