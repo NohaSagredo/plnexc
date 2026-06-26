@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Reglas para usuarios (cada usuario sólo lee y escribe sus propios datos)
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Reglas para nombres de usuario (comprobación de disponibilidad)
+    match /usernames/{username} {
+      // Cualquier usuario autenticado puede comprobar si un nombre de usuario existe (get)
+      allow get: if request.auth != null;
+      
+      // Permitir crear el nombre de usuario si estás asignándolo a tu propio userId
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      
+      // Permitir actualizar o borrar si eres el dueño del nombre de usuario
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Reglas para publicaciones de la comunidad
+    match /public_workouts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      
+      // Comentarios de la publicación
+      match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+        allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      }
+    }
+  }
+}

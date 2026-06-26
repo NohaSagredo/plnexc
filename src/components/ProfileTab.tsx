@@ -121,7 +121,8 @@ export default function ProfileTab({
         try {
           const ok = await isUsernameAvailable(cleaned, currentUser.uid);
           setUsernameStatus(ok ? 'available' : 'taken');
-        } catch {
+        } catch (err) {
+          console.error("Error checking username availability:", err);
           setUsernameStatus('taken');
         }
       }
