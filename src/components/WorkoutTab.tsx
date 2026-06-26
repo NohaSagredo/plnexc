@@ -151,36 +151,6 @@ const getCompletionSound2Url = () => {
   return completionSound2Url;
 };
 
-const playWarningBeep = () => {
-  try {
-    const audio = new Audio(getWarningBeepUrl());
-    audio.volume = 0.8;
-    audio.play().catch(err => console.warn('Warning beep play blocked:', err));
-  } catch (e) {
-    console.warn('Warning beep failed:', e);
-  }
-};
-
-const playCompletionSound = () => {
-  try {
-    const audio1 = new Audio(getCompletionSound1Url());
-    audio1.volume = 0.8;
-    audio1.play().catch(err => console.warn('Completion sound 1 play blocked:', err));
-    
-    setTimeout(() => {
-      try {
-        const audio2 = new Audio(getCompletionSound2Url());
-        audio2.volume = 0.8;
-        audio2.play().catch(err => console.warn('Completion sound 2 play blocked:', err));
-      } catch (e) {
-        console.warn('Completion sound 2 failed:', e);
-      }
-    }, 180); // Increased delay between starts from 120ms to 180ms
-  } catch (e) {
-    console.warn('Completion sound 1 failed:', e);
-  }
-};
-
 let feedbackSound1Url = '';
 let feedbackSound2Url = '';
 
@@ -540,6 +510,7 @@ export default function WorkoutTab({
   const routineGridRef = useRef<HTMLDivElement>(null);
   const hasInitialScrolled = useRef(false);
   const silentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const silentAudioUrlRef = useRef<string | null>(null);
 
   const startSilentAudio = () => {
     try {
@@ -579,14 +550,19 @@ export default function WorkoutTab({
 
         const blob = new Blob([buffer], { type: 'audio/wav' });
         const silentAudioUrl = URL.createObjectURL(blob);
+        silentAudioUrlRef.current = silentAudioUrl;
+        
         const audio = new Audio(silentAudioUrl);
         audio.loop = true;
         audio.volume = 0.01; // Tiny non-zero volume to keep audio active in background
         silentAudioRef.current = audio;
       }
-      silentAudioRef.current.play().catch(err => {
-        console.warn('Silent audio play blocked:', err);
-      });
+      
+      if (silentAudioRef.current.paused && silentAudioRef.current.src === silentAudioUrlRef.current) {
+        silentAudioRef.current.play().catch(err => {
+          console.warn('Silent audio play blocked:', err);
+        });
+      }
     } catch (e) {
       console.error('Error generating silent audio:', e);
     }
@@ -596,11 +572,79 @@ export default function WorkoutTab({
     if (silentAudioRef.current) {
       try {
         silentAudioRef.current.pause();
+        if (silentAudioUrlRef.current) {
+          silentAudioRef.current.src = silentAudioUrlRef.current;
+        }
         silentAudioRef.current.currentTime = 0;
       } catch (err) {
         console.warn('Error stopping silent audio:', err);
       }
     }
+  };
+
+  const playSoundThroughSilentAudio = (soundUrl: string, completionCallback?: () => void) => {
+    try {
+      if (silentAudioRef.current && silentAudioUrlRef.current) {
+        const audio = silentAudioRef.current;
+        
+        // Temporarily disable looping
+        audio.loop = false;
+        
+        // Set higher volume for the beep/alarm
+        audio.volume = 0.8;
+        
+        // Change src to the beep
+        audio.src = soundUrl;
+        
+        // Define what happens when the beep ends
+        audio.onended = () => {
+          // Restore the silent loop if rest timer is still active
+          if (restTimerActive) {
+            audio.loop = true;
+            audio.volume = 0.01;
+            audio.src = silentAudioUrlRef.current || '';
+            audio.play().catch(err => console.warn('Failed to resume silent audio:', err));
+          }
+          if (completionCallback) {
+            completionCallback();
+          }
+        };
+        
+        audio.currentTime = 0;
+        audio.play().catch(err => {
+          console.warn('Playback through silent audio ref blocked:', err);
+          // Attempt to restore if blocked
+          if (restTimerActive) {
+            audio.loop = true;
+            audio.volume = 0.01;
+            audio.src = silentAudioUrlRef.current || '';
+            audio.play().catch(() => {});
+          }
+        });
+      } else {
+        // Fallback to standard playback if silent audio is not initialized
+        const fallbackAudio = new Audio(soundUrl);
+        fallbackAudio.volume = 0.8;
+        fallbackAudio.play().catch(err => console.warn('Fallback play blocked:', err));
+        if (completionCallback) {
+          setTimeout(completionCallback, 300);
+        }
+      }
+    } catch (e) {
+      console.warn('playSoundThroughSilentAudio failed:', e);
+    }
+  };
+
+  const playWarningBeep = () => {
+    playSoundThroughSilentAudio(getWarningBeepUrl());
+  };
+
+  const playCompletionSound = () => {
+    playSoundThroughSilentAudio(getCompletionSound1Url(), () => {
+      setTimeout(() => {
+        playSoundThroughSilentAudio(getCompletionSound2Url());
+      }, 80);
+    });
   };
 
   useEffect(() => {
